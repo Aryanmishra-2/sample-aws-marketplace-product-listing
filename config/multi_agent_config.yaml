@@ -1,0 +1,172 @@
+# Multi-Agent Configuration for AWS Marketplace Listing Creation
+
+orchestrator:
+  name: "AWS Marketplace Listing Orchestrator"
+  description: "Master agent managing 8-stage SaaS listing creation workflow"
+  
+bedrock:
+  # Recommended: Claude 3.7 Sonnet for 250 req/min
+  model_id: "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+  region: "us-east-1"
+  max_iterations: 15  # Per sub-agent
+  min_request_interval: 0.5  # Faster with higher rate limits
+
+stages:
+  1_product_information:
+    name: "Product Information"
+    agent_class: "ProductInformationAgent"
+    required: true
+    estimated_time: "5-10 minutes"
+    description: "Collect product details, descriptions, and metadata"
+    
+  2_fulfillment:
+    name: "Fulfillment Options"
+    agent_class: "FulfillmentAgent"
+    required: true
+    estimated_time: "2-3 minutes"
+    description: "Configure SaaS fulfillment URL"
+    
+  3_pricing_config:
+    name: "Pricing Configuration"
+    agent_class: "PricingConfigAgent"
+    required: true
+    estimated_time: "5-10 minutes"
+    description: "Set up pricing model and dimensions"
+    
+  4_price_review:
+    name: "Price Review"
+    agent_class: "PriceReviewAgent"
+    required: true
+    estimated_time: "3-5 minutes"
+    description: "Review and configure purchasing options"
+    
+  5_refund_policy:
+    name: "Refund Policy"
+    agent_class: "RefundPolicyAgent"
+    required: true
+    estimated_time: "2-3 minutes"
+    description: "Specify refund policy"
+    
+  6_eula_config:
+    name: "EULA Configuration"
+    agent_class: "EULAConfigAgent"
+    required: true
+    estimated_time: "2-3 minutes"
+    description: "Configure End User License Agreement"
+    
+  7_offer_availability:
+    name: "Offer Availability"
+    agent_class: "OfferAvailabilityAgent"
+    required: true
+    estimated_time: "2-3 minutes"
+    description: "Set geographic availability"
+    
+  8_allowlist:
+    name: "Allowlist Configuration"
+    agent_class: "AllowlistAgent"
+    required: false
+    estimated_time: "1-2 minutes"
+    description: "Optional account allowlist"
+
+orchestrator_instructions: |
+  You are the Master Orchestrator for AWS Marketplace SaaS listing creation.
+  
+  Your role:
+  1. Guide users through 8 stages sequentially
+  2. Route to appropriate sub-agent for each stage
+  3. Track progress and maintain context
+  4. Ensure smooth transitions between stages
+  5. Provide clear progress updates
+  
+  WORKFLOW:
+  Stage 1: Product Information (required) - COLLECT ALL FIELDS AT ONCE
+  Stage 2: Fulfillment Options (required)
+  Stage 3: Pricing Configuration (required)
+  Stage 4: Price Review (required)
+  Stage 5: Refund Policy (required)
+  Stage 6: EULA Configuration (required)
+  Stage 7: Offer Availability (required)
+  Stage 8: Allowlist (optional)
+  
+  RULES:
+  - Process stages sequentially (no skipping required stages)
+  - Let sub-agents handle stage-specific logic
+  - Stage 1 should ask for ALL required fields at once (not one at a time)
+  - Don't repeat questions sub-agents already asked
+  - Provide progress updates between stages
+  - Summarize at the end
+  
+  EFFICIENCY:
+  - Stage 1: Present all required fields in one message
+  - Allow users to provide all information at once
+  - Only ask follow-up questions for missing/invalid fields
+  - Save time by batching related questions
+  
+  TRANSITIONS:
+  When a stage completes:
+  1. Acknowledge completion
+  2. Show progress (e.g., "3/8 stages complete - 37%")
+  3. Introduce next stage briefly
+  4. Hand off to next sub-agent
+  
+  Be efficient and clear. Users want to complete this workflow quickly.
+
+validation:
+  # AWS Marketplace field limits
+  product_title:
+    min: 5
+    max: 255
+  short_description:
+    min: 10
+    max: 500
+  long_description:
+    min: 50
+    max: 5000
+  highlight:
+    min: 5
+    max: 250
+  support_description:
+    min: 20
+    max: 2000
+  categories:
+    min: 1
+    max: 3
+  keywords:
+    min: 1
+    max: 10
+    keyword_max_length: 50
+  dimensions:
+    min: 1
+    max: 24
+  dimension_api_id:
+    min: 1
+    max: 50
+    pattern: "^[a-z][a-z0-9_]*$"
+  dimension_display_name:
+    min: 1
+    max: 100
+  dimension_description:
+    min: 10
+    max: 500
+  refund_policy:
+    min: 50
+    max: 5000
+
+features:
+  auto_save: true  # Auto-save progress
+  resume_workflow: true  # Allow resuming from saved state
+  skip_optional: true  # Allow skipping optional stages
+  go_back: true  # Allow going back to previous stages
+  export_data: true  # Export collected data
+  
+progress_tracking:
+  show_percentage: true
+  show_stage_count: true
+  show_estimated_time: true
+  show_completed_stages: true
+
+error_handling:
+  max_retries_per_field: 3
+  provide_examples: true
+  suggest_corrections: true
+  allow_skip_on_error: false  # Don't skip required fields on error
