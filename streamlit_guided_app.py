@@ -823,6 +823,52 @@ def review_suggestions_screen():
     
     st.divider()
     
+    # Auto-publish to Limited option
+    st.subheader("🚀 Publishing Options")
+    
+    auto_publish = st.checkbox(
+        "Automatically publish to Limited stage after creation",
+        value=True,
+        help="Publishes product and offer to Limited stage for testing. You can test with your AWS account immediately."
+    )
+    
+    if auto_publish:
+        st.info("✅ Your listing will be published to Limited stage automatically. You can test it immediately with your AWS account.")
+        
+        # Offer information (required for Limited)
+        col_a, col_b = st.columns(2)
+        with col_a:
+            offer_name = st.text_input(
+                "Offer Name",
+                value=product_title,
+                help="Name for your offer (defaults to product title)"
+            )
+        with col_b:
+            offer_description = st.text_input(
+                "Offer Description",
+                value=short_description[:200] if len(short_description) <= 200 else short_description[:197] + "...",
+                help="Brief description of your offer"
+            )
+        
+        # Optional: Buyer accounts for Limited testing
+        with st.expander("🔐 Add Buyer Accounts for Limited Testing (Optional)"):
+            st.caption("Add AWS account IDs that can access your Limited listing for testing")
+            buyer_accounts_limited = st.text_area(
+                "AWS Account IDs",
+                placeholder="123456789012, 987654321098 (comma-separated)",
+                help="Leave empty to test with only your account"
+            )
+            buyer_accounts_for_limited = []
+            if buyer_accounts_limited:
+                buyer_accounts_for_limited = [a.strip() for a in buyer_accounts_limited.split(",") if a.strip()]
+    else:
+        st.info("ℹ️ Your listing will be created in Draft state. You'll need to publish manually through AWS Marketplace Management Portal.")
+        offer_name = product_title
+        offer_description = short_description
+        buyer_accounts_for_limited = []
+    
+    st.divider()
+    
     # Action buttons
     col1, col2, col3 = st.columns([1, 1, 2])
     
@@ -933,7 +979,11 @@ def review_suggestions_screen():
                 "availability_type": availability_type,
                 "excluded_countries": excluded_countries,
                 "allowed_countries": allowed_countries,
-                "buyer_accounts": buyer_accounts
+                "buyer_accounts": buyer_accounts,
+                "auto_publish_to_limited": auto_publish,
+                "offer_name": offer_name,
+                "offer_description": offer_description,
+                "buyer_accounts_for_limited": buyer_accounts_for_limited
             }
             
             st.session_state.listing_data = listing_data
@@ -1104,6 +1154,51 @@ def create_listing_screen():
     offer_id = api_result.get("offer_id")
     product_id = api_result.get("product_id")
     
+    # Auto-publish to Limited if requested
+    published_to_limited = False
+    if all_stages_successful and product_id and offer_id and listing_data.get("auto_publish_to_limited"):
+        status_text.text("📤 Publishing to Limited stage...")
+        progress_bar.progress(97)
+        
+        tools = st.session_state.orchestrator.listing_tools
+        
+        # Prepare offer information
+        offer_name = listing_data.get("offer_name", listing_data["product_title"])
+        offer_description = listing_data.get("offer_description", listing_data["short_description"])
+        buyer_accounts = listing_data.get("buyer_accounts_for_limited", [])
+        pricing_model = listing_data.get("pricing_model", "Usage")
+        
+        release_result = tools.release_product_and_offer_to_limited(
+            product_id=product_id,
+            offer_id=offer_id,
+            offer_name=offer_name,
+            offer_description=offer_description,
+            pricing_model=pricing_model,
+            buyer_accounts=buyer_accounts if buyer_accounts else None
+        )
+        
+        if release_result.get("success"):
+            # Wait for release changeset to complete
+            change_set_id = release_result.get("change_set_id")
+            if change_set_id:
+                import time
+                max_attempts = 15
+                for attempt in range(1, max_attempts + 1):
+                    time.sleep(3)
+                    status_result = tools.get_listing_status(change_set_id)
+                    status = status_result.get("status", "UNKNOWN")
+                    
+                    if status == "SUCCEEDED":
+                        published_to_limited = True
+                        break
+                    elif status == "FAILED":
+                        st.warning(f"⚠️ Release to Limited failed: {status_result.get('error', 'Unknown error')}")
+                        break
+                    elif attempt == max_attempts:
+                        st.info("ℹ️ Release to Limited is in progress. Check AWS Marketplace Management Portal for status.")
+        else:
+            st.warning(f"⚠️ Could not publish to Limited: {release_result.get('error', 'Unknown error')}")
+    
     progress_bar.progress(100)
     status_text.text("🎉 Listing created successfully!")
     
@@ -1116,12 +1211,67 @@ def create_listing_screen():
         st.info(f"🆔 **Offer ID:** `{offer_id}`")
     
     if all_stages_successful:
-        st.info("📋 **Status:** Draft (ready to publish)")
-        st.markdown("""
-        ### ✅ Your listing is ready!
-        
-        The listing has been created in **Draft** state with all configurations complete:
-        - ✅ Product information
+        if published_to_limited:
+            st.success("📋 **Status:** Limited (published and ready for testing!)")
+            st.markdown("""
+            ### 🎉 Your listing is now LIVE in Limited stage!
+            
+            Your product and offer have been successfully published to Limited stage:
+            - ✅ Product information
+            - ✅ Fulfillment configuration
+            - ✅ Pricing and dimensions
+            - ✅ Support terms
+            - ✅ EULA
+            - ✅ Geographic availability
+            - ✅ **Published to Limited stage**
+            
+            ---
+            
+            ### 🧪 Test Your Listing
+            
+            1. **Find your product:**
+               - Go to [AWS Marketplace](https://aws.amazon.com/marketplace)
+               - Search for your product title
+               - Or use the Product ID above
+            
+            2. **Subscribe and test:**
+               - Click "Continue to Subscribe"
+               - Accept terms
+               - Click "Set Up Your Account"
+               - You'll be redirected to your fulfillment URL
+            
+            3. **Verify integration:**
+               - Test the subscription flow
+               - Verify fulfillment URL works
+               - Check metering/entitlement (if applicable)
+            
+            ---
+            
+            ### 📈 Next Steps: Go Public
+            
+            When you're ready to make your listing public:
+            
+            1. **Update pricing** from test values ($0.001) to production prices
+            2. **Go to** [AWS Marketplace Management Portal](https://aws.amazon.com/marketplace/management/products)
+            3. **Find your product** and click "Update visibility"
+            4. **Select "Public"** and submit for AWS review
+            5. **AWS reviews** your listing (typically 1-2 weeks)
+            6. **Once approved**, your listing is publicly available!
+            
+            ---
+            
+            ### 📚 Resources
+            - [SaaS Product Guidelines](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-guidelines.html)
+            - [Testing Your Product](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-prepare.html)
+            - [Seller Support](https://aws.amazon.com/marketplace/management/contact-us/)
+            """)
+        else:
+            st.info("📋 **Status:** Draft (ready to publish)")
+            st.markdown("""
+            ### ✅ Your listing is ready!
+            
+            The listing has been created in **Draft** state with all configurations complete:
+            - ✅ Product information
         - ✅ Fulfillment configuration
         - ✅ Pricing and dimensions
         - ✅ Support terms

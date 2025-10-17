@@ -297,14 +297,15 @@ class ListingTools:
                 "message": "Failed to create offer",
             }
 
-    def update_offer_description(
-        self, offer_id: str, description: str
+    def update_offer_information(
+        self, offer_id: str, name: str, description: str
     ) -> Dict[str, Any]:
         """
-        Update the description of an offer. Required before releasing to Limited stage.
+        Update offer name and description. REQUIRED before releasing to Limited stage.
 
         Args:
             offer_id: The offer entity ID
+            name: Name for the offer
             description: Description text for the offer
 
         Returns:
@@ -315,7 +316,7 @@ class ListingTools:
                 {
                     "ChangeType": "UpdateInformation",
                     "Entity": {"Type": "Offer@1.0", "Identifier": offer_id},
-                    "DetailsDocument": {"Description": description},
+                    "DetailsDocument": {"Name": name, "Description": description},
                 }
             ]
 
@@ -326,14 +327,61 @@ class ListingTools:
             return {
                 "success": True,
                 "change_set_id": response["ChangeSetId"],
-                "message": "Offer description updated successfully",
+                "message": "Offer information updated successfully",
             }
 
         except Exception as e:
             return {
                 "success": False,
                 "error": str(e),
-                "message": "Failed to update offer description",
+                "message": "Failed to update offer information",
+            }
+    
+    def update_product_targeting(
+        self, product_id: str, buyer_accounts: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Update product targeting with buyer account allowlist for Limited testing.
+        Optional - if not set, only your account can access the product.
+
+        Args:
+            product_id: The product entity ID
+            buyer_accounts: List of AWS account IDs to allowlist (optional)
+
+        Returns:
+            Dict with update status
+        """
+        try:
+            details_document = {}
+            
+            if buyer_accounts:
+                details_document = {
+                    "PositiveTargeting": {"BuyerAccounts": buyer_accounts}
+                }
+            
+            change_set = [
+                {
+                    "ChangeType": "UpdateTargeting",
+                    "Entity": {"Type": "SaaSProduct@1.0", "Identifier": product_id},
+                    "DetailsDocument": details_document,
+                }
+            ]
+
+            response = self.catalog_client.start_change_set(
+                Catalog="AWSMarketplace", ChangeSet=change_set
+            )
+
+            return {
+                "success": True,
+                "change_set_id": response["ChangeSetId"],
+                "message": f"Product targeting updated with {len(buyer_accounts) if buyer_accounts else 0} buyer accounts",
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to update product targeting",
             }
 
     def add_pricing(
@@ -617,6 +665,56 @@ class ListingTools:
                 "success": False,
                 "error": str(e),
                 "message": "Failed to update legal terms",
+            }
+    
+    def update_renewal_terms(self, offer_id: str) -> Dict[str, Any]:
+        """
+        Update renewal terms on an offer. REQUIRED for Contract pricing before release.
+        
+        Args:
+            offer_id: The OFFER entity ID
+            
+        Returns:
+            Dict with update status
+        """
+        try:
+            # Get current entity details
+            entity_details = self.get_entity_details("Offer@1.0", offer_id)
+            if not entity_details.get("success"):
+                return {
+                    "success": False,
+                    "error": f"Failed to get offer details: {entity_details.get('error')}",
+                    "message": "Could not fetch current offer revision",
+                }
+
+            change_set = [
+                {
+                    "ChangeType": "UpdateRenewalTerms",
+                    "Entity": {
+                        "Type": entity_details["entity_type"],
+                        "Identifier": offer_id,
+                    },
+                    "DetailsDocument": {
+                        "Terms": [{"Type": "RenewalTerm"}]
+                    },
+                }
+            ]
+
+            response = self.catalog_client.start_change_set(
+                Catalog="AWSMarketplace", ChangeSet=change_set
+            )
+
+            return {
+                "success": True,
+                "change_set_id": response["ChangeSetId"],
+                "message": "Renewal terms updated successfully",
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to update renewal terms",
             }
 
     def update_offer_availability(
@@ -1406,71 +1504,160 @@ class ListingTools:
             }
 
     def release_product_and_offer_to_limited(
-        self, product_id: str, offer_id: str, offer_description: str = None
+        self,
+        product_id: str,
+        offer_id: str,
+        offer_name: str,
+        offer_description: str,
+        pricing_model: str = "Usage",
+        buyer_accounts: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Release both product and offer to Limited stage in a single changeset.
-        AWS Marketplace requires both to be released together and the offer must have a description.
+        Release both product and offer to Limited stage.
+        AWS Marketplace requires offer name and description before release.
+        For Contract pricing, also requires renewal terms.
 
         Args:
             product_id: The product entity ID
             offer_id: The offer entity ID
-            offer_description: Description for the offer (required for release)
+            offer_name: Name for the offer (required)
+            offer_description: Description for the offer (required)
+            pricing_model: Pricing model ("Usage" or "Contract")
+            buyer_accounts: Optional list of AWS account IDs to allowlist
 
         Returns:
             Dict with success status and change_set_id
         """
         try:
-            # Check if offer has a description, if not set a default one
-            if offer_description:
-                # First, update the offer description
-                desc_result = self.update_offer_description(offer_id, offer_description)
-                if not desc_result.get("success"):
+            import time
+            
+            # Step 1: Update offer information (name and description - REQUIRED)
+            info_result = self.update_offer_information(offer_id, offer_name, offer_description)
+            if not info_result.get("success"):
+                return {
+                    "success": False,
+                    "error": f"Failed to set offer information: {info_result.get('error')}",
+                    "message": "Offer name and description are required before release",
+                }
+            
+            # Wait for offer info changeset to complete
+            info_changeset_id = info_result.get("change_set_id")
+            if info_changeset_id:
+                max_wait = 20  # 20 attempts = ~60 seconds
+                for attempt in range(max_wait):
+                    time.sleep(3)
+                    status_result = self.get_listing_status(info_changeset_id)
+                    status = status_result.get("status", "UNKNOWN")
+                    
+                    if status == "SUCCEEDED":
+                        break
+                    elif status == "FAILED":
+                        return {
+                            "success": False,
+                            "error": f"Offer information update failed: {status_result.get('error')}",
+                            "message": "Could not update offer information",
+                        }
+                    elif attempt == max_wait - 1:
+                        return {
+                            "success": False,
+                            "error": "Timeout waiting for offer information update",
+                            "message": "Offer information update is taking too long",
+                        }
+            
+            # Step 2: Update renewal terms for Contract pricing (REQUIRED for Contract)
+            if pricing_model == "Contract":
+                renewal_result = self.update_renewal_terms(offer_id)
+                if not renewal_result.get("success"):
                     return {
                         "success": False,
-                        "error": f"Failed to set offer description: {desc_result.get('error')}",
-                        "message": "Offer description is required before release",
+                        "error": f"Failed to set renewal terms: {renewal_result.get('error')}",
+                        "message": "Renewal terms are required for Contract pricing",
                     }
+                
+                # Wait for renewal terms changeset to complete
+                renewal_changeset_id = renewal_result.get("change_set_id")
+                if renewal_changeset_id:
+                    for attempt in range(max_wait):
+                        time.sleep(3)
+                        status_result = self.get_listing_status(renewal_changeset_id)
+                        status = status_result.get("status", "UNKNOWN")
+                        
+                        if status == "SUCCEEDED":
+                            break
+                        elif status == "FAILED":
+                            return {
+                                "success": False,
+                                "error": f"Renewal terms update failed: {status_result.get('error')}",
+                                "message": "Could not update renewal terms",
+                            }
+                        elif attempt == max_wait - 1:
+                            return {
+                                "success": False,
+                                "error": "Timeout waiting for renewal terms update",
+                                "message": "Renewal terms update is taking too long",
+                            }
+            
+            # Step 3: Update product targeting if buyer accounts provided (OPTIONAL)
+            if buyer_accounts:
+                targeting_result = self.update_product_targeting(product_id, buyer_accounts)
+                if not targeting_result.get("success"):
+                    return {
+                        "success": False,
+                        "error": f"Failed to set product targeting: {targeting_result.get('error')}",
+                        "message": "Could not set buyer account allowlist",
+                    }
+                
+                # Wait for targeting changeset to complete
+                targeting_changeset_id = targeting_result.get("change_set_id")
+                if targeting_changeset_id:
+                    for attempt in range(max_wait):
+                        time.sleep(3)
+                        status_result = self.get_listing_status(targeting_changeset_id)
+                        status = status_result.get("status", "UNKNOWN")
+                        
+                        if status == "SUCCEEDED":
+                            break
+                        elif status == "FAILED":
+                            return {
+                                "success": False,
+                                "error": f"Product targeting update failed: {status_result.get('error')}",
+                                "message": "Could not update product targeting",
+                            }
+                        elif attempt == max_wait - 1:
+                            return {
+                                "success": False,
+                                "error": "Timeout waiting for product targeting update",
+                                "message": "Product targeting update is taking too long",
+                            }
 
-                # Wait for description update to complete
-                import time
-
-                time.sleep(2)
-
-            # Both product and offer must be released in the same changeset
+            # Step 4: Release both product and offer in a single changeset
             change_set = [
                 {
                     "ChangeType": "ReleaseProduct",
                     "Entity": {"Type": "SaaSProduct@1.0", "Identifier": product_id},
-                    "Details": "{}",
+                    "DetailsDocument": {},
                 },
                 {
                     "ChangeType": "ReleaseOffer",
                     "Entity": {"Type": "Offer@1.0", "Identifier": offer_id},
-                    "Details": "{}",
+                    "DetailsDocument": {},
                 },
             ]
 
             response = self.catalog_client.start_change_set(
                 Catalog="AWSMarketplace",
                 ChangeSet=change_set,
-                ChangeSetName=f"Release product and offer to Limited",
+                ChangeSetName="Release product and offer to Limited",
             )
 
             return {
                 "success": True,
                 "change_set_id": response["ChangeSetId"],
-                "message": "Product and offer release to Limited initiated",
+                "message": "Product and offer release to Limited initiated successfully",
             }
 
         except Exception as e:
             error_msg = str(e)
-            if "MISSING_DESCRIPTION" in error_msg:
-                return {
-                    "success": False,
-                    "error": error_msg,
-                    "message": "Offer description is required. Please provide offer_description parameter.",
-                }
             return {
                 "success": False,
                 "error": error_msg,

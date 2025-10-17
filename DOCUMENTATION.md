@@ -36,8 +36,9 @@ streamlit run streamlit_guided_app.py
 3. Review and customize product information
 4. Configure pricing model and dimensions
 5. Set support terms and policies
-6. Complete all 8 stages
-7. Follow manual publishing steps
+6. **Enable auto-publish** (checked by default)
+7. Click "Create Listing"
+8. **Your listing is published to Limited stage automatically!**
 
 ---
 
@@ -53,6 +54,12 @@ streamlit run streamlit_guided_app.py
 1. **Usage-based**: Pay-as-you-go metered pricing
 2. **Contract-based**: Upfront commitment pricing
 3. **Contract with Consumption**: Hybrid model (contract + overages)
+
+### Auto-Publish to Limited
+- **One-click publishing** - Automatically publishes to Limited stage
+- **Immediate testing** - Test your listing right after creation
+- **Optional buyer accounts** - Add AWS account IDs for testing
+- **Enabled by default** - Can disable for manual publishing
 
 ### 8-Stage Workflow
 1. Product Information (title, description, logo)
@@ -160,10 +167,28 @@ Customer gets 100 users included, pays $10/month for each additional user
 
 ## Publishing Guide
 
-### Stage 1: Create Listing (Automated)
-The app creates your listing in **Draft** stage with all configurations.
+### Auto-Publish (Recommended)
 
-### Stage 2: Publish to Limited (Manual)
+**Default behavior** - Your listing is automatically published to Limited stage:
+
+1. **Enable auto-publish** (checked by default in UI)
+2. **Review offer information** (auto-filled from product details)
+3. **Optionally add buyer accounts** for testing
+4. **Click "Create Listing"**
+5. **Wait 2-3 minutes** for completion
+6. **Test immediately!** Your listing is live in Limited stage
+
+**What happens automatically:**
+- Creates listing (all 8 stages)
+- Sets offer name and description
+- Adds renewal terms (for Contract pricing)
+- Optionally sets buyer account allowlist
+- Releases product and offer to Limited
+- Polls for completion
+
+### Manual Publishing (If Auto-Publish Disabled)
+
+If you disabled auto-publish, follow these steps:
 
 #### Step 1: Open AWS Marketplace Management Portal
 1. Go to [AWS Marketplace Management Portal](https://aws.amazon.com/marketplace/management/products)
@@ -174,34 +199,14 @@ The app creates your listing in **Draft** stage with all configurations.
 2. Search for your Product ID (shown in success page)
 3. Click on the product name
 
-#### Step 3: Add Offer Description (Required)
-1. Navigate to **"Offers"** tab
-2. Click on your offer
-3. Click **"Edit offer information"**
-4. Add a description (use your product's short description)
-5. Click **"Save"**
+3. Add offer name and description
+4. Add renewal terms (for Contract pricing)
+5. Publish product to Limited
+6. Publish offer to Limited
 
-#### Step 4: Publish Product to Limited
-1. Go back to product overview page
-2. Click **"Request changes"** → **"Publish product"**
-3. Select **"Limited"** as target audience
-4. Review and submit
-5. Wait 5-10 minutes for changeset to complete
+See AWS Marketplace Management Portal for detailed steps.
 
-#### Step 5: Publish Offer to Limited
-1. Once product is in Limited stage, go to **"Offers"** tab
-2. Click on your offer
-3. Click **"Request changes"** → **"Publish offer"**
-4. Select **"Limited"** as target audience
-5. Review and submit
-
-#### Step 6: Test Your Listing
-- Listing is now visible to your AWS account
-- Test subscription flow
-- Verify fulfillment URL integration
-- Check metering/entitlement functionality
-
-### Stage 3: Publish to Public (When Ready)
+### Publish to Public (When Ready)
 1. Update pricing from test values ($0.001) to production prices
 2. Submit for AWS Marketplace review
 3. AWS reviews (typically 1-2 weeks)
