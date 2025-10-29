@@ -4,7 +4,7 @@
 1. [Quick Start](#quick-start)
 2. [Features](#features)
 3. [Pricing Models](#pricing-models)
-4. [Publishing Guide](#publishing-guide)
+4. [Workflow Guide](#workflow-guide)
 5. [Technical Details](#technical-details)
 6. [Troubleshooting](#troubleshooting)
 
@@ -12,33 +12,21 @@
 
 ## Quick Start
 
-### Prerequisites
-- AWS Account with Marketplace Seller registration
-- AWS credentials configured
-- Python 3.8+
-- Bedrock access enabled
-
 ### Installation
+
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure AWS credentials
-./setup_aws_credentials.sh
-
-# Run the app
-streamlit run streamlit_guided_app.py
+# The app is ready to run with pre-installed dependencies
+./run_streamlit.sh
 ```
 
 ### Create Your First Listing
-1. Enter your product website URL
-2. AI analyzes and suggests configurations
-3. Review and customize product information
-4. Configure pricing model and dimensions
-5. Set support terms and policies
-6. **Enable auto-publish** (checked by default)
-7. Click "Create Listing"
-8. **Your listing is published to Limited stage automatically!**
+
+1. Click "Start AI-Guided Creation"
+2. Enter your product website URL
+3. AI analyzes and generates all content
+4. Review and customize
+5. Click "Create Listing"
+6. **Your listing is created!**
 
 ---
 
@@ -46,9 +34,10 @@ streamlit run streamlit_guided_app.py
 
 ### AI-Powered Analysis
 - Automatically extracts product information from your website
-- Suggests optimal pricing model based on your product
+- Suggests optimal pricing model
 - Recommends pricing dimensions
 - Generates product descriptions and highlights
+- Selects appropriate categories and keywords
 
 ### Supported Pricing Models
 1. **Usage-based**: Pay-as-you-go metered pricing
@@ -56,20 +45,20 @@ streamlit run streamlit_guided_app.py
 3. **Contract with Consumption**: Hybrid model (contract + overages)
 
 ### Auto-Publish to Limited
-- **One-click publishing** - Automatically publishes to Limited stage
-- **Immediate testing** - Test your listing right after creation
-- **Optional buyer accounts** - Add AWS account IDs for testing
-- **Enabled by default** - Can disable for manual publishing
+- **One-click publishing** to Limited stage
+- **Immediate testing** with your AWS account
+- **Optional buyer accounts** for testing
+- **Enabled by default**
 
 ### 8-Stage Workflow
 1. Product Information (title, description, logo)
 2. Fulfillment Configuration (URLs)
 3. Pricing & Dimensions
-4. Offer Creation
-5. Support Terms
+4. Price Review (contract durations)
+5. Refund Policy
 6. EULA Configuration
-7. Refund Policy
-8. Geographic Availability
+7. Geographic Availability
+8. Account Allowlist (optional)
 
 ---
 
@@ -99,7 +88,7 @@ Price: $0.001 per call
 
 ### 2. Contract-Based Pricing
 
-**Best For**: Enterprise SaaS, annual subscriptions, predictable revenue models
+**Best For**: Enterprise SaaS, annual subscriptions, predictable revenue
 
 **How It Works**:
 - Customers commit to a contract period (1-36 months)
@@ -145,85 +134,125 @@ Customer gets 100 users included, pays $10/month for each additional user
 - Contract durations required
 - Both dimension types must be present
 
-**Configuration Steps**:
-1. Select "Contract with Consumption" pricing model
-2. Add Entitled dimensions (what's included in contract)
-3. Add Metered dimensions (what's billed as overage)
-4. Select contract durations
-5. System automatically:
-   - Adds all dimensions to product
-   - Creates ConfigurableUpfrontPricingTerm for Entitled dimensions
-   - Creates UsageBasedPricingTerm for Metered dimensions
-   - Combines both in a single changeset
-
-**Technical Implementation**:
-- Dimensions and pricing added together in one changeset
-- Two pricing terms in the offer:
-  - `ConfigurableUpfrontPricingTerm` for contract/entitled
-  - `UsageBasedPricingTerm` for usage/metered
-- AWS Marketplace automatically handles the hybrid billing
-
 ---
 
-## Publishing Guide
+## Workflow Guide
 
-### Auto-Publish (Recommended)
+### Step 1: Provide Product Information
 
-**Default behavior** - Your listing is automatically published to Limited stage:
+Enter your product URLs:
+- **Product Website** (required) - Main landing page
+- **Documentation URL** (optional) - Technical docs
+- **Pricing Page** (optional) - Existing pricing info
 
-1. **Enable auto-publish** (checked by default in UI)
-2. **Review offer information** (auto-filled from product details)
-3. **Optionally add buyer accounts** for testing
-4. **Click "Create Listing"**
-5. **Wait 2-3 minutes** for completion
-6. **Test immediately!** Your listing is live in Limited stage
+The AI will analyze these URLs to understand your product.
 
-**What happens automatically:**
-- Creates listing (all 8 stages)
-- Sets offer name and description
-- Adds renewal terms (for Contract pricing)
-- Optionally sets buyer account allowlist
-- Releases product and offer to Limited
-- Polls for completion
+### Step 2: AI Analysis
 
-### Manual Publishing (If Auto-Publish Disabled)
+The AI performs:
+1. **Product Analysis** - Understands product type, features, audience
+2. **Content Generation** - Creates title, descriptions, highlights
+3. **Pricing Suggestion** - Recommends optimal pricing model
+4. **Category Selection** - Suggests AWS Marketplace categories
 
-If you disabled auto-publish, follow these steps:
+This takes 30-60 seconds.
 
-#### Step 1: Open AWS Marketplace Management Portal
-1. Go to [AWS Marketplace Management Portal](https://aws.amazon.com/marketplace/management/products)
-2. Sign in with your AWS seller account
+### Step 3: Review & Configure
 
-#### Step 2: Find Your Product
-1. Click **"Products"** in left sidebar
-2. Search for your Product ID (shown in success page)
-3. Click on the product name
+Review and edit AI-generated content:
 
-3. Add offer name and description
-4. Add renewal terms (for Contract pricing)
-5. Publish product to Limited
-6. Publish offer to Limited
+#### Product Information
+- **Product Title** (5-72 chars) - Keep it clear and compelling
+- **Logo S3 URL** - Upload logo to S3 first
+- **Short Description** (10-500 chars) - For search results
+- **Long Description** (50-5000 chars) - Detailed features
+- **Highlights** (1-3) - Key features, 5-250 chars each
+- **Categories** (1-3) - AWS Marketplace categories
+- **Keywords** (1-10) - Search keywords, max 50 chars each
 
-See AWS Marketplace Management Portal for detailed steps.
+#### Support Information
+- **Support Email** - Valid email address
+- **Fulfillment URL** - Your SaaS signup/activation URL
+- **Support Description** (20-2000 chars) - How you provide support
 
-### Publish to Public (When Ready)
-1. Update pricing from test values ($0.001) to production prices
-2. Submit for AWS Marketplace review
-3. AWS reviews (typically 1-2 weeks)
-4. Once approved, listing is publicly available
+#### Pricing Configuration
+- **Pricing Model** - Usage, Contract, or Hybrid
+- **Dimensions** - Add 1-24 pricing dimensions:
+  - Dimension Name (display name)
+  - Dimension Key (API identifier)
+  - Description (what it measures)
+  - Type (Metered or Entitled)
+- **Contract Durations** (for Contract pricing) - Select 1-6 options
+
+#### Refund Policy
+- **Refund Policy** (50-5000 chars) - AI generates template, edit as needed
+
+#### EULA
+- **SCMP** (Standard Contract) - Recommended, pre-approved by AWS
+- **Custom EULA** - Provide S3 URL to your custom EULA PDF
+
+#### Geographic Availability
+- **All countries** - Worldwide availability
+- **All except specific** - Exclude certain countries
+- **Only specific countries** - Allowlist specific countries
+
+#### Account Allowlist (Optional)
+- Add AWS account IDs for Limited testing
+- Leave empty for public offer
+
+#### Auto-Publish to Limited
+- **Enable** - Automatically publish to Limited stage
+- **Offer Name** - Defaults to product title
+- **Offer Description** - Brief description
+- **Buyer Accounts** - Optional AWS account IDs for testing
+
+### Step 4: Create Listing
+
+Click "Create Listing" and the app will:
+1. Create product with all information
+2. Configure fulfillment URL
+3. Add pricing dimensions
+4. Apply pricing terms
+5. Set support terms
+6. Configure EULA
+7. Set geographic availability
+8. Apply account allowlist (if specified)
+9. **Publish to Limited stage** (if enabled)
+
+You'll receive:
+- **Product ID** - Use this to find your product
+- **Offer ID** - Use this to manage your offer
+
+### Step 5: Test in Limited Stage
+
+If auto-publish is enabled:
+1. Go to [AWS Marketplace](https://aws.amazon.com/marketplace)
+2. Search for your product title
+3. Subscribe and test the flow
+4. Verify fulfillment URL works
+5. Check metering/entitlement (if applicable)
+
+### Step 6: Publish to Public
+
+When ready:
+1. Update pricing from test values ($0.001) to production
+2. Go to [Management Portal](https://aws.amazon.com/marketplace/management/products)
+3. Find your product
+4. Submit for AWS review
+5. Once approved, listing is public
 
 ---
 
 ## Technical Details
 
 ### Character Sanitization
+
 AWS Marketplace doesn't support certain Unicode characters. The app automatically converts:
 - Smart quotes → Regular quotes
 - Em/en dashes → Hyphens
 - Ellipsis → Three dots
 - Trademark symbols → (TM)
 - Copyright symbols → (C)
-- And more...
 
 ### Dimension Types
 
@@ -265,23 +294,33 @@ AWS Marketplace doesn't support certain Unicode characters. The app automaticall
 
 ### API Mapping
 
-**UI to API Pricing Model**:
-- "Usage" → `"Usage"`
-- "Contract" → `"Contract"`
-- "Contract with Consumption" → `"Contract"` (with mixed dimension types)
+**Pricing Model**:
+- UI: "Usage" → API: `"Usage"`
+- UI: "Contract" → API: `"Contract"`
+- UI: "Contract with Consumption" → API: `"Contract"` (with mixed dimensions)
 
 **Contract Durations**:
-- UI: "12 Months"
-- API: `"P12M"` (ISO 8601 duration format)
+- UI: "12 Months" → API: `"P12M"` (ISO 8601 format)
 
-### Workflow Architecture
+### Architecture
 
-The app uses a multi-stage orchestrator pattern:
-1. Each stage has a dedicated sub-agent
-2. Stages execute sequentially
-3. Data flows between stages via orchestrator
-4. All API calls use AWS Marketplace Catalog API
-5. Changesets track all modifications
+```
+Streamlit UI
+    ↓
+StrandsMarketplaceAgent (Strands SDK)
+    ↓
+ListingOrchestrator (8-stage workflow)
+    ↓
+Sub-Agents (specialized per stage)
+    ↓
+ListingTools (AWS Marketplace Catalog API)
+```
+
+**Components**:
+- **Strands Agent** - LLM interaction with @tool decorators
+- **Orchestrator** - Manages workflow state and transitions
+- **Sub-Agents** - 8 specialized agents (one per stage)
+- **Listing Tools** - AWS Marketplace Catalog API wrapper
 
 ---
 
@@ -289,60 +328,73 @@ The app uses a multi-stage orchestrator pattern:
 
 ### Common Issues
 
-#### 1. "MISSING_DESCRIPTION" Error
-**Problem**: Offer can't be published without description
-
-**Solution**: 
-- Add offer description in AWS Marketplace Management Portal
-- Navigate to Offers → Edit offer information → Add description
-
-#### 2. Invalid Dimension Types
-**Problem**: API rejects dimension configuration
+#### 1. Import Error: "No module named 'strands'"
 
 **Solution**:
-- Usage pricing: Use `["Metered", "ExternallyMetered"]`
-- Contract pricing: Use `["Entitled"]`
-- Both types required for Metered dimensions
+```bash
+pip install strands-agents strands-agents-tools
+```
 
-#### 3. Hybrid Pricing Not Working
-**Problem**: Contract with Consumption validation fails
+Note: Package is `strands-agents` but import is `from strands import Agent`
 
-**Solution**:
-- Must have at least 1 Entitled dimension
-- Must have at least 1 Metered dimension
-- Must select contract durations
-
-#### 4. Character Encoding Errors
-**Problem**: AWS rejects text with Unicode characters
+#### 2. Model Access Denied
 
 **Solution**:
-- App automatically sanitizes text
-- Review sanitization warnings
-- Manually edit if needed
+1. Go to https://console.aws.amazon.com/bedrock/
+2. Navigate to: Model access → Manage model access
+3. Enable: Claude 3.7 Sonnet
+4. Wait 2-3 minutes for activation
 
-#### 5. Changeset Stuck in PREPARING
-**Problem**: Changeset doesn't complete
+#### 3. AWS Credentials Not Found
+
+**Solution**:
+```bash
+aws configure
+# Enter your AWS Access Key ID, Secret Access Key, and region
+```
+
+#### 4. Invalid Logo URL
+
+**Problem**: Logo URL must be S3 URL
+
+**Solution**:
+1. Upload logo to S3 bucket
+2. Make it publicly readable
+3. Use format: `https://bucket-name.s3.region.amazonaws.com/logo.png`
+
+#### 5. Dimension Type Error
+
+**Problem**: Wrong dimension types for pricing model
+
+**Solution**:
+- **Usage pricing**: Use Metered dimensions
+- **Contract pricing**: Use Entitled dimensions
+- **Hybrid pricing**: Use both types
+
+#### 6. Changeset Stuck in PREPARING
+
+**Problem**: AWS is processing the changeset
 
 **Solution**:
 - Wait 5-10 minutes (normal processing time)
-- Check AWS Marketplace Management Portal
-- Use `check_changeset_status.py` script
+- Check [Management Portal](https://aws.amazon.com/marketplace/management/products)
+- Changeset will complete automatically
 
 ### Debug Tools
 
-**Check Changeset Status**:
+**Check Test Results**:
 ```bash
-python check_changeset_status.py <changeset-id>
+export VIRTUAL_ENV=/Users/avivenk/Library/CloudStorage/WorkDocsDrive-Documents/MPAgent/venv
+export PATH="$VIRTUAL_ENV/bin:$PATH"
+python test_strands_migration.py
 ```
 
-**Verify Bedrock Access**:
-```bash
-python check_bedrock_models.py
-```
-
-**Test AWS Credentials**:
-```bash
-python test_setup.py
+**Check Agent Status**:
+```python
+from agent.strands_marketplace_agent import StrandsMarketplaceAgent
+agent = StrandsMarketplaceAgent()
+status = agent.get_workflow_status()
+print(status)
 ```
 
 ---
@@ -385,61 +437,34 @@ python test_setup.py
 ## Additional Resources
 
 ### AWS Documentation
-- [AWS Marketplace Seller Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/what-is-marketplace.html)
-- [SaaS Product Guidelines](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-guidelines.html)
+- [Seller Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/)
+- [SaaS Guidelines](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-guidelines.html)
 - [Pricing Models](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-pricing-models.html)
-- [Testing Your Product](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-prepare.html)
+- [Testing Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-prepare.html)
 
-### Support
-- AWS Marketplace Seller Support
-- AWS Support Console
-- Marketplace Seller Forums
+### Strands SDK
+- Package: `strands-agents`
+- Import: `from strands import Agent, tool`
+- [AWS Bedrock AgentCore](https://aws.amazon.com/bedrock/)
 
 ---
 
 ## Version History
 
-### Current Version
+### Current Version (Strands SDK)
 - ✅ All 3 pricing models supported
 - ✅ AI-powered product analysis
 - ✅ Character sanitization
-- ✅ Manual publishing guide
+- ✅ Auto-publish to Limited
 - ✅ Comprehensive validation
 - ✅ 8-stage workflow
-
-### Recent Changes
-- Re-implemented Contract with Consumption pricing
-- Removed auto-publish (replaced with manual steps)
-- Enhanced success page with detailed instructions
-- Fixed dimension type combinations
-- Added hybrid pricing validation
+- ✅ Strands SDK integration
+- ✅ 27% less code than previous version
 
 ---
 
-## File Structure
+**Ready to create your listing?**
 
+```bash
+./run_streamlit.sh
 ```
-.
-├── streamlit_guided_app.py          # Main application
-├── streamlit_launcher.py            # App launcher
-├── agent/
-│   ├── orchestrator.py              # Workflow orchestrator
-│   ├── tools/
-│   │   └── listing_tools.py         # AWS Marketplace API tools
-│   └── sub_agents/                  # Stage-specific agents
-├── config/
-│   ├── agent_config.yaml            # Agent configuration
-│   └── marketplace_config.yaml      # Marketplace settings
-├── docs/
-│   └── MULTI_AGENT_ARCHITECTURE.md  # Architecture details
-├── DOCUMENTATION.md                 # This file
-└── README.md                        # Project overview
-```
-
----
-
-## License
-See LICENSE file for details.
-
-## Contributing
-Contributions welcome! Please follow AWS Marketplace guidelines and test thoroughly.

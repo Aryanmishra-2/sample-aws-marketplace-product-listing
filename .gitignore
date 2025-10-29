@@ -4,10 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-venv/
-env/
-ENV/
-.venv
 build/
 develop-eggs/
 dist/
@@ -24,52 +20,53 @@ wheels/
 .installed.cfg
 *.egg
 
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.kiro/
-
-# OS
 .DS_Store
-Thumbs.db
-.AppleDouble
-.LSOverride
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.env.local
 
 # AWS
 .aws/
-*.pem
-
-# Environment
-.env
-.env.local
-.env.*.local
 
 # Logs
 *.log
 logs/
 
-# Test files
-test_output/
-*.tmp
-.pytest_cache/
+# Test coverage
+.coverage
+htmlcov/
 
 # Streamlit
-.streamlit/secrets.toml
+.streamlit/
 
-# Coverage
-htmlcov/
-.coverage
-.coverage.*
-coverage.xml
-*.cover
+# AgentCore
+.agentcore/
 
-# Jupyter
-.ipynb_checkpoints
+# Temporary files
+*.tmp
+*.bak
+*.cache
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# Progress files
+progress.json
+*.json.bak
+
+# Old implementation (if backing up)
+agent/agentcore/
+agent/marketplace_agent_v2.py.bak
