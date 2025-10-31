@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "aws-knowledge": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "env": {
+        "FETCH_BASE_URL": "https://knowledge-mcp.global.api.aws"
+      }
+    }
+  }
+}

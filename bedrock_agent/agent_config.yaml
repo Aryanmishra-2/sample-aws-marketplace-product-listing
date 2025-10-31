@@ -1,0 +1,64 @@
+agents:
+  - name: "create_saas"
+    file: "create_saas.py"
+    class: "CreateSaasAgent"
+    dependencies:
+      - "strands"
+    
+  - name: "serverless_saas_integration"
+    file: "serverless_saas_integration.py"
+    class: "ServerlessSaasIntegrationAgent"
+    dependencies:
+      - "strands"
+      - "boto3"
+      - "botocore"
+    environment:
+      - "AWS_DEFAULT_REGION=us-east-1"
+    
+  - name: "metering"
+    file: "metering.py"
+    class: "MeteringAgent"
+    dependencies:
+      - "strands"
+      - "boto3"
+      - "botocore"
+    environment:
+      - "AWS_DEFAULT_REGION=us-east-1"
+    
+  - name: "public_visibility"
+    file: "public_visibility.py"
+    class: "PublicVisibilityAgent"
+    dependencies:
+      - "strands"
+      - "boto3"
+      - "botocore"
+    environment:
+      - "AWS_DEFAULT_REGION=us-east-1"
+    
+  - name: "workflow_orchestrator"
+    file: "workflow_orchestrator.py"
+    class: "WorkflowOrchestrator"
+    dependencies:
+      - "strands"
+      - "boto3"
+      - "botocore"
+    environment:
+      - "AWS_DEFAULT_REGION=us-east-1"
+    
+  - name: "status_checker"
+    file: "status_checker.py"
+    class: "StatusChecker"
+    dependencies:
+      - "strands"
+      - "boto3"
+      - "botocore"
+    environment:
+      - "AWS_DEFAULT_REGION=us-east-1"
+    
+  - name: "buyer_experience"
+    file: "buyer_experience.py"
+    class: "BuyerExperienceAgent"
+    dependencies:
+      - "strands"
+    environment:
+      - "AWS_DEFAULT_REGION=us-east-1"

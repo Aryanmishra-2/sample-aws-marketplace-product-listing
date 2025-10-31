@@ -7,9 +7,19 @@ from typing import Dict, Any, List, Optional
 class ListingTools:
     """AWS Marketplace listing management tools"""
 
-    def __init__(self, region: str = "us-east-1"):
-        self.catalog_client = boto3.client("marketplace-catalog", region_name=region)
+    def __init__(self, region: str = "us-east-1", session=None):
+        if session:
+            self.catalog_client = session.client("marketplace-catalog")
+        else:
+            self.catalog_client = boto3.client("marketplace-catalog", region_name=region)
         self.region = region
+        self.session = session
+    
+    def update_credentials(self, session):
+        """Update AWS credentials using a boto3 session"""
+        self.session = session
+        self.catalog_client = session.client("marketplace-catalog")
+        self.region = session.region_name or self.region
 
     def get_entity_details(self, entity_type: str, entity_id: str) -> Dict[str, Any]:
         """

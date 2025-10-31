@@ -69,11 +69,20 @@ def sanitize_text_for_marketplace(text: str) -> str:
 
 def init_session_state():
     """Initialize session state"""
-    if 'orchestrator' not in st.session_state:
-        # Use Strands agent
-        from agent.strands_marketplace_agent import StrandsMarketplaceAgent
-        strands_agent = StrandsMarketplaceAgent()
-        st.session_state.orchestrator = strands_agent.orchestrator
+    if 'strands_agent' not in st.session_state:
+        try:
+            # Use integrated Strands agent
+            from agent.strands_marketplace_agent import StrandsMarketplaceAgent
+            st.session_state.strands_agent = StrandsMarketplaceAgent()
+            st.session_state.orchestrator = st.session_state.strands_agent.orchestrator
+        except Exception as e:
+            # Fallback to basic orchestrator if Strands agent fails to initialize
+            st.warning(f"⚠️ Advanced features unavailable: {str(e)}")
+            from agent.orchestrator import ListingOrchestrator
+            from agent.tools.listing_tools import ListingTools
+            listing_tools = ListingTools(region='us-east-1')
+            st.session_state.orchestrator = ListingOrchestrator(listing_tools=listing_tools)
+            st.session_state.strands_agent = None
     
     if 'conversation_history' not in st.session_state:
         st.session_state.conversation_history = []
@@ -989,25 +998,449 @@ def review_suggestions_screen():
             }
             
             st.session_state.listing_data = listing_data
-            st.session_state.current_step = "create_listing"
+            st.session_state.current_step = "aws_credentials"
             st.rerun()
+
+
+def aws_credentials_screen():
+    """Collect AWS credentials before creating listing"""
+    st.title("🔑 AWS Credentials Setup")
+    
+    st.markdown("""
+    ### 🔐 AWS Marketplace API Access Required
+    
+    To create your listing, I need AWS credentials with AWS Marketplace permissions.
+    
+    **Required Permissions:**
+    - `marketplace-catalog:*` - Create and manage marketplace listings
+    - `iam:GetRole` - Verify permissions
+    - `sts:GetCallerIdentity` - Validate credentials
+    """)
+    
+    st.divider()
+    
+    # Credential input form
+    with st.form("aws_credentials_form"):
+        st.subheader("🔑 Enter AWS Credentials")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            aws_access_key = st.text_input(
+                "AWS Access Key ID *",
+                type="password",
+                help="Your AWS Access Key (starts with AKIA...)"
+            )
+        with col2:
+            aws_secret_key = st.text_input(
+                "AWS Secret Access Key *",
+                type="password",
+                help="Your AWS Secret Access Key"
+            )
+        
+        aws_session_token = st.text_input(
+            "AWS Session Token (Optional)",
+            type="password",
+            help="Required only if using temporary credentials"
+        )
+        
+        aws_region = st.selectbox(
+            "AWS Region *",
+            options=["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"],
+            index=0,
+            help="AWS region for marketplace operations"
+        )
+        
+        st.divider()
+        
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            if st.form_submit_button("← Back"):
+                st.session_state.current_step = "review_suggestions"
+                st.rerun()
+        
+        with col3:
+            if st.form_submit_button("🚀 Validate & Create Listing", type="primary"):
+                if not aws_access_key or not aws_secret_key:
+                    st.error("❌ Please provide AWS Access Key and Secret Key")
+                    return
+                
+                # Validate credentials
+                with st.spinner("🔍 Validating AWS credentials..."):
+                    try:
+                        import boto3
+                        
+                        # Test credentials
+                        session = boto3.Session(
+                            aws_access_key_id=aws_access_key,
+                            aws_secret_access_key=aws_secret_key,
+                            aws_session_token=aws_session_token,
+                            region_name=aws_region
+                        )
+                        
+                        # Verify credentials work
+                        sts = session.client('sts')
+                        identity = sts.get_caller_identity()
+                        
+                        # Test marketplace permissions
+                        marketplace = session.client('marketplace-catalog')
+                        
+                        # Test basic marketplace access
+                        try:
+                            # Try to list entities to verify permissions
+                            test_response = marketplace.list_entities(
+                                Catalog='AWSMarketplace',
+                                EntityType='SaaSProduct@1.0',
+                                MaxResults=1
+                            )
+                            st.success("✅ AWS Marketplace permissions verified")
+                        except Exception as perm_error:
+                            st.warning(f"⚠️ Limited marketplace permissions: {str(perm_error)}")
+                            st.info("💡 You may need additional marketplace permissions, but basic access works")
+                        
+                        # Store credentials in session state
+                        st.session_state.aws_credentials = {
+                            'access_key': aws_access_key,
+                            'secret_key': aws_secret_key,
+                            'session_token': aws_session_token,
+                            'region': aws_region,
+                            'account_id': identity['Account']
+                        }
+                        
+                        # Update orchestrator with credentials
+                        if st.session_state.orchestrator:
+                            st.session_state.orchestrator.listing_tools.update_credentials(session)
+                        
+                        st.success(f"✅ Credentials validated! Account: {identity['Account']}")
+                        st.session_state.current_step = "create_listing"
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Credential validation failed: {str(e)}")
+                        
+                        # Show helpful error messages
+                        error_str = str(e).lower()
+                        if "invalidclienttokenid" in error_str:
+                            st.info("💡 **Tip:** Check your Access Key for typos")
+                        elif "signaturemismatch" in error_str:
+                            st.info("💡 **Tip:** Check your Secret Key for typos")
+                        elif "accessdenied" in error_str:
+                            st.error("🚫 **Access Denied:** Your credentials lack AWS Marketplace permissions")
+                            st.info("💡 **Required permissions:** marketplace-catalog:*, sts:GetCallerIdentity")
+                        elif "tokenrefreshreq" in error_str:
+                            st.info("💡 **Tip:** Your session token may be expired")
+                        elif "unrecognizedclientexception" in error_str:
+                            st.info("💡 **Tip:** Check your AWS region - marketplace-catalog may not be available")
+                        
+                        # Show debug info
+                        with st.expander("🔍 Debug Information"):
+                            st.code(f"Error Type: {type(e).__name__}")
+                            st.code(f"Error Message: {str(e)}")
+                            st.code(f"AWS Region: {aws_region}")
+    
+    st.divider()
+    
+    # Help section
+    with st.expander("🎆 Need Help Getting AWS Credentials?", expanded=False):
+        st.markdown("""
+        ### 📝 How to Get AWS Credentials:
+        
+        1. **Sign in to AWS Console** as an IAM user with marketplace permissions
+        2. **Go to IAM → Users → [Your User] → Security Credentials**
+        3. **Click "Create Access Key"**
+        4. **Select "Command Line Interface (CLI)"**
+        5. **Download the credentials**
+        
+        ### 🔒 Required IAM Permissions:
+        ```json
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "marketplace-catalog:*",
+                        "iam:GetRole",
+                        "sts:GetCallerIdentity"
+                    ],
+                    "Resource": "*"
+                }
+            ]
+        }
+        ```
+        
+        ### ⚠️ Security Best Practices:
+        - Use temporary credentials when possible
+        - Create a dedicated IAM user for marketplace operations
+        - Rotate access keys regularly
+        - Never share credentials
+        
+        ### 🔧 Common AWS Marketplace Issues:
+        
+        **1. Access Denied Errors:**
+        - Ensure your AWS account is registered as a marketplace seller
+        - Add marketplace-catalog:* permissions to your IAM user/role
+        - Verify you're using the correct AWS region (us-east-1 recommended)
+        
+        **2. Account Not Eligible:**
+        - Complete AWS Marketplace seller registration at [AWS Marketplace Management Portal](https://aws.amazon.com/marketplace/management/)
+        - Verify your tax and banking information
+        - Wait for seller account approval (can take 1-3 business days)
+        
+        **3. API Throttling:**
+        - AWS Marketplace has rate limits on API calls
+        - Wait 1-2 minutes between retries
+        - Use test mode if you're experimenting
+        
+        **4. Region Issues:**
+        - AWS Marketplace Catalog API is primarily available in us-east-1
+        - Try switching to us-east-1 region if you're having issues
+        """)
+
+
+def chat_mode_screen():
+    """Interactive chat with the Strands agent"""
+    st.title("💬 Chat with AWS Marketplace Agent")
+    
+    strands_agent = st.session_state.strands_agent
+    
+    if not strands_agent:
+        st.error("❌ Chat mode is not available. Advanced agent features are disabled.")
+        st.info("💡 You can still use the guided creation workflow.")
+        if st.button("← Back to Guided Creation"):
+            st.session_state.current_step = "welcome"
+            st.rerun()
+        return
+    
+    # Show current status
+    status = strands_agent.get_workflow_status()
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Current Stage", f"{status['current_stage']}/8")
+    with col2:
+        st.metric("Progress", f"{status['progress']}%")
+    with col3:
+        st.metric("Phase", status['phase'].replace('_', ' ').title())
+    
+    if status['listing_complete']:
+        st.success("✅ Limited listing creation complete! Ready for AWS integration.")
+        if status['product_id']:
+            st.info(f"🆔 Product ID: {status['product_id']}")
+        if status['offer_id']:
+            st.info(f"🆔 Offer ID: {status['offer_id']}")
+    else:
+        st.info(f"📝 Currently in: {status['stage_name']}")
+    
+    st.divider()
+    
+    # Chat interface
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+    
+    # Display chat history
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+    
+    # Chat input
+    if prompt := st.chat_input("Ask me anything about your marketplace listing..."):
+        # Add user message to chat history
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        
+        # Display user message
+        with st.chat_message("user"):
+            st.write(prompt)
+        
+        # Get agent response
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                if strands_agent:
+                    response = strands_agent.process_message(prompt)
+                else:
+                    response = "Sorry, the advanced chat agent is not available. Please use the guided creation workflow."
+                st.write(response)
+        
+        # Add assistant response to chat history
+        st.session_state.chat_history.append({"role": "assistant", "content": response})
+    
+    # Quick actions
+    st.divider()
+    st.subheader("⚡ Quick Actions")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("📋 Check Status"):
+            if strands_agent:
+                response = strands_agent.process_message("What's my current status?")
+                st.session_state.chat_history.append({"role": "user", "content": "What's my current status?"})
+                st.session_state.chat_history.append({"role": "assistant", "content": response})
+                st.rerun()
+            else:
+                st.error("Chat agent not available")
+    
+    with col2:
+        if st.button("🚀 Deploy Integration") and status['listing_complete']:
+            st.session_state.show_aws_form = True
+            st.rerun()
+    
+    with col3:
+        if st.button("⚙️ Execute Workflow") and status['listing_complete']:
+            st.session_state.show_workflow_form = True
+            st.rerun()
+    
+    # AWS Integration Form
+    if st.session_state.get('show_aws_form'):
+        with st.form("aws_integration_form"):
+            st.subheader("🔧 Deploy AWS Integration")
+            aws_access_key = st.text_input("AWS Access Key", type="password")
+            aws_secret_key = st.text_input("AWS Secret Key", type="password")
+            aws_session_token = st.text_input("AWS Session Token (optional)", type="password")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.form_submit_button("🚀 Deploy", type="primary"):
+                    if aws_access_key and aws_secret_key:
+                        deploy_message = f"Deploy AWS integration with credentials: Access Key: {aws_access_key[:8]}..., Secret Key: {aws_secret_key[:8]}..."
+                        if aws_session_token:
+                            deploy_message += f", Session Token: {aws_session_token[:8]}..."
+                        
+                        st.session_state.chat_history.append({"role": "user", "content": deploy_message})
+                        
+                        with st.spinner("Deploying..."):
+                            if strands_agent:
+                                response = strands_agent.process_message(deploy_message)
+                            else:
+                                response = "Chat agent not available for deployment."
+                        
+                        st.session_state.chat_history.append({"role": "assistant", "content": response})
+                        st.session_state.show_aws_form = False
+                        st.rerun()
+                    else:
+                        st.error("Please provide AWS credentials")
+            
+            with col2:
+                if st.form_submit_button("Cancel"):
+                    st.session_state.show_aws_form = False
+                    st.rerun()
+    
+    # Workflow Execution Form
+    if st.session_state.get('show_workflow_form'):
+        with st.form("workflow_form"):
+            st.subheader("⚡ Execute Marketplace Workflow")
+            aws_access_key = st.text_input("AWS Access Key", type="password")
+            aws_secret_key = st.text_input("AWS Secret Key", type="password")
+            aws_session_token = st.text_input("AWS Session Token (optional)", type="password")
+            lambda_function = st.text_input("Lambda Function Name (optional)")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.form_submit_button("⚡ Execute", type="primary"):
+                    if aws_access_key and aws_secret_key:
+                        workflow_message = f"Execute marketplace workflow with: Access Key: {aws_access_key[:8]}..., Secret Key: {aws_secret_key[:8]}..."
+                        if aws_session_token:
+                            workflow_message += f", Session Token: {aws_session_token[:8]}..."
+                        if lambda_function:
+                            workflow_message += f", Lambda Function: {lambda_function}"
+                        
+                        st.session_state.chat_history.append({"role": "user", "content": workflow_message})
+                        
+                        with st.spinner("Executing workflow..."):
+                            if strands_agent:
+                                response = strands_agent.process_message(workflow_message)
+                            else:
+                                response = "Chat agent not available for workflow execution."
+                        
+                        st.session_state.chat_history.append({"role": "assistant", "content": response})
+                        st.session_state.show_workflow_form = False
+                        st.rerun()
+                    else:
+                        st.error("Please provide AWS credentials")
+            
+            with col2:
+                if st.form_submit_button("Cancel"):
+                    st.session_state.show_workflow_form = False
+                    st.rerun()
+    
+    # Navigation
+    st.divider()
+    if st.button("← Back to Guided Creation"):
+        st.session_state.current_step = "welcome"
+        st.rerun()
 
 
 def create_listing_screen():
     """Create the listing using the orchestrator"""
     st.title("🚀 Creating Your Listing...")
     
+    # Debug info
+    with st.expander("🔍 Debug Info", expanded=False):
+        st.write(f"Current step: {st.session_state.current_step}")
+        st.write(f"Orchestrator available: {st.session_state.orchestrator is not None}")
+        if st.session_state.orchestrator:
+            st.write(f"Current stage: {st.session_state.orchestrator.current_stage}")
+        st.write(f"Listing data keys: {list(st.session_state.listing_data.keys()) if 'listing_data' in st.session_state else 'None'}")
+    
+    if 'listing_data' not in st.session_state:
+        st.error("❌ No listing data found. Please go back and complete the form.")
+        if st.button("← Back to Review"):
+            st.session_state.current_step = "review_suggestions"
+            st.rerun()
+        return
+    
+    if 'aws_credentials' not in st.session_state:
+        st.error("❌ No AWS credentials found. Please provide credentials first.")
+        if st.button("← Back to AWS Setup"):
+            st.session_state.current_step = "aws_credentials"
+            st.rerun()
+        return
+    
     listing_data = st.session_state.listing_data
     orchestrator = st.session_state.orchestrator
     
+    if not orchestrator:
+        st.error("❌ Orchestrator not available. Please restart the app.")
+        return
+    
     progress_bar = st.progress(0)
     status_text = st.empty()
+    error_container = st.container()
+    
+    # Add cancel and test mode options
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("❌ Cancel Creation"):
+            st.session_state.current_step = "review_suggestions"
+            st.rerun()
+    with col2:
+        test_mode = st.checkbox("🧪 Test Mode (Skip AWS API calls)", 
+                               value=st.session_state.get('force_test_mode', False),
+                               help="For debugging - simulates successful API responses")
+        if st.session_state.get('force_test_mode'):
+            st.warning("⚠️ Test mode enabled due to API errors")
     
     # Stage 1: Product Information
     status_text.text("📦 Creating product...")
     progress_bar.progress(10)
     
+    # Show what we're about to do
+    credentials = st.session_state.aws_credentials
+    st.info(f"📝 Creating product: {listing_data['product_title']}")
+    st.info(f"🌍 Using AWS Account: {credentials['account_id']} in {credentials['region']}")
+    
     # Set Stage 1 data
+    print(f"[DEBUG] Starting Stage 1. Current stage: {orchestrator.current_stage}")
+    print(f"[DEBUG] Current agent: {orchestrator.get_current_agent().stage_name}")
+    
+    # Ensure we're on the correct stage (Stage 1 = PRODUCT_INFO)
+    if orchestrator.current_stage != WorkflowStage.PRODUCT_INFO:
+        print(f"[DEBUG] WARNING: Expected Stage 1 (PRODUCT_INFO) but on {orchestrator.current_stage}")
+        print(f"[DEBUG] Forcing stage to PRODUCT_INFO")
+        orchestrator.current_stage = WorkflowStage.PRODUCT_INFO
+        print(f"[DEBUG] Stage corrected to: {orchestrator.current_stage}")
+        print(f"[DEBUG] Agent after correction: {orchestrator.get_current_agent().stage_name}")
+    
     orchestrator.set_stage_data("product_title", listing_data["product_title"])
     orchestrator.set_stage_data("logo_s3_url", listing_data["logo_s3_url"])
     orchestrator.set_stage_data("short_description", listing_data["short_description"])
@@ -1017,25 +1450,107 @@ def create_listing_screen():
     orchestrator.set_stage_data("support_description", listing_data["support_description"])
     orchestrator.set_stage_data("categories", listing_data["categories"])
     orchestrator.set_stage_data("search_keywords", listing_data["search_keywords"])
+    print(f"[DEBUG] Stage 1 data set. Current agent data: {orchestrator.get_current_agent().stage_data}")
     
-    result1 = orchestrator.complete_current_stage()
+    try:
+        if test_mode:
+            result1 = {"status": "complete", "api_result": {"success": True, "product_id": "prod-test123", "offer_id": "offer-test123"}}
+            st.write("🧪 Test mode: Simulated Stage 1 success")
+        else:
+            # Show what API call we're about to make
+            st.info("🔄 Calling AWS Marketplace Catalog API: CreateProduct + CreateOffer")
+            with st.expander("🔍 API Call Details", expanded=False):
+                st.write(f"Product Title: {listing_data['product_title']}")
+                st.write(f"AWS Account: {credentials['account_id']}")
+                st.write(f"Region: {credentials['region']}")
+            
+            result1 = orchestrator.complete_current_stage()
+        st.write(f"Stage 1 result: {result1}")
+    except Exception as e:
+        error_container.error(f"❌ Stage 1 failed: {str(e)}")
+        
+        # Enhanced error analysis
+        error_str = str(e).lower()
+        if "accessdenied" in error_str:
+            st.error("🚫 **AWS Marketplace Access Denied**")
+            st.info("💡 Your AWS credentials need marketplace-catalog permissions")
+            st.code("Required IAM Policy:\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{\n    \"Effect\": \"Allow\",\n    \"Action\": [\"marketplace-catalog:*\"],\n    \"Resource\": \"*\"\n  }]\n}")
+        elif "invalidparameter" in error_str or "validationexception" in error_str:
+            st.error("📝 **Invalid Parameters**")
+            st.info("💡 Check product title, descriptions, and other fields for AWS requirements")
+        elif "throttling" in error_str:
+            st.error("⏱️ **API Rate Limited**")
+            st.info("💡 Wait a few minutes before retrying")
+        
+        with st.expander("🔍 Full Error Details"):
+            st.code(f"Error Type: {type(e).__name__}")
+            st.code(f"Error Message: {str(e)}")
+            st.code(f"AWS Account: {credentials.get('account_id', 'Unknown')}")
+            st.code(f"Region: {credentials.get('region', 'Unknown')}")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Retry Stage 1"):
+                st.rerun()
+        with col2:
+            if st.button("🧪 Enable Test Mode"):
+                st.session_state.force_test_mode = True
+                st.rerun()
+        return
     
     if result1.get("status") != "complete":
-        st.error(f"Failed to create product: {result1.get('message')}")
+        error_container.error(f"Failed to create product: {result1.get('message')}")
+        st.write(f"Debug - Stage 1 full result: {result1}")
         return
     
     progress_bar.progress(25)
     
     # Stage 2: Fulfillment
     status_text.text("🔗 Adding fulfillment options...")
+    print(f"[DEBUG] Starting Stage 2. Current stage: {orchestrator.current_stage}")
+    print(f"[DEBUG] Current agent: {orchestrator.get_current_agent().stage_name}")
+    
+    # Ensure we're on the correct stage (Stage 2 = FULFILLMENT)
+    if orchestrator.current_stage != WorkflowStage.FULFILLMENT:
+        print(f"[DEBUG] WARNING: Expected Stage 2 (FULFILLMENT) but on {orchestrator.current_stage}")
+        print(f"[DEBUG] Forcing stage to FULFILLMENT")
+        orchestrator.current_stage = WorkflowStage.FULFILLMENT
+        print(f"[DEBUG] Stage corrected to: {orchestrator.current_stage}")
+        print(f"[DEBUG] Agent after correction: {orchestrator.get_current_agent().stage_name}")
+    
     orchestrator.set_stage_data("fulfillment_url", listing_data["fulfillment_url"])
     orchestrator.set_stage_data("quick_launch_enabled", False)
     
-    result2 = orchestrator.complete_current_stage()
+    try:
+        if test_mode:
+            result2 = {"status": "complete", "api_result": {"success": True}}
+            st.write("🧪 Test mode: Simulated Stage 2 success")
+        else:
+            st.info("🔄 Calling AWS API: AddDeliveryOptions")
+            result2 = orchestrator.complete_current_stage()
+        st.write(f"Stage 2 result: {result2}")
+    except Exception as e:
+        error_container.error(f"❌ Stage 2 failed: {str(e)}")
+        st.info("💡 **Tip:** Stage 2 adds fulfillment URL to your product")
+        if st.button("🧪 Enable Test Mode for Remaining Stages"):
+            st.session_state.force_test_mode = True
+            st.rerun()
+        return
     progress_bar.progress(40)
     
     # Stage 3: Pricing Dimensions
     status_text.text("💰 Configuring pricing...")
+    print(f"[DEBUG] Starting Stage 3. Current stage: {orchestrator.current_stage}")
+    print(f"[DEBUG] Current agent: {orchestrator.get_current_agent().stage_name}")
+    
+    # Ensure we're on the correct stage (Stage 3 = PRICING_CONFIG)
+    if orchestrator.current_stage != WorkflowStage.PRICING_CONFIG:
+        print(f"[DEBUG] WARNING: Expected Stage 3 (PRICING_CONFIG) but on {orchestrator.current_stage}")
+        print(f"[DEBUG] Forcing stage to PRICING_CONFIG")
+        orchestrator.current_stage = WorkflowStage.PRICING_CONFIG
+        print(f"[DEBUG] Stage corrected to: {orchestrator.current_stage}")
+        print(f"[DEBUG] Agent after correction: {orchestrator.get_current_agent().stage_name}")
+    
     dimensions = listing_data["dimensions"]
     
     # Convert dimensions to API format
@@ -1062,14 +1577,38 @@ def create_listing_screen():
     orchestrator.set_stage_data("pricing_model", listing_data["pricing_model"])
     orchestrator.set_stage_data("dimensions", api_dimensions)
     
-    result3 = orchestrator.complete_current_stage()
-    print(f"[DEBUG] Stage 3 result: {result3}")
-    print(f"[DEBUG] Current stage after Stage 3: {orchestrator.current_stage}")
+    try:
+        if test_mode:
+            result3 = {"status": "complete", "api_result": {"success": True}}
+            st.write("🧪 Test mode: Simulated Stage 3 success")
+        else:
+            st.info("🔄 Calling AWS API: AddDimensions")
+            result3 = orchestrator.complete_current_stage()
+        st.write(f"Stage 3 result: {result3}")
+        if not test_mode:
+            st.write(f"Current stage after Stage 3: {orchestrator.current_stage}")
+    except Exception as e:
+        error_container.error(f"❌ Stage 3 failed: {str(e)}")
+        st.info("💡 **Tip:** Stage 3 adds pricing dimensions to your product")
+        if st.button("🧪 Enable Test Mode for Remaining Stages"):
+            st.session_state.force_test_mode = True
+            st.rerun()
+        return
     progress_bar.progress(55)
     
     # Stage 4: Price Review
     status_text.text("💵 Applying pricing terms...")
     print(f"[DEBUG] Setting Stage 4 data...")
+    print(f"[DEBUG] Current stage before Stage 4: {orchestrator.current_stage}")
+    print(f"[DEBUG] Current agent before Stage 4: {orchestrator.get_current_agent().stage_name}")
+    
+    # Ensure we're on the correct stage (Stage 4 = PRICE_REVIEW)
+    if orchestrator.current_stage != WorkflowStage.PRICE_REVIEW:
+        print(f"[DEBUG] WARNING: Expected Stage 4 (PRICE_REVIEW) but on {orchestrator.current_stage}")
+        print(f"[DEBUG] Forcing stage to PRICE_REVIEW")
+        orchestrator.current_stage = WorkflowStage.PRICE_REVIEW
+        print(f"[DEBUG] Stage corrected to: {orchestrator.current_stage}")
+        print(f"[DEBUG] Agent after correction: {orchestrator.get_current_agent().stage_name}")
     
     # For Usage pricing, these fields are not applicable but required by the agent
     # Set dummy values that won't be used by the API
@@ -1089,31 +1628,141 @@ def create_listing_screen():
             orchestrator.set_stage_data("multiple_dimension_selection", "Disallowed")
             orchestrator.set_stage_data("quantity_configuration", "Disallowed")
     
+    print(f"[DEBUG] Stage 4 data set complete. Current agent data: {orchestrator.get_current_agent().stage_data}")
+    
     print(f"[DEBUG] About to complete Stage 4...")
-    print(f"[DEBUG] Stage 4 agent: {orchestrator.get_current_agent()}")
+    current_agent = orchestrator.get_current_agent()
+    print(f"[DEBUG] Stage 4 agent: {current_agent}")
+    print(f"[DEBUG] Stage 4 required fields: {current_agent.get_required_fields()}")
+    print(f"[DEBUG] Stage 4 collected data: {current_agent.stage_data}")
     print(f"[DEBUG] Stage 4 is complete: {orchestrator.check_stage_completion()}")
-    result4 = orchestrator.complete_current_stage()
-    print(f"[DEBUG] Stage 4 result: {result4}")
+    
+    # Check what's missing
+    missing_fields = [f for f in current_agent.get_required_fields() if f not in current_agent.stage_data or not current_agent.stage_data[f]]
+    if missing_fields:
+        print(f"[DEBUG] Missing required fields: {missing_fields}")
+    
+    # Check validation errors
+    validation_errors = current_agent.validate_all_fields(current_agent.stage_data)
+    if validation_errors:
+        print(f"[DEBUG] Validation errors: {validation_errors}")
+    try:
+        if test_mode:
+            result4 = {"status": "complete", "api_result": {"success": True}}
+            st.write("🧪 Test mode: Simulated Stage 4 success")
+        else:
+            st.info("🔄 Calling AWS API: UpdatePricingTerms")
+            result4 = orchestrator.complete_current_stage()
+        st.write(f"Stage 4 result: {result4}")
+        print(f"[DEBUG] Stage 4 completed. Current stage now: {orchestrator.current_stage}")
+    except Exception as e:
+        error_container.error(f"❌ Stage 4 failed: {str(e)}")
+        st.info("💡 **Tip:** Stage 4 configures pricing terms on your offer")
+        
+        # Enhanced debug info for Stage 4
+        print(f"[DEBUG] Stage 4 exception: {str(e)}")
+        print(f"[DEBUG] Exception type: {type(e).__name__}")
+        
+        # Show debug info for Stage 4 failure
+        with st.expander("🔍 Stage 4 Debug Info", expanded=True):
+            current_agent = orchestrator.get_current_agent()
+            st.write(f"**Current Stage:** {orchestrator.current_stage}")
+            st.write(f"**Agent:** {current_agent.stage_name}")
+            st.write(f"**Required Fields:** {current_agent.get_required_fields()}")
+            st.write(f"**Collected Data:** {current_agent.stage_data}")
+            
+            missing_fields = [f for f in current_agent.get_required_fields() if f not in current_agent.stage_data or not current_agent.stage_data[f]]
+            if missing_fields:
+                st.error(f"**Missing Required Fields:** {missing_fields}")
+            
+            validation_errors = current_agent.validate_all_fields(current_agent.stage_data)
+            if validation_errors:
+                st.error(f"**Validation Errors:** {validation_errors}")
+        
+        if st.button("🧪 Enable Test Mode for Remaining Stages"):
+            st.session_state.force_test_mode = True
+            st.rerun()
+        return
     progress_bar.progress(70)
     
     # Stage 5: Refund Policy
     status_text.text("↩️ Setting refund policy...")
+    print(f"[DEBUG] Starting Stage 5. Current stage: {orchestrator.current_stage}")
+    print(f"[DEBUG] Current agent: {orchestrator.get_current_agent().stage_name}")
+    
+    # Ensure we're on the correct stage (Stage 5 = REFUND_POLICY)
+    if orchestrator.current_stage != WorkflowStage.REFUND_POLICY:
+        print(f"[DEBUG] WARNING: Expected Stage 5 (REFUND_POLICY) but on {orchestrator.current_stage}")
+        print(f"[DEBUG] Forcing stage to REFUND_POLICY")
+        orchestrator.current_stage = WorkflowStage.REFUND_POLICY
+        print(f"[DEBUG] Stage corrected to: {orchestrator.current_stage}")
+        print(f"[DEBUG] Agent after correction: {orchestrator.get_current_agent().stage_name}")
+    
     orchestrator.set_stage_data("refund_policy", listing_data["refund_policy"])
     
-    result5 = orchestrator.complete_current_stage()
+    try:
+        if test_mode:
+            result5 = {"status": "complete", "api_result": {"success": True}}
+            st.write("🧪 Test mode: Simulated Stage 5 success")
+        else:
+            st.info("🔄 Calling AWS API: UpdateSupportTerms")
+            result5 = orchestrator.complete_current_stage()
+        st.write(f"Stage 5 result: {result5}")
+    except Exception as e:
+        error_container.error(f"❌ Stage 5 failed: {str(e)}")
+        st.info("💡 **Tip:** Stage 5 adds refund policy to your offer")
+        if st.button("🧪 Enable Test Mode for Remaining Stages"):
+            st.session_state.force_test_mode = True
+            st.rerun()
+        return
     progress_bar.progress(80)
     
     # Stage 6: EULA
     status_text.text("📄 Configuring EULA...")
+    print(f"[DEBUG] Starting Stage 6. Current stage: {orchestrator.current_stage}")
+    print(f"[DEBUG] Current agent: {orchestrator.get_current_agent().stage_name}")
+    
+    # Ensure we're on the correct stage (Stage 6 = EULA_CONFIG)
+    if orchestrator.current_stage != WorkflowStage.EULA_CONFIG:
+        print(f"[DEBUG] WARNING: Expected Stage 6 (EULA_CONFIG) but on {orchestrator.current_stage}")
+        print(f"[DEBUG] Forcing stage to EULA_CONFIG")
+        orchestrator.current_stage = WorkflowStage.EULA_CONFIG
+        print(f"[DEBUG] Stage corrected to: {orchestrator.current_stage}")
+        print(f"[DEBUG] Agent after correction: {orchestrator.get_current_agent().stage_name}")
+    
     orchestrator.set_stage_data("eula_type", listing_data["eula_type"])
     if listing_data.get("custom_eula_url"):
         orchestrator.set_stage_data("custom_eula_s3_url", listing_data["custom_eula_url"])
     
-    result6 = orchestrator.complete_current_stage()
+    try:
+        if test_mode:
+            result6 = {"status": "complete", "api_result": {"success": True}}
+            st.write("🧪 Test mode: Simulated Stage 6 success")
+        else:
+            st.info("🔄 Calling AWS API: UpdateLegalTerms")
+            result6 = orchestrator.complete_current_stage()
+        st.write(f"Stage 6 result: {result6}")
+    except Exception as e:
+        error_container.error(f"❌ Stage 6 failed: {str(e)}")
+        st.info("💡 **Tip:** Stage 6 configures EULA (legal terms) on your offer")
+        if st.button("🧪 Enable Test Mode for Remaining Stages"):
+            st.session_state.force_test_mode = True
+            st.rerun()
+        return
     progress_bar.progress(90)
     
     # Stage 7: Availability
     status_text.text("🌍 Setting availability...")
+    print(f"[DEBUG] Starting Stage 7. Current stage: {orchestrator.current_stage}")
+    print(f"[DEBUG] Current agent: {orchestrator.get_current_agent().stage_name}")
+    
+    # Ensure we're on the correct stage (Stage 7 = OFFER_AVAILABILITY)
+    if orchestrator.current_stage != WorkflowStage.OFFER_AVAILABILITY:
+        print(f"[DEBUG] WARNING: Expected Stage 7 (OFFER_AVAILABILITY) but on {orchestrator.current_stage}")
+        print(f"[DEBUG] Forcing stage to OFFER_AVAILABILITY")
+        orchestrator.current_stage = WorkflowStage.OFFER_AVAILABILITY
+        print(f"[DEBUG] Stage corrected to: {orchestrator.current_stage}")
+        print(f"[DEBUG] Agent after correction: {orchestrator.get_current_agent().stage_name}")
     
     # Map availability type to orchestrator format
     if listing_data["availability_type"] == "All countries (worldwide)":
@@ -1125,16 +1774,52 @@ def create_listing_screen():
         orchestrator.set_stage_data("availability_type", "allowlist_only")
         orchestrator.set_stage_data("allowed_countries", listing_data.get("allowed_countries", []))
     
-    result7 = orchestrator.complete_current_stage()
+    try:
+        if test_mode:
+            result7 = {"status": "complete", "api_result": {"success": True}}
+            st.write("🧪 Test mode: Simulated Stage 7 success")
+        else:
+            st.info("🔄 Calling AWS API: UpdateAvailability")
+            result7 = orchestrator.complete_current_stage()
+        st.write(f"Stage 7 result: {result7}")
+    except Exception as e:
+        error_container.error(f"❌ Stage 7 failed: {str(e)}")
+        st.info("💡 **Tip:** Stage 7 sets geographic availability for your offer")
+        if st.button("🧪 Enable Test Mode for Remaining Stages"):
+            st.session_state.force_test_mode = True
+            st.rerun()
+        return
     progress_bar.progress(95)
     
     # Stage 8: Allowlist
     status_text.text("✅ Finalizing...")
+    print(f"[DEBUG] Starting Stage 8. Current stage: {orchestrator.current_stage}")
+    print(f"[DEBUG] Current agent: {orchestrator.get_current_agent().stage_name}")
+    
+    # Ensure we're on the correct stage (Stage 8 = ALLOWLIST)
+    if orchestrator.current_stage != WorkflowStage.ALLOWLIST:
+        print(f"[DEBUG] WARNING: Expected Stage 8 (ALLOWLIST) but on {orchestrator.current_stage}")
+        print(f"[DEBUG] Forcing stage to ALLOWLIST")
+        orchestrator.current_stage = WorkflowStage.ALLOWLIST
+        print(f"[DEBUG] Stage corrected to: {orchestrator.current_stage}")
+        print(f"[DEBUG] Agent after correction: {orchestrator.get_current_agent().stage_name}")
+    
     buyer_accounts = listing_data.get("buyer_accounts", [])
     if buyer_accounts:
         orchestrator.set_stage_data("allowlist_account_ids", buyer_accounts)
     
-    result8 = orchestrator.complete_current_stage()
+    try:
+        if test_mode:
+            result8 = {"status": "complete", "api_result": {"success": True}}
+            st.write("🧪 Test mode: Simulated Stage 8 success")
+        else:
+            st.info("🔄 Calling AWS API: UpdateTargeting")
+            result8 = orchestrator.complete_current_stage()
+        st.write(f"Stage 8 result: {result8}")
+    except Exception as e:
+        error_container.error(f"❌ Stage 8 failed: {str(e)}")
+        st.info("💡 **Tip:** Stage 8 configures account targeting (allowlist) for your offer")
+        return
     
     progress_bar.progress(95)
     
@@ -1202,19 +1887,36 @@ def create_listing_screen():
             st.warning(f"⚠️ Could not publish to Limited: {release_result.get('error', 'Unknown error')}")
     
     progress_bar.progress(100)
-    status_text.text("🎉 Listing created successfully!")
+    status_text.text("🎉 Listing creation process completed!")
+    
+    # Show final status
+    if all_stages_successful:
+        st.success("✅ All stages completed successfully!")
+    else:
+        st.warning("⚠️ Some stages had issues but process completed.")
     
     # Show results
-    st.success("🎉 Your AWS Marketplace listing has been created!")
+    if all_stages_successful:
+        st.success("🎉 Your AWS Marketplace listing has been created!")
+    else:
+        st.warning("⚠️ Listing creation completed with some issues.")
     
     if product_id:
         st.info(f"🆔 **Product ID:** `{product_id}`")
+    else:
+        st.warning("⚠️ Product ID not found - check AWS Marketplace console")
+        
     if offer_id:
         st.info(f"🆔 **Offer ID:** `{offer_id}`")
+    else:
+        st.warning("⚠️ Offer ID not found - check AWS Marketplace console")
     
-    if all_stages_successful:
+    # Always show next steps, regardless of success status
+    if all_stages_successful and product_id and offer_id:
         if published_to_limited:
             st.success("📋 **Status:** Limited (published and ready for testing!)")
+            
+            # Show AWS Integration option
             st.markdown("""
             ### 🎉 Your listing is now LIVE in Limited stage!
             
@@ -1227,6 +1929,81 @@ def create_listing_screen():
             - ✅ Geographic availability
             - ✅ **Published to Limited stage**
             
+            ---
+            
+            ### 🚀 Next Phase: AWS Integration & Deployment
+            
+            Now you can deploy the complete AWS infrastructure for your SaaS integration:
+            """)
+            
+            # AWS Integration Section
+            with st.expander("🔧 Deploy AWS Integration Infrastructure", expanded=True):
+                st.markdown("""
+                Deploy CloudFormation stack with:
+                - DynamoDB tables for subscribers and metering
+                - Lambda functions for hourly metering processing  
+                - API Gateway for customer registration
+                - SNS topics for marketplace notifications
+                """)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    aws_access_key = st.text_input("AWS Access Key", type="password")
+                    aws_secret_key = st.text_input("AWS Secret Key", type="password")
+                with col2:
+                    aws_session_token = st.text_input("AWS Session Token (optional)", type="password")
+                
+                if st.button("🚀 Deploy AWS Integration", type="primary"):
+                    if aws_access_key and aws_secret_key:
+                        with st.spinner("Deploying AWS infrastructure..."):
+                            # Use the integrated Strands agent
+                            strands_agent = st.session_state.strands_agent
+                            
+                            # Deploy integration
+                            deploy_message = f"Deploy AWS integration with credentials: Access Key: {aws_access_key[:8]}..., Secret Key: {aws_secret_key[:8]}..."
+                            if aws_session_token:
+                                deploy_message += f", Session Token: {aws_session_token[:8]}..."
+                            
+                            response = strands_agent.process_message(deploy_message)
+                            st.success("✅ AWS Integration deployment initiated!")
+                            st.write(response)
+                            
+                            # Show next step
+                            st.info("💡 **Next:** Execute the complete marketplace workflow (metering, buyer experience, visibility)")
+                    else:
+                        st.error("Please provide AWS Access Key and Secret Key")
+            
+            # Workflow Execution Section  
+            with st.expander("⚡ Execute Complete Marketplace Workflow"):
+                st.markdown("""
+                Execute the complete workflow:
+                1. Update fulfillment URL in marketplace
+                2. Test buyer experience (purchase & registration)
+                3. Create metering records
+                4. Trigger Lambda processing
+                5. Submit public visibility request
+                """)
+                
+                lambda_function = st.text_input("Lambda Function Name (optional)", placeholder="marketplace-metering-hourly-{ProductId}")
+                
+                if st.button("⚡ Execute Workflow"):
+                    if aws_access_key and aws_secret_key:
+                        with st.spinner("Executing marketplace workflow..."):
+                            strands_agent = st.session_state.strands_agent
+                            
+                            workflow_message = f"Execute marketplace workflow with: Access Key: {aws_access_key[:8]}..., Secret Key: {aws_secret_key[:8]}..."
+                            if aws_session_token:
+                                workflow_message += f", Session Token: {aws_session_token[:8]}..."
+                            if lambda_function:
+                                workflow_message += f", Lambda Function: {lambda_function}"
+                            
+                            response = strands_agent.process_message(workflow_message)
+                            st.success("✅ Marketplace workflow executed!")
+                            st.write(response)
+                    else:
+                        st.error("Please provide AWS credentials above first")
+            
+            st.markdown("""
             ---
             
             ### 🧪 Test Your Listing
@@ -1344,10 +2121,17 @@ def create_listing_screen():
         4. Publish to Limited stage for testing
         """)
     
-    if st.button("Create Another Listing"):
-        # Reset
-        st.session_state.clear()
-        st.rerun()
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Create Another Listing"):
+            # Reset
+            st.session_state.clear()
+            st.rerun()
+    
+    with col2:
+        if st.button("💬 Chat with Agent", type="secondary"):
+            st.session_state.current_step = "chat_mode"
+            st.rerun()
 
 
 def main():
@@ -1390,7 +2174,9 @@ def main():
             "gather_context": "Product Info",
             "analyze_product": "AI Analysis",
             "review_suggestions": "Review",
-            "create_listing": "Create"
+            "aws_credentials": "AWS Setup",
+            "create_listing": "Create",
+            "chat_mode": "💬 Chat Mode"
         }
         
         current = st.session_state.current_step
@@ -1412,8 +2198,12 @@ def main():
         analyze_product_screen()
     elif st.session_state.current_step == "review_suggestions":
         review_suggestions_screen()
+    elif st.session_state.current_step == "aws_credentials":
+        aws_credentials_screen()
     elif st.session_state.current_step == "create_listing":
         create_listing_screen()
+    elif st.session_state.current_step == "chat_mode":
+        chat_mode_screen()
 
 
 if __name__ == "__main__":

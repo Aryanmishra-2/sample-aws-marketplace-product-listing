@@ -37,6 +37,13 @@ class StrandsMarketplaceAgent:
         # Get model configuration
         model_id = self.config.get('model_id', 'us.anthropic.claude-3-7-sonnet-20250219-v1:0')
         
+        # Post-listing workflow state
+        self.post_listing_active = False
+        self.integration_agents = None
+        
+        # Initialize post-listing agents
+        self._init_post_listing_agents()
+        
         # Create Strands agent with tools
         self.agent = Agent(
             tools=[
@@ -48,6 +55,9 @@ class StrandsMarketplaceAgent:
                 self._create_add_delivery_tool(),
                 self._create_add_pricing_tool(),
                 self._create_get_status_tool(),
+                self._create_deploy_integration_tool(),
+                self._create_execute_workflow_tool(),
+                self._create_check_workflow_status_tool(),
             ],
             model=model_id
         )
@@ -291,6 +301,184 @@ class StrandsMarketplaceAgent:
         
         return get_listing_status
     
+    def _init_post_listing_agents(self):
+        """Initialize post-listing workflow agents"""
+        try:
+            # Import agents from the agents folder
+            import sys
+            import os
+            agents_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'agents')
+            if agents_path not in sys.path:
+                sys.path.insert(0, agents_path)
+            
+            # Import with absolute imports to avoid module conflicts
+            import importlib.util
+            
+            # Load serverless integration agent
+            serverless_spec = importlib.util.spec_from_file_location(
+                "serverless_saas_integration", 
+                os.path.join(agents_path, "serverless_saas_integration.py")
+            )
+            serverless_module = importlib.util.module_from_spec(serverless_spec)
+            serverless_spec.loader.exec_module(serverless_module)
+            
+            # Load workflow orchestrator
+            workflow_spec = importlib.util.spec_from_file_location(
+                "workflow_orchestrator", 
+                os.path.join(agents_path, "workflow_orchestrator.py")
+            )
+            workflow_module = importlib.util.module_from_spec(workflow_spec)
+            workflow_spec.loader.exec_module(workflow_module)
+            
+            # Load buyer experience agent
+            buyer_spec = importlib.util.spec_from_file_location(
+                "buyer_experience", 
+                os.path.join(agents_path, "buyer_experience.py")
+            )
+            buyer_module = importlib.util.module_from_spec(buyer_spec)
+            buyer_spec.loader.exec_module(buyer_module)
+            
+            # Load metering agent
+            metering_spec = importlib.util.spec_from_file_location(
+                "metering", 
+                os.path.join(agents_path, "metering.py")
+            )
+            metering_module = importlib.util.module_from_spec(metering_spec)
+            metering_spec.loader.exec_module(metering_module)
+            
+            # Load public visibility agent
+            visibility_spec = importlib.util.spec_from_file_location(
+                "public_visibility", 
+                os.path.join(agents_path, "public_visibility.py")
+            )
+            visibility_module = importlib.util.module_from_spec(visibility_spec)
+            visibility_spec.loader.exec_module(visibility_module)
+            
+            self.integration_agents = {
+                'serverless_integration': serverless_module.ServerlessSaasIntegrationAgent(strands_agent=self),
+                'workflow_orchestrator': workflow_module.WorkflowOrchestrator(strands_agent=self),
+                'buyer_experience': buyer_module.BuyerExperienceAgent(strands_agent=self),
+                'metering': metering_module.MeteringAgent(strands_agent=self),
+                'public_visibility': visibility_module.PublicVisibilityAgent(strands_agent=self)
+            }
+        except Exception as e:
+            print(f"Warning: Could not import post-listing agents: {e}")
+            self.integration_agents = None
+    
+    def _create_deploy_integration_tool(self):
+        """Create tool for deploying AWS integration"""
+        integration_agents = self.integration_agents
+        
+        @tool
+        def deploy_aws_integration(
+            access_key: str,
+            secret_key: str,
+            session_token: str = None
+        ) -> dict:
+            """
+            Deploy AWS Marketplace SaaS integration infrastructure.
+            This creates CloudFormation stack with DynamoDB, Lambda, API Gateway, and SNS.
+            Call this after completing the limited listing (Stage 8).
+            
+            Args:
+                access_key: AWS Access Key ID
+                secret_key: AWS Secret Access Key
+                session_token: AWS Session Token (optional)
+            
+            Returns:
+                Dictionary with deployment status and stack information
+            """
+            if not integration_agents or 'serverless_integration' not in integration_agents:
+                return {"error": "Integration agents not available"}
+            
+            # Check if limited listing is complete
+            if self.orchestrator.current_stage.value < 8:
+                return {
+                    "error": "Please complete the limited listing creation first (all 8 stages)",
+                    "current_stage": self.orchestrator.current_stage.value,
+                    "required_stage": 8
+                }
+            
+            return integration_agents['serverless_integration'].deploy_integration(
+                access_key, secret_key, session_token
+            )
+        
+        return deploy_aws_integration
+    
+    def _create_execute_workflow_tool(self):
+        """Create tool for executing post-deployment workflow"""
+        integration_agents = self.integration_agents
+        
+        @tool
+        def execute_marketplace_workflow(
+            access_key: str,
+            secret_key: str,
+            session_token: str = None,
+            lambda_function_name: str = None
+        ) -> dict:
+            """
+            Execute complete AWS Marketplace workflow: Metering → Lambda → Public Visibility.
+            Call this after deploying the AWS integration infrastructure.
+            
+            Args:
+                access_key: AWS Access Key ID
+                secret_key: AWS Secret Access Key
+                session_token: AWS Session Token (optional)
+                lambda_function_name: Lambda function name for metering (optional)
+            
+            Returns:
+                Dictionary with workflow execution results
+            """
+            if not integration_agents or 'workflow_orchestrator' not in integration_agents:
+                return {"error": "Workflow orchestrator not available"}
+            
+            if 'workflow_orchestrator' in integration_agents:
+                return integration_agents['workflow_orchestrator'].execute_full_workflow(
+                    access_key, secret_key, session_token, lambda_function_name
+                )
+            else:
+                return {"error": "Workflow orchestrator not properly initialized"}
+        
+        return execute_marketplace_workflow
+    
+    def _create_check_workflow_status_tool(self):
+        """Create tool for checking workflow status"""
+        
+        @tool
+        def check_listing_status() -> dict:
+            """
+            Check the current status of the listing creation and post-deployment workflow.
+            
+            Returns:
+                Dictionary with current status and next steps
+            """
+            current_stage = self.orchestrator.current_stage.value
+            progress = self.orchestrator.get_progress_percentage()
+            
+            status = {
+                "listing_creation": {
+                    "current_stage": current_stage,
+                    "stage_name": self.orchestrator.get_current_agent().stage_name if current_stage <= 8 else "Complete",
+                    "progress_percentage": progress,
+                    "is_complete": current_stage > 8,
+                    "product_id": self.orchestrator.product_id,
+                    "offer_id": self.orchestrator.offer_id
+                },
+                "next_steps": []
+            }
+            
+            if current_stage <= 8:
+                status["next_steps"].append(f"Complete Stage {current_stage}: {self.orchestrator.get_current_agent().stage_name}")
+                status["next_steps"].append("Continue with listing creation workflow")
+            else:
+                status["next_steps"].append("✅ Limited listing creation complete!")
+                status["next_steps"].append("Ready to deploy AWS integration infrastructure")
+                status["next_steps"].append("Use deploy_aws_integration tool with your AWS credentials")
+            
+            return status
+        
+        return check_listing_status
+    
     def process_message(self, user_message: str, session_id: Optional[str] = None) -> str:
         """
         Process user message through Strands agent
@@ -310,8 +498,33 @@ class StrandsMarketplaceAgent:
         collected_fields = list(current_agent.stage_data.keys())
         missing_fields = [f for f in stage_info['required_fields'] if f not in collected_fields]
         
-        # Build context-aware system prompt
-        context_prompt = f"""You are an AWS Marketplace listing assistant in Stage {stage_info['stage_number']}/8: {stage_info['stage_name']}.
+        # Check if we're in post-listing workflow
+        if self.orchestrator.current_stage.value > 8:
+            # Post-listing workflow - AWS integration and deployment
+            context_prompt = f"""You are an AWS Marketplace integration assistant. The limited listing creation is COMPLETE! 
+
+🎉 LISTING STATUS: All 8 stages completed successfully!
+✅ Product ID: {self.orchestrator.product_id or 'Available'}
+✅ Offer ID: {self.orchestrator.offer_id or 'Available'}
+
+NEXT PHASE: AWS Integration & Deployment
+
+You can now help with:
+1. **Deploy AWS Integration** - Create CloudFormation infrastructure (DynamoDB, Lambda, API Gateway, SNS)
+2. **Execute Marketplace Workflow** - Run metering, Lambda processing, and public visibility requests
+3. **Check Status** - Monitor deployment and workflow progress
+
+AVAILABLE TOOLS:
+- deploy_aws_integration(access_key, secret_key, session_token) - Deploy AWS infrastructure
+- execute_marketplace_workflow(access_key, secret_key, session_token, lambda_function_name) - Run post-deployment workflow
+- check_listing_status() - Check current status and next steps
+
+To proceed, the user needs to provide AWS credentials for deployment.
+
+User message: {user_message}"""
+        else:
+            # Standard listing creation workflow
+            context_prompt = f"""You are an AWS Marketplace listing assistant in Stage {stage_info['stage_number']}/8: {stage_info['stage_name']}.
 
 COLLECTED DATA SO FAR:
 {json.dumps(current_agent.stage_data, indent=2) if current_agent.stage_data else "None yet"}
@@ -350,14 +563,26 @@ User message: {user_message}"""
     
     def get_workflow_status(self) -> Dict[str, Any]:
         """Get current workflow status"""
-        return {
-            "current_stage": self.orchestrator.current_stage.value,
-            "stage_name": self.orchestrator.get_current_agent().stage_name,
+        current_stage = self.orchestrator.current_stage.value
+        
+        status = {
+            "current_stage": current_stage,
             "progress": self.orchestrator.get_progress_percentage(),
             "completed_stages": [s.value for s in self.orchestrator.completed_stages],
             "product_id": self.orchestrator.product_id,
-            "offer_id": self.orchestrator.offer_id
+            "offer_id": self.orchestrator.offer_id,
+            "listing_complete": current_stage > 8,
+            "ready_for_integration": current_stage > 8 and self.orchestrator.product_id is not None
         }
+        
+        if current_stage <= 8:
+            status["stage_name"] = self.orchestrator.get_current_agent().stage_name
+            status["phase"] = "listing_creation"
+        else:
+            status["stage_name"] = "AWS Integration & Deployment"
+            status["phase"] = "post_listing_integration"
+        
+        return status
     
     def reset_workflow(self):
         """Reset workflow to beginning"""

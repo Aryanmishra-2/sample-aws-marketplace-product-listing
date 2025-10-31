@@ -1,264 +1,158 @@
-# AWS Marketplace SaaS Listing Creator
+# AI Agent Marketplace
 
-AI-powered tool to create AWS Marketplace SaaS listings using Strands SDK.
+An AI-powered assistant system that guides AWS customers through the complete AWS Marketplace SaaS integration process with intelligent error handling and troubleshooting.
 
 ## 🚀 Quick Start
 
+1. **Install Dependencies**
 ```bash
-# Run the app
-./run_streamlit.sh
+pip install -r requirements.txt
 ```
 
-## 📋 What It Does
-
-Creates complete AWS Marketplace SaaS listings through an AI-guided workflow:
-
-1. **Provide URLs** - Enter your product website, docs, pricing page
-2. **AI Analysis** - AI analyzes and generates all content automatically
-3. **Review & Configure** - Review AI suggestions and configure:
-   - Product information (title, descriptions, highlights)
-   - Pricing dimensions (metered/entitled)
-   - Contract durations
-   - Geographic availability
-   - Account allowlist
-   - Support & EULA
-4. **Create & Publish** - One-click creation with optional auto-publish to Limited stage
-
-## ✨ Features
-
-- ✅ **AI-Powered** - Analyzes your product and generates optimized content
-- ✅ **Complete Workflow** - All 8 AWS Marketplace stages
-- ✅ **Pricing Models** - Usage, Contract, or Hybrid (Contract with Consumption)
-- ✅ **Auto-Publish** - Optionally publish to Limited stage automatically
-- ✅ **Strands SDK** - Built on AWS Strands agent framework
-
-## 📦 Setup
-
-### Prerequisites
-
-- Python 3.8+
-- AWS Account with Marketplace Seller registration
-- AWS credentials configured
-- Bedrock access (Claude 3.7 Sonnet enabled)
-
-### Installation
-
-The packages are already installed in:
-```
-/Users/avivenk/Library/CloudStorage/WorkDocsDrive-Documents/MPAgent/venv
-```
-
-The `run_streamlit.sh` script automatically uses this venv.
-
-### Manual Setup (if needed)
-
+2. **Run the AI Assistant**
 ```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements_strands.txt
-
-# Configure AWS
-aws configure
-
-# Enable Bedrock models
-# Go to: https://console.aws.amazon.com/bedrock/
-# Enable: Claude 3.7 Sonnet
+python ai_marketplace_orchestrator.py
 ```
 
-## 🎯 Usage
+3. **Provide AWS Credentials**
+- Enter your AWS Access Key, Secret Key, and optional Session Token
+- The assistant will guide you through the complete workflow
 
-### Run the App
+## 🤖 What the Assistant Can Do
 
-```bash
-./run_streamlit.sh
-```
+### Natural Language Commands:
+- "Deploy my SaaS integration"
+- "Test metering functionality" 
+- "Make my product public"
+- "What's my current status?"
+- "Help me troubleshoot this error"
 
-### Workflow
-
-1. **Welcome** - Click "Start AI-Guided Creation"
-2. **Provide URLs** - Enter product website, docs, pricing URLs
-3. **AI Analysis** - Wait while AI analyzes your product
-4. **Review** - Review and edit AI-generated content:
-   - Product title, descriptions, highlights
-   - Categories and keywords
-   - Pricing model and dimensions
-   - Contract durations (if applicable)
-   - Support information
-   - Refund policy
-   - EULA configuration
-   - Geographic availability
-   - Account allowlist (optional)
-5. **Create** - Click "Create Listing" to publish
-
-### Auto-Publish to Limited
-
-Enable the checkbox to automatically publish your listing to Limited stage for testing. This allows you to test immediately with your AWS account.
-
-## 📊 Pricing Models
-
-### Usage-Based
-Pay-as-you-go metered pricing
-- Add metered dimensions (e.g., API calls, storage)
-- Customers pay only for what they use
-
-### Contract-Based
-Upfront commitment pricing
-- Add entitled dimensions (e.g., user seats)
-- Select contract durations (1-36 months)
-- Customers pay upfront
-
-### Contract with Consumption (Hybrid)
-Base contract + usage overages
-- Add both entitled and metered dimensions
-- Customers get base entitlement + pay for overages
+### Complete Workflow:
+1. **Deploy** CloudFormation template with SaaS integration
+2. **Update** fulfillment URL automatically via AWS Marketplace Catalog API
+3. **Confirm** SNS subscription for notifications
+4. **Test** metering with usage records
+5. **Validate** metering success
+6. **Request** public visibility
 
 ## 🏗️ Architecture
 
-```
-Streamlit UI
-    ↓
-StrandsMarketplaceAgent (Strands SDK)
-    ↓
-ListingOrchestrator (8-stage workflow)
-    ↓
-Sub-Agents (specialized per stage)
-    ↓
-ListingTools (AWS Marketplace API)
-```
+### Core Agents:
+- **CreateSaasAgent**: Product configuration
+- **ServerlessSaasIntegrationAgent**: CloudFormation deployment
+- **MeteringAgent**: Usage tracking and validation
+- **PublicVisibilityAgent**: Marketplace visibility management
+- **ValidationHelperAgent**: Input validation with Knowledge Base
 
-### Key Components
+### AI Components:
+- **Bedrock LLM**: Natural language understanding and response generation
+- **Knowledge Base**: AWS Marketplace documentation and troubleshooting
+- **Orchestrator**: Workflow coordination and state management
 
-- **Strands Agent** - LLM interaction with @tool decorators
-- **Orchestrator** - Manages 8-stage workflow
-- **Sub-Agents** - Stage-specific logic (Product Info, Pricing, etc.)
-- **Listing Tools** - AWS Marketplace Catalog API integration
+## 📋 Prerequisites
 
-## 📁 Files
+### AWS Setup:
+1. **Enable Bedrock Models**:
+   - Amazon Nova Pro
+   - Amazon Titan Text Embeddings V2
 
-### Main Files
-- **`streamlit_app_complete.py`** - Complete AI-guided UI (recommended)
-- **`run_streamlit.sh`** - Launch script
-- **`requirements_strands.txt`** - Python dependencies
+2. **Create Knowledge Base** (Optional but recommended):
+   - Deploy `knowledge_base_setup.yaml`
+   - Upload AWS Marketplace documentation
+   - Update `knowledge_base_id` in orchestrator
 
-### Agent Files
-- `agent/strands_marketplace_agent.py` - Main Strands agent
-- `agent/orchestrator.py` - Workflow orchestration
-- `agent/sub_agents/*.py` - 8 specialized sub-agents
-- `agent/tools/listing_tools.py` - AWS Marketplace API tools
-
-### Configuration
-- `config/multi_agent_config.yaml` - Agent configuration
-- `agentcore_config.yaml` - AgentCore deployment config
-
-### Testing
-- `test_strands_migration.py` - Test suite
-
-## 🧪 Testing
-
-```bash
-export VIRTUAL_ENV=/Users/avivenk/Library/CloudStorage/WorkDocsDrive-Documents/MPAgent/venv
-export PATH="$VIRTUAL_ENV/bin:$PATH"
-python test_strands_migration.py
-```
-
-Expected: 8/9 tests passing (89%)
+3. **AWS Credentials**:
+   - IAM user with marketplace, CloudFormation, and Catalog API permissions
+   - Required permissions: `marketplace-catalog:StartChangeSet`, `marketplace-catalog:DescribeEntity`
+   - Temporary credentials recommended for security
 
 ## 🔧 Configuration
 
-### Model Configuration
-
-Edit `config/multi_agent_config.yaml`:
-
-```yaml
-bedrock:
-  model_id: "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-  region: "us-east-1"
-```
-
-### Virtual Environment
-
-The app uses:
-```
-/Users/avivenk/Library/CloudStorage/WorkDocsDrive-Documents/MPAgent/venv
-```
-
-The `run_streamlit.sh` script handles this automatically.
-
-## 📚 AWS Marketplace Resources
-
-- [Seller Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/)
-- [SaaS Guidelines](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-guidelines.html)
-- [Management Portal](https://aws.amazon.com/marketplace/management/products)
-
-## 🐛 Troubleshooting
-
-### Import Error: "No module named 'strands'"
-
-The package is `strands-agents` but import is:
+### Update Product Settings:
+Edit `create_saas.py` with your product details:
 ```python
-from strands import Agent, tool
+def get_product_id(self):
+    return "your-product-id"
+
+def get_pricing_model_dimension(self):
+    return "Contract-based-pricing"  # or Usage-based-pricing
+
+def get_email_dimension(self):
+    return "your-email@example.com"
 ```
 
-Install:
-```bash
-pip install strands-agents strands-agents-tools
+### Knowledge Base Integration:
+Update `ai_marketplace_orchestrator.py`:
+```python
+self.knowledge_base_id = "your-actual-kb-id"
 ```
 
-### Model Access Denied
+## 🚦 Usage Examples
 
-Enable Claude models in Bedrock console:
-1. Go to https://console.aws.amazon.com/bedrock/
-2. Navigate to: Model access → Manage model access
-3. Enable: Claude 3.7 Sonnet
+### Interactive Session:
+```
+🤖 AWS Marketplace SaaS Integration Assistant
+Enter AWS Access Key: AKIA...
+Enter Session Token (optional): 
 
-### AWS Credentials
+💬 What would you like to do? Deploy my SaaS integration
 
-```bash
-aws configure
+🤖 I'll help you deploy your SaaS integration. Starting CloudFormation 
+deployment with your product configuration...
+
+✅ Fulfillment URL updated automatically via AWS Marketplace Catalog API
+
+📋 Suggested next actions:
+   • Confirm SNS subscription
+   • Test metering functionality
+
+📍 Current step: deployment
+✅ Completed: None
 ```
 
-## 💡 Tips
+## 🛠️ Error Handling
 
-1. **Provide good URLs** - Better URLs = better AI analysis
-2. **Review everything** - Always review AI-generated content
-3. **Test in Limited** - Use auto-publish to test immediately
-4. **Start with test pricing** - Use $0.001 for testing
-5. **Update before public** - Change to production prices before going public
+The assistant provides intelligent error handling:
+- **Input Validation**: Real-time format checking with examples
+- **AWS API Errors**: Natural language explanation of technical errors
+- **Knowledge Base Lookup**: Contextual troubleshooting guidance
+- **Retry Mechanisms**: Guided correction with specific instructions
 
-## 🎉 What's New (Strands SDK)
+## 📁 File Structure
 
-This version uses **Strands SDK** instead of custom runtime:
-
-### Before (Custom)
-- Custom AgentRuntime class
-- Custom Gateway for tool routing
-- Manual conversation management
-- ~1,500 lines of code
-
-### After (Strands SDK)
-- Strands Agent class
-- @tool decorator for tools
-- Built-in conversation handling
-- ~1,100 lines of code (-27%)
-
-### What Stayed the Same
-- ✅ All 8 workflow stages
-- ✅ Orchestration logic
-- ✅ Sub-agents
-- ✅ AWS Marketplace API tools
-- ✅ Data validation
-
-## 📄 License
-
-See LICENSE file for details.
-
----
-
-**Ready to create your AWS Marketplace listing?**
-
-```bash
-./run_streamlit.sh
 ```
+AI_Agent_Marketplace/
+├── agents/                           # Core marketplace agents
+│   ├── create_saas.py               # Product configuration
+│   ├── serverless_saas_integration.py # CloudFormation deployment
+│   ├── metering.py                  # Usage tracking
+│   ├── public_visibility.py         # Visibility management
+│   ├── buyer_experience.py          # Buyer simulation
+│   ├── workflow_orchestrator.py     # Complete workflow
+│   ├── validation_helper.py         # Input validation
+│   └── status_checker.py            # Infrastructure verification
+├── bedrock_agent/                   # AI and infrastructure files
+│   ├── ai_marketplace_orchestrator.py # Main AI assistant
+│   ├── Integration.yaml             # CloudFormation template
+│   ├── knowledge_base_setup.yaml    # Knowledge Base infrastructure
+│   ├── agent_config.yaml            # Agent configuration
+│   └── mcp_config.json              # MCP configuration
+├── tests/                           # Test suite
+│   ├── test_*.py                    # Individual agent tests
+│   └── run_all_tests.py             # Master test runner
+└── requirements.txt                 # Dependencies
+```
+
+## 🔐 Security
+
+- Uses temporary AWS credentials
+- No permanent credential storage
+- Least-privilege IAM permissions
+- Secure Knowledge Base access
+
+## 📞 Support
+
+For issues or questions:
+1. Check the Knowledge Base for troubleshooting guidance
+2. Review AWS CloudFormation events for deployment issues
+3. Verify IAM permissions for marketplace operations
