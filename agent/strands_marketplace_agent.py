@@ -370,20 +370,12 @@ class StrandsMarketplaceAgent:
         integration_agents = self.integration_agents
         
         @tool
-        def deploy_aws_integration(
-            access_key: str,
-            secret_key: str,
-            session_token: str = None
-        ) -> dict:
+        def deploy_aws_integration() -> dict:
             """
             Deploy AWS Marketplace SaaS integration infrastructure.
             This creates CloudFormation stack with DynamoDB, Lambda, API Gateway, and SNS.
             Call this after completing the limited listing (Stage 8).
-            
-            Args:
-                access_key: AWS Access Key ID
-                secret_key: AWS Secret Access Key
-                session_token: AWS Session Token (optional)
+            Uses the AWS credentials provided at the start of the session.
             
             Returns:
                 Dictionary with deployment status and stack information
@@ -399,8 +391,14 @@ class StrandsMarketplaceAgent:
                     "required_stage": 8
                 }
             
-            return integration_agents['serverless_integration'].deploy_integration(
-                access_key, secret_key, session_token
+            # Use the session stored in listing_tools
+            if not self.listing_tools or not self.listing_tools.session:
+                return {
+                    "error": "AWS credentials not available. Please restart and provide credentials."
+                }
+            
+            return integration_agents['serverless_integration'].deploy_integration_with_session(
+                self.listing_tools.session
             )
         
         return deploy_aws_integration
@@ -410,20 +408,13 @@ class StrandsMarketplaceAgent:
         integration_agents = self.integration_agents
         
         @tool
-        def execute_marketplace_workflow(
-            access_key: str,
-            secret_key: str,
-            session_token: str = None,
-            lambda_function_name: str = None
-        ) -> dict:
+        def execute_marketplace_workflow(lambda_function_name: str = None) -> dict:
             """
             Execute complete AWS Marketplace workflow: Metering → Lambda → Public Visibility.
             Call this after deploying the AWS integration infrastructure.
+            Uses the AWS credentials provided at the start of the session.
             
             Args:
-                access_key: AWS Access Key ID
-                secret_key: AWS Secret Access Key
-                session_token: AWS Session Token (optional)
                 lambda_function_name: Lambda function name for metering (optional)
             
             Returns:
@@ -432,9 +423,15 @@ class StrandsMarketplaceAgent:
             if not integration_agents or 'workflow_orchestrator' not in integration_agents:
                 return {"error": "Workflow orchestrator not available"}
             
+            # Use the session stored in listing_tools
+            if not self.listing_tools or not self.listing_tools.session:
+                return {
+                    "error": "AWS credentials not available. Please restart and provide credentials."
+                }
+            
             if 'workflow_orchestrator' in integration_agents:
-                return integration_agents['workflow_orchestrator'].execute_full_workflow(
-                    access_key, secret_key, session_token, lambda_function_name
+                return integration_agents['workflow_orchestrator'].execute_full_workflow_with_session(
+                    self.listing_tools.session, lambda_function_name
                 )
             else:
                 return {"error": "Workflow orchestrator not properly initialized"}

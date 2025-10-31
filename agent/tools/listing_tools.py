@@ -8,18 +8,28 @@ class ListingTools:
     """AWS Marketplace listing management tools"""
 
     def __init__(self, region: str = "us-east-1", session=None):
-        if session:
-            self.catalog_client = session.client("marketplace-catalog")
-        else:
-            self.catalog_client = boto3.client("marketplace-catalog", region_name=region)
+        """
+        Initialize ListingTools with AWS credentials
+        
+        Args:
+            region: AWS region (default: us-east-1)
+            session: boto3.Session object with credentials (recommended)
+        """
         self.region = region
         self.session = session
+        
+        if session:
+            self.catalog_client = session.client("marketplace-catalog", region_name=region)
+        else:
+            # Fallback to default credentials (not recommended for production)
+            self.catalog_client = boto3.client("marketplace-catalog", region_name=region)
     
     def update_credentials(self, session):
         """Update AWS credentials using a boto3 session"""
         self.session = session
-        self.catalog_client = session.client("marketplace-catalog")
-        self.region = session.region_name or self.region
+        self.catalog_client = session.client("marketplace-catalog", region_name=self.region)
+        if session.region_name:
+            self.region = session.region_name
 
     def get_entity_details(self, entity_type: str, entity_id: str) -> Dict[str, Any]:
         """

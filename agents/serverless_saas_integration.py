@@ -15,7 +15,21 @@ class ServerlessSaasIntegrationAgent(Agent):
     
     @tool
     def deploy_integration(self, access_key, secret_key, session_token=None):
-        """Deploy AWS Marketplace SaaS integration with complete automated workflow"""
+        """
+        Deploy AWS Marketplace SaaS integration with complete automated workflow
+        DEPRECATED: Use deploy_integration_with_session instead
+        """
+        # Create session from credentials
+        session = boto3.Session(
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            aws_session_token=session_token,
+            region_name='us-east-1'
+        )
+        return self.deploy_integration_with_session(session)
+    
+    def deploy_integration_with_session(self, session):
+        """Deploy AWS Marketplace SaaS integration using boto3 session"""
         
         print("=== Starting AWS Marketplace SaaS Integration Deployment ===")
         
@@ -43,13 +57,7 @@ class ServerlessSaasIntegrationAgent(Agent):
         # Validate credentials before deployment
         print("\nValidating AWS credentials...")
         try:
-            sts_client = boto3.client(
-                'sts',
-                region_name='us-east-1',
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                aws_session_token=session_token
-            )
+            sts_client = session.client('sts')
             identity = sts_client.get_caller_identity()
             print(f"  ✓ Credentials valid for account: {identity['Account']}")
         except Exception as e:
@@ -58,13 +66,7 @@ class ServerlessSaasIntegrationAgent(Agent):
         
         # Connect to CloudFormation
         print("Connecting to AWS CloudFormation...")
-        cf_client = boto3.client(
-            'cloudformation',
-            region_name='us-east-1',
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            aws_session_token=session_token
-        )
+        cf_client = session.client('cloudformation')
         
         # Deploy AWS Marketplace SaaS integration CloudFormation template
         print("\nDeploying CloudFormation stack...")

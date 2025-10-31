@@ -69,21 +69,6 @@ def sanitize_text_for_marketplace(text: str) -> str:
 
 def init_session_state():
     """Initialize session state"""
-    if 'strands_agent' not in st.session_state:
-        try:
-            # Use integrated Strands agent
-            from agent.strands_marketplace_agent import StrandsMarketplaceAgent
-            st.session_state.strands_agent = StrandsMarketplaceAgent()
-            st.session_state.orchestrator = st.session_state.strands_agent.orchestrator
-        except Exception as e:
-            # Fallback to basic orchestrator if Strands agent fails to initialize
-            st.warning(f"⚠️ Advanced features unavailable: {str(e)}")
-            from agent.orchestrator import ListingOrchestrator
-            from agent.tools.listing_tools import ListingTools
-            listing_tools = ListingTools(region='us-east-1')
-            st.session_state.orchestrator = ListingOrchestrator(listing_tools=listing_tools)
-            st.session_state.strands_agent = None
-    
     if 'conversation_history' not in st.session_state:
         st.session_state.conversation_history = []
     
@@ -91,13 +76,57 @@ def init_session_state():
         st.session_state.product_context = {}
     
     if 'current_step' not in st.session_state:
-        st.session_state.current_step = "welcome"
+        st.session_state.current_step = "credentials"
+    
+    if 'aws_credentials' not in st.session_state:
+        st.session_state.aws_credentials = None
+    
+    if 'credentials_validated' not in st.session_state:
+        st.session_state.credentials_validated = False
+
+
+def init_agents_with_credentials():
+    """Initialize agents with user-provided credentials"""
+    if 'strands_agent' not in st.session_state and st.session_state.credentials_validated:
+        try:
+            # Create boto3 session with user credentials
+            creds = st.session_state.aws_credentials
+            session = boto3.Session(
+                aws_access_key_id=creds['access_key'],
+                aws_secret_access_key=creds['secret_key'],
+                aws_session_token=creds.get('session_token'),
+                region_name=creds.get('region', 'us-east-1')
+            )
+            
+            # Use integrated Strands agent with credentials
+            from agent.strands_marketplace_agent import StrandsMarketplaceAgent
+            from agent.tools.listing_tools import ListingTools
+            
+            # Create listing tools with session
+            listing_tools = ListingTools(region=creds.get('region', 'us-east-1'), session=session)
+            
+            # Create agent with listing tools
+            st.session_state.strands_agent = StrandsMarketplaceAgent()
+            st.session_state.strands_agent.listing_tools = listing_tools
+            st.session_state.strands_agent.orchestrator.listing_tools = listing_tools
+            st.session_state.orchestrator = st.session_state.strands_agent.orchestrator
+            
+            # Store session for Phase 2
+            st.session_state.boto3_session = session
+            
+        except Exception as e:
+            st.error(f"⚠️ Failed to initialize agents: {str(e)}")
+            st.session_state.strands_agent = None
 
 
 def call_bedrock_llm(prompt: str, system_prompt: str = None, model_id: str = None) -> str:
     """Call Amazon Bedrock to generate responses"""
     try:
-        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
+        # Use user-provided credentials if available
+        if st.session_state.get('boto3_session'):
+            bedrock = st.session_state.boto3_session.client('bedrock-runtime')
+        else:
+            bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
         
         messages = [{"role": "user", "content": prompt}]
         
@@ -144,9 +173,108 @@ def call_bedrock_llm(prompt: str, system_prompt: str = None, model_id: str = Non
         return None
 
 
+def credentials_screen():
+    """AWS Credentials input screen"""
+    st.title("🔐 AWS Credentials Setup")
+    
+    st.markdown("""
+    ### Secure Credential Input
+    
+    Please provide your AWS credentials to access AWS Marketplace and Bedrock services.
+    
+    **Required Permissions:**
+    - AWS Marketplace Catalog API
+    - Amazon Bedrock (for AI features)
+    - CloudFormation (for infrastructure deployment)
+    - DynamoDB, Lambda, API Gateway, SNS (for SaaS integration)
+    
+    **Security Note:** Credentials are only stored in your browser session and never saved to disk.
+    """)
+    
+    st.divider()
+    
+    with st.form("credentials_form"):
+        access_key = st.text_input(
+            "AWS Access Key ID *",
+            type="password",
+            help="Your AWS access key (e.g., AKIAIOSFODNN7EXAMPLE)"
+        )
+        
+        secret_key = st.text_input(
+            "AWS Secret Access Key *",
+            type="password",
+            help="Your AWS secret access key"
+        )
+        
+        session_token = st.text_input(
+            "AWS Session Token (Optional)",
+            type="password",
+            help="Required only if using temporary credentials"
+        )
+        
+        region = st.selectbox(
+            "AWS Region *",
+            options=['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'],
+            index=0,
+            help="AWS region for Marketplace and Bedrock operations"
+        )
+        
+        submitted = st.form_submit_button("Validate & Continue", type="primary", use_container_width=True)
+        
+        if submitted:
+            if not access_key or not secret_key:
+                st.error("❌ Please provide both Access Key and Secret Key")
+            else:
+                # Validate credentials
+                with st.spinner("🔍 Validating AWS credentials..."):
+                    try:
+                        # Test credentials with STS
+                        sts_client = boto3.client(
+                            'sts',
+                            region_name=region,
+                            aws_access_key_id=access_key,
+                            aws_secret_access_key=secret_key,
+                            aws_session_token=session_token if session_token else None
+                        )
+                        identity = sts_client.get_caller_identity()
+                        
+                        # Store credentials in session state
+                        st.session_state.aws_credentials = {
+                            'access_key': access_key,
+                            'secret_key': secret_key,
+                            'session_token': session_token if session_token else None,
+                            'region': region,
+                            'account_id': identity['Account'],
+                            'user_arn': identity['Arn']
+                        }
+                        st.session_state.credentials_validated = True
+                        
+                        # Initialize agents with credentials
+                        init_agents_with_credentials()
+                        
+                        st.success(f"✅ Credentials validated for account: {identity['Account']}")
+                        st.info(f"👤 User: {identity['Arn']}")
+                        
+                        # Move to welcome screen
+                        st.session_state.current_step = "welcome"
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Credential validation failed: {str(e)}")
+                        st.info("💡 Please check your credentials and try again")
+    
+    st.divider()
+    st.caption("🔒 Your credentials are encrypted in transit and only stored in your browser session")
+
+
 def welcome_screen():
     """Welcome screen with workflow selection"""
     st.title("🤖 AI-Guided AWS Marketplace Listing Creation")
+    
+    # Show credential status
+    if st.session_state.credentials_validated:
+        creds = st.session_state.aws_credentials
+        st.success(f"✅ Connected to AWS Account: {creds['account_id']} ({creds['region']})")
     
     st.markdown("""
     ### Welcome! Let's create your AWS Marketplace listing together.
@@ -163,9 +291,17 @@ def welcome_screen():
     
     st.divider()
     
-    if st.button("Start AI-Guided Creation", type="primary", use_container_width=True):
-        st.session_state.current_step = "gather_context"
-        st.rerun()
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("← Change Credentials"):
+            st.session_state.current_step = "credentials"
+            st.session_state.credentials_validated = False
+            st.rerun()
+    
+    with col2:
+        if st.button("Start AI-Guided Creation", type="primary", use_container_width=True):
+            st.session_state.current_step = "gather_context"
+            st.rerun()
 
 
 def gather_context_screen():
@@ -998,204 +1134,8 @@ def review_suggestions_screen():
             }
             
             st.session_state.listing_data = listing_data
-            st.session_state.current_step = "aws_credentials"
+            st.session_state.current_step = "create_listing"
             st.rerun()
-
-
-def aws_credentials_screen():
-    """Collect AWS credentials before creating listing"""
-    st.title("🔑 AWS Credentials Setup")
-    
-    st.markdown("""
-    ### 🔐 AWS Marketplace API Access Required
-    
-    To create your listing, I need AWS credentials with AWS Marketplace permissions.
-    
-    **Required Permissions:**
-    - `marketplace-catalog:*` - Create and manage marketplace listings
-    - `iam:GetRole` - Verify permissions
-    - `sts:GetCallerIdentity` - Validate credentials
-    """)
-    
-    st.divider()
-    
-    # Credential input form
-    with st.form("aws_credentials_form"):
-        st.subheader("🔑 Enter AWS Credentials")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            aws_access_key = st.text_input(
-                "AWS Access Key ID *",
-                type="password",
-                help="Your AWS Access Key (starts with AKIA...)"
-            )
-        with col2:
-            aws_secret_key = st.text_input(
-                "AWS Secret Access Key *",
-                type="password",
-                help="Your AWS Secret Access Key"
-            )
-        
-        aws_session_token = st.text_input(
-            "AWS Session Token (Optional)",
-            type="password",
-            help="Required only if using temporary credentials"
-        )
-        
-        aws_region = st.selectbox(
-            "AWS Region *",
-            options=["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"],
-            index=0,
-            help="AWS region for marketplace operations"
-        )
-        
-        st.divider()
-        
-        col1, col2, col3 = st.columns([1, 1, 2])
-        
-        with col1:
-            if st.form_submit_button("← Back"):
-                st.session_state.current_step = "review_suggestions"
-                st.rerun()
-        
-        with col3:
-            if st.form_submit_button("🚀 Validate & Create Listing", type="primary"):
-                if not aws_access_key or not aws_secret_key:
-                    st.error("❌ Please provide AWS Access Key and Secret Key")
-                    return
-                
-                # Validate credentials
-                with st.spinner("🔍 Validating AWS credentials..."):
-                    try:
-                        import boto3
-                        
-                        # Test credentials
-                        session = boto3.Session(
-                            aws_access_key_id=aws_access_key,
-                            aws_secret_access_key=aws_secret_key,
-                            aws_session_token=aws_session_token,
-                            region_name=aws_region
-                        )
-                        
-                        # Verify credentials work
-                        sts = session.client('sts')
-                        identity = sts.get_caller_identity()
-                        
-                        # Test marketplace permissions
-                        marketplace = session.client('marketplace-catalog')
-                        
-                        # Test basic marketplace access
-                        try:
-                            # Try to list entities to verify permissions
-                            test_response = marketplace.list_entities(
-                                Catalog='AWSMarketplace',
-                                EntityType='SaaSProduct@1.0',
-                                MaxResults=1
-                            )
-                            st.success("✅ AWS Marketplace permissions verified")
-                        except Exception as perm_error:
-                            st.warning(f"⚠️ Limited marketplace permissions: {str(perm_error)}")
-                            st.info("💡 You may need additional marketplace permissions, but basic access works")
-                        
-                        # Store credentials in session state
-                        st.session_state.aws_credentials = {
-                            'access_key': aws_access_key,
-                            'secret_key': aws_secret_key,
-                            'session_token': aws_session_token,
-                            'region': aws_region,
-                            'account_id': identity['Account']
-                        }
-                        
-                        # Update orchestrator with credentials
-                        if st.session_state.orchestrator:
-                            st.session_state.orchestrator.listing_tools.update_credentials(session)
-                        
-                        st.success(f"✅ Credentials validated! Account: {identity['Account']}")
-                        st.session_state.current_step = "create_listing"
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"❌ Credential validation failed: {str(e)}")
-                        
-                        # Show helpful error messages
-                        error_str = str(e).lower()
-                        if "invalidclienttokenid" in error_str:
-                            st.info("💡 **Tip:** Check your Access Key for typos")
-                        elif "signaturemismatch" in error_str:
-                            st.info("💡 **Tip:** Check your Secret Key for typos")
-                        elif "accessdenied" in error_str:
-                            st.error("🚫 **Access Denied:** Your credentials lack AWS Marketplace permissions")
-                            st.info("💡 **Required permissions:** marketplace-catalog:*, sts:GetCallerIdentity")
-                        elif "tokenrefreshreq" in error_str:
-                            st.info("💡 **Tip:** Your session token may be expired")
-                        elif "unrecognizedclientexception" in error_str:
-                            st.info("💡 **Tip:** Check your AWS region - marketplace-catalog may not be available")
-                        
-                        # Show debug info
-                        with st.expander("🔍 Debug Information"):
-                            st.code(f"Error Type: {type(e).__name__}")
-                            st.code(f"Error Message: {str(e)}")
-                            st.code(f"AWS Region: {aws_region}")
-    
-    st.divider()
-    
-    # Help section
-    with st.expander("🎆 Need Help Getting AWS Credentials?", expanded=False):
-        st.markdown("""
-        ### 📝 How to Get AWS Credentials:
-        
-        1. **Sign in to AWS Console** as an IAM user with marketplace permissions
-        2. **Go to IAM → Users → [Your User] → Security Credentials**
-        3. **Click "Create Access Key"**
-        4. **Select "Command Line Interface (CLI)"**
-        5. **Download the credentials**
-        
-        ### 🔒 Required IAM Permissions:
-        ```json
-        {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Action": [
-                        "marketplace-catalog:*",
-                        "iam:GetRole",
-                        "sts:GetCallerIdentity"
-                    ],
-                    "Resource": "*"
-                }
-            ]
-        }
-        ```
-        
-        ### ⚠️ Security Best Practices:
-        - Use temporary credentials when possible
-        - Create a dedicated IAM user for marketplace operations
-        - Rotate access keys regularly
-        - Never share credentials
-        
-        ### 🔧 Common AWS Marketplace Issues:
-        
-        **1. Access Denied Errors:**
-        - Ensure your AWS account is registered as a marketplace seller
-        - Add marketplace-catalog:* permissions to your IAM user/role
-        - Verify you're using the correct AWS region (us-east-1 recommended)
-        
-        **2. Account Not Eligible:**
-        - Complete AWS Marketplace seller registration at [AWS Marketplace Management Portal](https://aws.amazon.com/marketplace/management/)
-        - Verify your tax and banking information
-        - Wait for seller account approval (can take 1-3 business days)
-        
-        **3. API Throttling:**
-        - AWS Marketplace has rate limits on API calls
-        - Wait 1-2 minutes between retries
-        - Use test mode if you're experimenting
-        
-        **4. Region Issues:**
-        - AWS Marketplace Catalog API is primarily available in us-east-1
-        - Try switching to us-east-1 region if you're having issues
-        """)
 
 
 def chat_mode_screen():
@@ -1389,10 +1329,10 @@ def create_listing_screen():
             st.rerun()
         return
     
-    if 'aws_credentials' not in st.session_state:
+    if 'aws_credentials' not in st.session_state or not st.session_state.credentials_validated:
         st.error("❌ No AWS credentials found. Please provide credentials first.")
-        if st.button("← Back to AWS Setup"):
-            st.session_state.current_step = "aws_credentials"
+        if st.button("← Back to Credentials"):
+            st.session_state.current_step = "credentials"
             st.rerun()
         return
     
@@ -2170,11 +2110,11 @@ def main():
         
         # Show progress
         steps = {
+            "credentials": "🔐 Credentials",
             "welcome": "Welcome",
             "gather_context": "Product Info",
             "analyze_product": "AI Analysis",
             "review_suggestions": "Review",
-            "aws_credentials": "AWS Setup",
             "create_listing": "Create",
             "chat_mode": "💬 Chat Mode"
         }
@@ -2187,10 +2127,20 @@ def main():
                 st.markdown(f"   {label}")
         
         st.divider()
+        
+        # Show credential status in sidebar
+        if st.session_state.credentials_validated:
+            creds = st.session_state.aws_credentials
+            st.success(f"✅ AWS: {creds['account_id']}")
+        else:
+            st.warning("⚠️ Credentials needed")
+        
         st.caption("Powered by Amazon Bedrock")
     
     # Main content
-    if st.session_state.current_step == "welcome":
+    if st.session_state.current_step == "credentials":
+        credentials_screen()
+    elif st.session_state.current_step == "welcome":
         welcome_screen()
     elif st.session_state.current_step == "gather_context":
         gather_context_screen()
@@ -2198,8 +2148,6 @@ def main():
         analyze_product_screen()
     elif st.session_state.current_step == "review_suggestions":
         review_suggestions_screen()
-    elif st.session_state.current_step == "aws_credentials":
-        aws_credentials_screen()
     elif st.session_state.current_step == "create_listing":
         create_listing_screen()
     elif st.session_state.current_step == "chat_mode":
