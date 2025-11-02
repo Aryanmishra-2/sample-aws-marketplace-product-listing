@@ -8,7 +8,7 @@ The AWS Marketplace Seller Registration Module is a **completely standalone, reu
 
 **All tests passed: 2/2** 🎉
 
-- ✅ **Account 533719170361**: Correctly identified as `APPROVED` seller
+- ✅ **Test Account**: Correctly identified seller registration status
 - ✅ **Modular Architecture**: Fully tested and working
 - ✅ **Multi-Agent Integration**: Successfully integrated with 6 different patterns
 - ✅ **Reusability**: Works across all contexts (Direct, Agent, Quick Functions, Multiple Instances)
@@ -253,9 +253,9 @@ registration = SellerRegistrationModule()
 ```python
 # Provide specific credentials
 credentials = {
-    'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
-    'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
-    'aws_session_token': 'AQoDYXdzEJr...'  # Optional for temporary credentials
+    'aws_access_key_id': 'YOUR_ACCESS_KEY_ID',
+    'aws_secret_access_key': 'YOUR_SECRET_ACCESS_KEY',
+    'aws_session_token': 'YOUR_SESSION_TOKEN'  # Optional for temporary credentials
 }
 
 registration = SellerRegistrationModule(aws_credentials=credentials)
@@ -292,7 +292,7 @@ python test_seller_registration.py
 ```
 
 ### **Expected Results**
-- ✅ **Account 533719170361**: Status = `APPROVED`
+- ✅ **Test Account**: Status validation working
 - ✅ **All Tests**: 2/2 passed
 - ✅ **Integration**: 6 patterns working
 - ✅ **Reusability**: 4/4 contexts working
@@ -459,6 +459,6 @@ For questions or issues with the seller registration module:
 1. **Check the test results** - Run `python test_modular_seller_registration.py`
 2. **Review integration examples** - See `seller_registration_integration_examples.py`
 3. **Verify AWS credentials** - Ensure proper marketplace permissions
-4. **Check account status** - Account 533719170361 should show as `APPROVED`
+4. **Check account status** - Test with your AWS account
 
 The module is production-ready and fully tested! 🚀

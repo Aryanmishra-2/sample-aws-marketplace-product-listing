@@ -431,13 +431,12 @@ class SellerRegistrationTools:
                         seller_status = "UNKNOWN"
                 
                 # Method 2: Check for specific known registered accounts
-                # Some accounts are known to be registered sellers
-                known_registered_accounts = [
-                    "533719170361"  # Known registered seller account
-                ]
+                # Check for registered seller accounts (would be determined via API in production)
+                # Note: In production, this would use proper AWS APIs to determine seller status
+                # rather than hardcoded account lists
                 
-                if account_info["account_id"] in known_registered_accounts:
-                    seller_status = "APPROVED"
+                # In production, this would use actual AWS Marketplace Management API
+                # to determine seller registration status
                 
                 # Method 3: Try to check change set capabilities
                 # Registered sellers should be able to work with change sets
@@ -1868,18 +1867,18 @@ class SellerRegistrationTools:
             "required_credentials": {
                 "aws_access_key_id": {
                     "description": "AWS Access Key ID",
-                    "example": "AKIAIOSFODNN7EXAMPLE",
+                    "example": "AKIA[REDACTED]",
                     "required": True
                 },
                 "aws_secret_access_key": {
                     "description": "AWS Secret Access Key", 
-                    "example": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                    "example": "[REDACTED]",
                     "required": True,
                     "sensitive": True
                 },
                 "aws_session_token": {
                     "description": "AWS Session Token (for temporary credentials)",
-                    "example": "AQoDYXdzEJr...",
+                    "example": "[REDACTED]",
                     "required": False,
                     "sensitive": True
                 }
@@ -2113,18 +2112,18 @@ class SellerRegistrationTools:
             "required_credentials": {
                 "aws_access_key_id": {
                     "description": "AWS Access Key ID",
-                    "example": "AKIAIOSFODNN7EXAMPLE",
+                    "example": "AKIA[REDACTED]",
                     "required": True
                 },
                 "aws_secret_access_key": {
                     "description": "AWS Secret Access Key", 
-                    "example": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                    "example": "[REDACTED]",
                     "required": True,
                     "sensitive": True
                 },
                 "aws_session_token": {
                     "description": "AWS Session Token (for temporary credentials)",
-                    "example": "AQoDYXdzEJr...",
+                    "example": "[REDACTED]",
                     "required": False,
                     "sensitive": True
                 }
