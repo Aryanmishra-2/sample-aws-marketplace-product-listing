@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional
 from enum import Enum
 
 from .sub_agents import (
+    SellerRegistrationAgent,
     ProductInformationAgent,
     FulfillmentAgent,
     PricingConfigAgent,
@@ -20,6 +21,7 @@ from .sub_agents import (
 
 class WorkflowStage(Enum):
     """Workflow stages"""
+    SELLER_REGISTRATION = 0
     PRODUCT_INFO = 1
     FULFILLMENT = 2
     PRICING_CONFIG = 3
