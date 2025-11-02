@@ -2,6 +2,7 @@
 Sub-agents for AWS Marketplace listing creation stages
 """
 
+from .seller_registration_agent import SellerRegistrationAgent
 from .product_information_agent import ProductInformationAgent
 from .fulfillment_agent import FulfillmentAgent
 from .pricing_config_agent import PricingConfigAgent

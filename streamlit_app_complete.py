@@ -75,6 +75,15 @@ def init_session_state():
         strands_agent = StrandsMarketplaceAgent()
         st.session_state.orchestrator = strands_agent.orchestrator
     
+    # Add seller registration components
+    if 'seller_registration_tools' not in st.session_state:
+        from agent.tools.seller_registration_tools import SellerRegistrationTools
+        st.session_state.seller_registration_tools = SellerRegistrationTools()
+    
+    if 'seller_registration_agent' not in st.session_state:
+        from agent.sub_agents.seller_registration_agent import SellerRegistrationAgent
+        st.session_state.seller_registration_agent = SellerRegistrationAgent()
+    
     if 'conversation_history' not in st.session_state:
         st.session_state.conversation_history = []
     
@@ -83,6 +92,13 @@ def init_session_state():
     
     if 'current_step' not in st.session_state:
         st.session_state.current_step = "welcome"
+    
+    # Add seller registration state
+    if 'seller_status' not in st.session_state:
+        st.session_state.seller_status = None
+    
+    if 'registration_data' not in st.session_state:
+        st.session_state.registration_data = {}
 
 
 def call_bedrock_llm(prompt: str, system_prompt: str = None, model_id: str = None) -> str:
@@ -136,27 +152,94 @@ def call_bedrock_llm(prompt: str, system_prompt: str = None, model_id: str = Non
 
 
 def welcome_screen():
-    """Welcome screen with workflow selection"""
-    st.title("🤖 AI-Guided AWS Marketplace Listing Creation")
+    """Welcome screen with seller status check and workflow selection"""
+    st.title("🚀 AWS Marketplace Seller Registration & Listing Creation")
     
     st.markdown("""
-    ### Welcome! Let's create your AWS Marketplace listing together.
+    ### Welcome! Let's get you set up on AWS Marketplace.
     
-    This AI-powered workflow will:
-    - 📄 Analyze your product documentation
-    - 💡 Suggest the best pricing model
-    - ✍️ Generate all required text fields automatically
-    - 🎯 Select appropriate categories and keywords
-    - 🚀 Create your listing in minutes
+    This comprehensive workflow will:
     
-    **No AWS Marketplace expertise required!**
+    **Step 1: Seller Registration** 🏢
+    - Check your current seller status
+    - Guide you through AWS Marketplace seller registration
+    - Handle business profile, tax information, and banking setup
+    
+    **Step 2: Listing Creation** 🛍️
+    - Analyze your product documentation
+    - Generate all required listing content automatically
+    - Select optimal pricing models and dimensions
+    - Create and publish your marketplace listing
+    
+    **Complete end-to-end solution!**
     """)
     
     st.divider()
     
-    if st.button("Start AI-Guided Creation", type="primary", use_container_width=True):
-        st.session_state.current_step = "gather_context"
-        st.rerun()
+    # Check seller status first
+    if st.session_state.seller_status is None:
+        with st.spinner("Checking your AWS Marketplace seller status..."):
+            try:
+                status = st.session_state.seller_registration_tools.check_seller_status()
+                st.session_state.seller_status = status
+            except Exception as e:
+                st.error(f"Unable to check seller status: {str(e)}")
+                st.session_state.seller_status = {"success": False, "error": str(e)}
+    
+    status = st.session_state.seller_status
+    
+    if status and status.get("success"):
+        seller_status = status.get("seller_status", "UNKNOWN")
+        
+        if seller_status == "APPROVED":
+            st.success("✅ **You're already registered as an AWS Marketplace seller!**")
+            st.info("You can proceed directly to creating product listings.")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 Re-check Seller Status", use_container_width=True):
+                    st.session_state.seller_status = None
+                    st.rerun()
+            
+            with col2:
+                if st.button("Start AI-Guided Creation →", type="primary", use_container_width=True):
+                    st.session_state.current_step = "gather_context"
+                    st.rerun()
+        
+        elif seller_status == "PENDING":
+            st.warning("⏳ **Your seller registration is under review by AWS**")
+            st.info("This typically takes 2-3 business days. You can check the status in your AWS Marketplace Management Console.")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 Re-check Status", use_container_width=True):
+                    st.session_state.seller_status = None
+                    st.rerun()
+            
+            with col2:
+                if st.button("View Management Console", use_container_width=True):
+                    st.markdown("[Open AWS Marketplace Management Console](https://console.aws.amazon.com/marketplace/management/)")
+        
+        else:  # NOT_REGISTERED or other status
+            st.info("📋 **You need to register as an AWS Marketplace seller first**")
+            st.markdown("Don't worry - we'll guide you through the entire process step by step.")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 Re-check Status", use_container_width=True):
+                    st.session_state.seller_status = None
+                    st.rerun()
+            
+            with col2:
+                if st.button("Start Seller Registration →", type="primary", use_container_width=True):
+                    st.session_state.current_step = "seller_registration"
+                    st.rerun()
+    
+    else:
+        st.error("❌ Unable to check seller status. Please check your AWS credentials and try again.")
+        if st.button("Retry", type="primary"):
+            st.session_state.seller_status = None
+            st.rerun()
 
 
 def gather_context_screen():
@@ -1350,6 +1433,334 @@ def create_listing_screen():
         st.rerun()
 
 
+def seller_registration_screen():
+    """Seller registration workflow"""
+    st.title("🏢 AWS Marketplace Seller Registration")
+    
+    st.markdown("""
+    Let's get you registered as an AWS Marketplace seller. This process involves:
+    
+    1. **Business Profile** - Legal business information
+    2. **Public Profile** - Customer-facing company profile  
+    3. **Tax Information** - Tax forms and identification
+    4. **Banking Information** - Payment account setup
+    5. **Verification** - AWS review process (2-3 business days)
+    6. **Disbursement** - Payment method selection
+    """)
+    
+    # Show current registration status
+    with st.expander("📊 Registration Progress", expanded=True):
+        workflow_status = st.session_state.seller_registration_tools.get_registration_workflow_status()
+        if workflow_status.get("success"):
+            progress = workflow_status.get("progress_percentage", 0)
+            st.progress(progress / 100)
+            st.write(f"**Progress:** {progress}% complete")
+            st.write(f"**Current Step:** {workflow_status.get('current_step', 'Unknown').replace('_', ' ').title()}")
+            st.write(f"**Next Action:** {workflow_status.get('next_action', 'Continue with registration')}")
+        else:
+            st.progress(0)
+            st.write("**Progress:** Starting registration process")
+    
+    st.divider()
+    
+    # Interactive registration form
+    st.subheader("📝 Business Information")
+    
+    # Check if we already have some data
+    if not st.session_state.registration_data:
+        st.session_state.registration_data = {}
+    
+    data = st.session_state.registration_data
+    
+    # Business Information Form
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        business_name = st.text_input(
+            "Business Name *",
+            value=data.get("business_name", ""),
+            placeholder="Your legal business name",
+            help="Enter the legal name of your business as registered"
+        )
+        
+        business_type = st.selectbox(
+            "Business Type *",
+            options=["", "Corporation", "LLC", "Partnership", "Sole Proprietorship", "Private Limited Company", "Public Limited Company"],
+            index=0 if not data.get("business_type") else ["", "Corporation", "LLC", "Partnership", "Sole Proprietorship", "Private Limited Company", "Public Limited Company"].index(data.get("business_type", "")),
+            help="Select your business entity type"
+        )
+        
+        business_email = st.text_input(
+            "Business Email *",
+            value=data.get("business_email", ""),
+            placeholder="contact@yourcompany.com",
+            help="Primary business email address"
+        )
+        
+        tax_id = st.text_input(
+            "Tax ID *",
+            value=data.get("tax_id", ""),
+            placeholder="EIN (US), PAN (India), or equivalent",
+            help="Tax identification number (EIN for US, PAN for India)"
+        )
+        
+        primary_contact_name = st.text_input(
+            "Primary Contact Name *",
+            value=data.get("primary_contact_name", ""),
+            placeholder="John Doe",
+            help="Name of the primary business contact"
+        )
+    
+    with col2:
+        business_address = st.text_area(
+            "Business Address *",
+            value=data.get("business_address", ""),
+            placeholder="123 Business St, City, State/Province, Country, ZIP",
+            help="Complete business address",
+            height=100
+        )
+        
+        business_phone = st.text_input(
+            "Business Phone *",
+            value=data.get("business_phone", ""),
+            placeholder="+1-555-123-4567 or +91-9876543210",
+            help="Business phone number with country code"
+        )
+        
+        primary_contact_email = st.text_input(
+            "Primary Contact Email *",
+            value=data.get("primary_contact_email", ""),
+            placeholder="john@yourcompany.com",
+            help="Email of the primary contact person"
+        )
+        
+        primary_contact_phone = st.text_input(
+            "Primary Contact Phone *",
+            value=data.get("primary_contact_phone", ""),
+            placeholder="+1-555-123-4567",
+            help="Phone number of the primary contact"
+        )
+        
+        website_url = st.text_input(
+            "Website URL (Optional)",
+            value=data.get("website_url", ""),
+            placeholder="https://www.yourcompany.com",
+            help="Your company website"
+        )
+    
+    # Country-specific information
+    st.subheader("🌍 Country-Specific Information")
+    
+    country = st.selectbox(
+        "Country/Region",
+        options=["United States", "India", "Other"],
+        help="Select your country for specific requirements"
+    )
+    
+    if country == "India":
+        st.info("🇮🇳 **India-Specific Requirements**")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            gst_number = st.text_input(
+                "GST Number (if applicable)",
+                value=data.get("gst_number", ""),
+                placeholder="27ABCDE1234F1Z5",
+                help="GST registration number if your turnover exceeds ₹20 lakhs"
+            )
+        with col_b:
+            pan_number = st.text_input(
+                "PAN Number",
+                value=data.get("pan_number", tax_id),
+                placeholder="ABCDE1234F",
+                help="Permanent Account Number (PAN)"
+            )
+        
+        if pan_number:
+            tax_id = pan_number
+        
+        with st.expander("📋 India Registration Requirements", expanded=False):
+            india_req = st.session_state.seller_registration_tools.get_india_specific_requirements()
+            if india_req.get("success"):
+                st.write("**Required Documents:**")
+                for doc in india_req["business_requirements"]["mandatory_documents"]:
+                    st.write(f"• {doc}")
+                
+                st.write("**Tax Benefits:**")
+                st.write(f"• US withholding tax reduced from 30% to 10% with W-8BEN-E form")
+    
+    # Update registration data
+    st.session_state.registration_data.update({
+        "business_name": business_name,
+        "business_type": business_type,
+        "business_address": business_address,
+        "business_phone": business_phone,
+        "business_email": business_email,
+        "tax_id": tax_id,
+        "primary_contact_name": primary_contact_name,
+        "primary_contact_email": primary_contact_email,
+        "primary_contact_phone": primary_contact_phone,
+        "website_url": website_url,
+        "country": country
+    })
+    
+    if country == "India":
+        st.session_state.registration_data.update({
+            "gst_number": gst_number,
+            "pan_number": pan_number
+        })
+    
+    st.divider()
+    
+    # Action buttons
+    col1, col2, col3 = st.columns([1, 1, 2])
+    
+    with col1:
+        if st.button("← Back"):
+            st.session_state.current_step = "welcome"
+            st.rerun()
+    
+    with col2:
+        if st.button("Validate Info"):
+            # Validate the information
+            if country == "India":
+                validation = st.session_state.seller_registration_tools.validate_india_business_info(st.session_state.registration_data)
+            else:
+                validation = st.session_state.seller_registration_tools.validate_business_info(st.session_state.registration_data)
+            
+            if validation["success"]:
+                st.success("✅ All information is valid!")
+            else:
+                st.error("❌ Validation errors:")
+                for error in validation.get("errors", []):
+                    st.error(f"• {error}")
+                if validation.get("warnings"):
+                    for warning in validation.get("warnings", []):
+                        st.warning(f"• {warning}")
+    
+    with col3:
+        if st.button("Continue to AWS Portal →", type="primary", use_container_width=True):
+            # Validate required fields
+            required_fields = ["business_name", "business_type", "business_address", "business_phone", 
+                             "business_email", "tax_id", "primary_contact_name", "primary_contact_email", 
+                             "primary_contact_phone"]
+            
+            missing_fields = [field for field in required_fields if not st.session_state.registration_data.get(field)]
+            
+            if missing_fields:
+                st.error(f"Please fill in all required fields: {', '.join(missing_fields)}")
+            else:
+                # Validate the information
+                if country == "India":
+                    validation = st.session_state.seller_registration_tools.validate_india_business_info(st.session_state.registration_data)
+                else:
+                    validation = st.session_state.seller_registration_tools.validate_business_info(st.session_state.registration_data)
+                
+                if validation["success"]:
+                    st.session_state.current_step = "registration_portal"
+                    st.rerun()
+                else:
+                    st.error("Please fix validation errors before continuing")
+
+
+def registration_portal_screen():
+    """Guide user to AWS Marketplace Management Portal"""
+    st.title("🌐 AWS Marketplace Management Portal")
+    
+    st.markdown("""
+    Great! Your business information is ready. Now you need to complete the registration 
+    in the AWS Marketplace Management Portal.
+    """)
+    
+    # Show collected information summary
+    with st.expander("📋 Your Business Information Summary", expanded=True):
+        data = st.session_state.registration_data
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write(f"**Business Name:** {data.get('business_name', 'N/A')}")
+            st.write(f"**Business Type:** {data.get('business_type', 'N/A')}")
+            st.write(f"**Email:** {data.get('business_email', 'N/A')}")
+            st.write(f"**Phone:** {data.get('business_phone', 'N/A')}")
+            st.write(f"**Tax ID:** {data.get('tax_id', 'N/A')}")
+        
+        with col2:
+            st.write(f"**Address:** {data.get('business_address', 'N/A')}")
+            st.write(f"**Contact Person:** {data.get('primary_contact_name', 'N/A')}")
+            st.write(f"**Contact Email:** {data.get('primary_contact_email', 'N/A')}")
+            st.write(f"**Contact Phone:** {data.get('primary_contact_phone', 'N/A')}")
+            if data.get('website_url'):
+                st.write(f"**Website:** {data.get('website_url')}")
+    
+    st.divider()
+    
+    # Portal access instructions
+    portal_info = st.session_state.seller_registration_tools.get_marketplace_portal_url()
+    
+    st.subheader("🚀 Next Steps")
+    
+    st.markdown(f"""
+    **1. Access the AWS Marketplace Management Portal:**
+    
+    👉 **[Open AWS Marketplace Management Portal]({portal_info.get('portal_url', '#')})**
+    
+    **2. Complete the registration process in the portal**
+    """)
+    
+    # Show step-by-step instructions
+    requirements = st.session_state.seller_registration_tools.get_registration_requirements()
+    if requirements.get("success"):
+        workflow_steps = requirements["workflow_steps"]
+        
+        for step_key, step_info in workflow_steps.items():
+            step_num = step_key.split('_')[0]
+            st.markdown(f"""
+            **Step {step_num}: {step_info['title']}**
+            - Estimated time: {step_info['estimated_time']}
+            """)
+    
+    st.divider()
+    
+    # Action buttons
+    col1, col2, col3 = st.columns([1, 1, 2])
+    
+    with col1:
+        if st.button("← Back to Edit Info"):
+            st.session_state.current_step = "seller_registration"
+            st.rerun()
+    
+    with col2:
+        if st.button("Check Status"):
+            # Re-check seller status
+            st.session_state.seller_status = None
+            with st.spinner("Checking registration status..."):
+                status = st.session_state.seller_registration_tools.check_seller_status()
+                st.session_state.seller_status = status
+            
+            if status.get("seller_status") == "APPROVED":
+                st.success("🎉 Registration approved! You can now create listings.")
+                st.session_state.current_step = "welcome"
+                st.rerun()
+            elif status.get("seller_status") == "PENDING":
+                st.info("⏳ Registration is still under review.")
+            else:
+                st.info("📋 Registration not yet submitted or approved.")
+    
+    with col3:
+        if st.button("I've Completed Registration →", type="primary", use_container_width=True):
+            # Check status and proceed
+            st.session_state.seller_status = None
+            with st.spinner("Verifying registration..."):
+                status = st.session_state.seller_registration_tools.check_seller_status()
+                st.session_state.seller_status = status
+            
+            if status.get("seller_status") == "APPROVED":
+                st.success("🎉 Registration verified! Proceeding to listing creation.")
+                st.session_state.current_step = "gather_context"
+                st.rerun()
+            else:
+                st.warning("Registration not yet approved. Please complete the process in the AWS Portal first.")
+
+
 def main():
     """Main app logic"""
     init_session_state()
@@ -1386,11 +1797,13 @@ def main():
         
         # Show progress
         steps = {
-            "welcome": "Welcome",
-            "gather_context": "Product Info",
-            "analyze_product": "AI Analysis",
-            "review_suggestions": "Review",
-            "create_listing": "Create"
+            "welcome": "🏠 Welcome",
+            "seller_registration": "🏢 Seller Registration",
+            "registration_portal": "🌐 AWS Portal", 
+            "gather_context": "📄 Product Info",
+            "analyze_product": "🔍 AI Analysis",
+            "review_suggestions": "📝 Review",
+            "create_listing": "🚀 Create"
         }
         
         current = st.session_state.current_step
@@ -1401,11 +1814,26 @@ def main():
                 st.markdown(f"   {label}")
         
         st.divider()
+        
+        # Show seller status
+        if st.session_state.seller_status:
+            status = st.session_state.seller_status.get("seller_status", "UNKNOWN")
+            if status == "APPROVED":
+                st.success("✅ Seller Registered")
+            elif status == "PENDING":
+                st.warning("⏳ Registration Pending")
+            else:
+                st.info("📋 Registration Needed")
+        
         st.caption("Powered by Amazon Bedrock")
     
     # Main content
     if st.session_state.current_step == "welcome":
         welcome_screen()
+    elif st.session_state.current_step == "seller_registration":
+        seller_registration_screen()
+    elif st.session_state.current_step == "registration_portal":
+        registration_portal_screen()
     elif st.session_state.current_step == "gather_context":
         gather_context_screen()
     elif st.session_state.current_step == "analyze_product":

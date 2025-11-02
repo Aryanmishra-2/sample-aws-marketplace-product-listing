@@ -114,7 +114,8 @@ class BaseSubAgent(ABC):
             pattern = rules.get("pattern")
             if pattern:
                 import re
-                if not re.match(pattern, value):
+                # Use case-insensitive matching for patterns
+                if not re.match(pattern, value, re.IGNORECASE):
                     return f"{field_name} format is invalid"
         
         # Array validations
