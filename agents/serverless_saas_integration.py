@@ -2,6 +2,7 @@ from strands import Agent, tool
 import boto3
 import time
 import json
+import traceback
 try:
     from .workflow_orchestrator import WorkflowOrchestrator
 except ImportError:
@@ -11,7 +12,13 @@ class ServerlessSaasIntegrationAgent(Agent):
     def __init__(self, strands_agent=None):
         super().__init__(name="ServerlessSaasIntegration")
         self.strands_agent = strands_agent
-        self.workflow_orchestrator = WorkflowOrchestrator(strands_agent=strands_agent)
+        print(f"[DEBUG] ServerlessSaasIntegrationAgent initialized with strands_agent: {strands_agent is not None}")
+        try:
+            self.workflow_orchestrator = WorkflowOrchestrator(strands_agent=strands_agent)
+            print(f"[DEBUG] WorkflowOrchestrator initialized successfully")
+        except Exception as e:
+            print(f"[DEBUG] Error initializing WorkflowOrchestrator: {e}")
+            self.workflow_orchestrator = None
     
     @tool
     def deploy_integration(self, access_key, secret_key, session_token=None):
@@ -28,27 +35,270 @@ class ServerlessSaasIntegrationAgent(Agent):
         )
         return self.deploy_integration_with_session(session)
     
-    def deploy_integration_with_session(self, session):
+    @tool
+    def deploy_infrastructure(self, email, stack_name, product_id=None, fulfillment_url=None, pricing_dimensions=None, aws_access_key=None, aws_secret_key=None, aws_session_token=None):
+        """
+        Deploy serverless infrastructure for AWS Marketplace SaaS integration using CloudFormation
+        This is the method called by the Streamlit frontend
+        """
+        print(f"[DEBUG] deploy_infrastructure called with:")
+        print(f"  email: {email}")
+        print(f"  stack_name: {stack_name}")
+        print(f"  product_id: {product_id}")
+        print(f"  fulfillment_url: {fulfillment_url}")
+        print(f"  pricing_dimensions: {pricing_dimensions}")
+        
+        # Check if we have access to strands agent data
+        if self.strands_agent:
+            print(f"[DEBUG] Strands agent available: {self.strands_agent is not None}")
+            if hasattr(self.strands_agent, 'orchestrator') and self.strands_agent.orchestrator:
+                print(f"[DEBUG] Orchestrator available: {self.strands_agent.orchestrator is not None}")
+                print(f"[DEBUG] Orchestrator product_id: {getattr(self.strands_agent.orchestrator, 'product_id', 'Not set')}")
+        
+        try:
+            # Use product_id from parameter or from strands agent
+            final_product_id = product_id
+            if not final_product_id and self.strands_agent and hasattr(self.strands_agent, 'orchestrator'):
+                final_product_id = getattr(self.strands_agent.orchestrator, 'product_id', None)
+            
+            print(f"[DEBUG] Final product_id for deployment: {final_product_id}")
+            
+            # Validate required parameters
+            if not email:
+                return {'success': False, 'error': 'Email is required for SNS notifications'}
+            if not final_product_id:
+                return {'success': False, 'error': 'Product ID is required for deployment'}
+            
+            # Create CloudFormation client
+            if aws_access_key and aws_secret_key:
+                print("[DEBUG] Using provided AWS credentials")
+                cf_client = boto3.client(
+                    'cloudformation',
+                    region_name='us-east-1',
+                    aws_access_key_id=aws_access_key,
+                    aws_secret_access_key=aws_secret_key,
+                    aws_session_token=aws_session_token
+                )
+            else:
+                print("[DEBUG] Using default AWS credentials")
+                cf_client = boto3.client('cloudformation', region_name='us-east-1')
+            
+            # Validate credentials
+            try:
+                sts_client = boto3.client('sts', region_name='us-east-1')
+                identity = sts_client.get_caller_identity()
+                print(f"[DEBUG] ✅ AWS credentials validated for account: {identity['Account']}")
+            except Exception as e:
+                return {'success': False, 'error': f'Invalid AWS credentials: {str(e)}'}
+            
+            # Load existing Integration.yaml template
+            import os
+            template_path = os.path.join(os.path.dirname(__file__), '..', 'bedrock_agent', 'Integration.yaml')
+            
+            if not os.path.exists(template_path):
+                return {'success': False, 'error': f'Integration.yaml template not found at {template_path}'}
+            
+            print(f"[DEBUG] → Loading CloudFormation template from: {template_path}")
+            
+            with open(template_path, 'r') as f:
+                template_body = f.read()
+            
+            # Determine pricing model from pricing_dimensions
+            pricing_model = "Usage-based-pricing"  # Default
+            if pricing_dimensions:
+                # Check if we have both entitled and metered dimensions (hybrid)
+                dim_types = set(dim.get('type', 'Metered') for dim in pricing_dimensions)
+                if 'Entitled' in dim_types and 'Metered' in dim_types:
+                    pricing_model = "Contract-with-consumption"
+                elif 'Entitled' in dim_types:
+                    pricing_model = "Contract-based-pricing"
+                else:
+                    pricing_model = "Usage-based-pricing"
+            
+            print("[DEBUG] → Deploying CloudFormation stack...")
+            print(f"[DEBUG] → Stack Name: {stack_name}")
+            print(f"[DEBUG] → Product ID: {final_product_id}")
+            print(f"[DEBUG] → Email: {email}")
+            print(f"[DEBUG] → Pricing Model: {pricing_model}")
+            
+            # Deploy CloudFormation stack
+            try:
+                response = cf_client.create_stack(
+                    StackName=stack_name,
+                    TemplateBody=template_body,
+                    Parameters=[
+                        {'ParameterKey': 'ProductId', 'ParameterValue': final_product_id},
+                        {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': email},
+                        {'ParameterKey': 'PricingModel', 'ParameterValue': pricing_model},
+                        {'ParameterKey': 'UpdateFulfillmentURL', 'ParameterValue': 'true'}
+                    ],
+                    Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM']
+                )
+                
+                stack_id = response['StackId']
+                print(f"[DEBUG] ✅ CloudFormation stack created: {stack_id}")
+                
+                # Wait for stack creation to complete
+                print("[DEBUG] → Waiting for stack deployment to complete...")
+                print("[DEBUG] → This may take 5-10 minutes. Monitoring progress...")
+                
+                # Monitor stack progress
+                for i in range(40):  # 20 minutes max
+                    try:
+                        stack_info = cf_client.describe_stacks(StackName=stack_name)
+                        status = stack_info['Stacks'][0]['StackStatus']
+                        print(f"[DEBUG] → Stack status: {status} (check {i+1}/40)")
+                        
+                        if status == 'CREATE_COMPLETE':
+                            print("[DEBUG] ✅ Stack creation completed successfully")
+                            break
+                        elif status in ['CREATE_FAILED', 'ROLLBACK_COMPLETE', 'ROLLBACK_FAILED']:
+                            print(f"[DEBUG] ❌ Stack creation failed with status: {status}")
+                            
+                            # Get failure details
+                            stack_events = cf_client.describe_stack_events(StackName=stack_name)
+                            failed_events = [event for event in stack_events['StackEvents'] 
+                                           if event.get('ResourceStatus', '').endswith('_FAILED')]
+                            
+                            for event in failed_events[-3:]:  # Last 3 failures
+                                print(f"[DEBUG] Failed resource: {event.get('LogicalResourceId')} - {event.get('ResourceStatusReason')}")
+                            
+                            raise Exception(f"Stack creation failed: {status}")
+                        
+                        time.sleep(30)
+                    except Exception as e:
+                        if 'does not exist' in str(e):
+                            print(f"[DEBUG] ❌ Stack was deleted or rolled back")
+                            raise Exception("Stack creation failed and was rolled back")
+                        raise e
+                
+                # Get stack outputs
+                stack_info = cf_client.describe_stacks(StackName=stack_name)
+                outputs = stack_info['Stacks'][0].get('Outputs', [])
+                
+                # Extract important outputs from Integration.yaml
+                fulfillment_url_output = None
+                lambda_function_name = None
+                website_bucket = None
+                landing_page_url = None
+                
+                for output in outputs:
+                    if output['OutputKey'] == 'AWSMarketplaceFulfillmentURL':
+                        fulfillment_url_output = output['OutputValue']
+                    elif output['OutputKey'] == 'WebsiteS3Bucket':
+                        website_bucket = output['OutputValue']
+                    elif output['OutputKey'] == 'LandingPagePreviewURL':
+                        landing_page_url = output['OutputValue']
+                
+                # Try to get Lambda function name from nested stack
+                try:
+                    nested_stacks = cf_client.list_stack_resources(StackName=stack_name)
+                    for resource in nested_stacks['StackResourceSummaries']:
+                        if resource['ResourceType'] == 'AWS::CloudFormation::Stack':
+                            nested_stack_name = resource['PhysicalResourceId']
+                            nested_outputs = cf_client.describe_stacks(StackName=nested_stack_name)
+                            for nested_output in nested_outputs['Stacks'][0].get('Outputs', []):
+                                if 'Lambda' in nested_output.get('OutputKey', '') and 'Hourly' in nested_output.get('OutputKey', ''):
+                                    lambda_function_name = nested_output['OutputValue']
+                                    break
+                except Exception as e:
+                    print(f"[DEBUG] Could not get nested stack outputs: {e}")
+                
+                print(f"[DEBUG] ✅ Stack deployment completed successfully!")
+                print(f"[DEBUG] Stack ID: {stack_id}")
+                print(f"[DEBUG] Fulfillment URL: {fulfillment_url_output}")
+                print(f"[DEBUG] Lambda Function: {lambda_function_name}")
+                
+                return {
+                    'success': True,
+                    'stack_id': stack_id,
+                    'stack_name': stack_name,
+                    'message': 'AWS Marketplace SaaS Integration deployed successfully',
+                    'fulfillment_url': fulfillment_url_output,
+                    'lambda_function': lambda_function_name,
+                    'website_bucket': website_bucket,
+                    'landing_page_url': landing_page_url,
+                    'product_id': final_product_id,
+                    'pricing_model': pricing_model,
+                    'outputs': {output['OutputKey']: output['OutputValue'] for output in outputs}
+                }
+                
+            except Exception as cf_error:
+                print(f"[DEBUG] ❌ CloudFormation deployment failed: {cf_error}")
+                
+                # Get detailed error information
+                try:
+                    stack_events = cf_client.describe_stack_events(StackName=stack_name)
+                    failed_events = [event for event in stack_events['StackEvents'] 
+                                   if event.get('ResourceStatus', '').endswith('_FAILED')]
+                    
+                    error_details = []
+                    for event in failed_events[-3:]:  # Last 3 failed events
+                        error_details.append({
+                            'resource': event.get('LogicalResourceId', 'Unknown'),
+                            'type': event.get('ResourceType', 'Unknown'),
+                            'status': event.get('ResourceStatus', 'Unknown'),
+                            'reason': event.get('ResourceStatusReason', 'No reason provided')
+                        })
+                    
+                    print(f"[DEBUG] Failed resource details: {error_details}")
+                    
+                    return {
+                        'success': False,
+                        'error': f'CloudFormation deployment failed: {str(cf_error)}',
+                        'failed_resources': error_details
+                    }
+                except:
+                    return {
+                        'success': False,
+                        'error': f'CloudFormation deployment failed: {str(cf_error)}'
+                    }
+            
+        except Exception as e:
+            print(f"[DEBUG] Error in deploy_infrastructure: {e}")
+            import traceback
+            print(f"[DEBUG] Full traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def deploy_integration_with_session(self, session, product_id=None, email=None, pricing_dimensions=None):
         """Deploy AWS Marketplace SaaS integration using boto3 session"""
         
         print("=== Starting AWS Marketplace SaaS Integration Deployment ===")
         
-        # Get configuration from strands marketplace agent
-        if not self.strands_agent:
-            return {"error": "Strands marketplace agent not available"}
+        # Use provided parameters first, then fall back to strands agent data
+        if not product_id and self.strands_agent:
+            product_id = self.strands_agent.orchestrator.product_id
         
-        # Get product_id from orchestrator
-        product_id = self.strands_agent.orchestrator.product_id
         if not product_id:
-            return {"error": "Product ID not available. Please complete the limited listing creation first."}
+            return {"error": "Product ID not available. Please provide product_id parameter or complete the limited listing creation first."}
         
-        # Get pricing model from collected data
-        pricing_data = self.strands_agent.orchestrator.all_data.get('PRICING_CONFIG', {})
-        pricing_model = pricing_data.get('pricing_model', 'Usage-based-pricing')
+        # Use provided email or get from strands agent
+        if not email and self.strands_agent:
+            product_data = self.strands_agent.orchestrator.all_data.get('PRODUCT_INFO', {})
+            email = product_data.get('support_email', 'admin@example.com')
         
-        # Get email from product info or use default
-        product_data = self.strands_agent.orchestrator.all_data.get('PRODUCT_INFO', {})
-        email_id = product_data.get('support_email', 'admin@example.com')
+        if not email:
+            email = 'admin@example.com'
+        
+        # Determine pricing model from pricing_dimensions or strands agent data
+        pricing_model = "Usage-based-pricing"  # Default
+        if pricing_dimensions:
+            # Check if we have both entitled and metered dimensions (hybrid)
+            dim_types = set(dim.get('type', 'Metered') for dim in pricing_dimensions)
+            if 'Entitled' in dim_types and 'Metered' in dim_types:
+                pricing_model = "Contract-with-consumption"
+            elif 'Entitled' in dim_types:
+                pricing_model = "Contract-based-pricing"
+            else:
+                pricing_model = "Usage-based-pricing"
+        elif self.strands_agent:
+            pricing_data = self.strands_agent.orchestrator.all_data.get('PRICING_CONFIG', {})
+            pricing_model = pricing_data.get('pricing_model', 'Usage-based-pricing')
+        
+        email_id = email
         
         print(f"Product ID: {product_id}")
         print(f"Pricing Model: {pricing_model}")
@@ -512,13 +762,9 @@ class ServerlessSaasIntegrationAgent(Agent):
         print(f"  ✗ Stack deployment timeout after {max_wait_minutes} minutes")
         return 'TIMEOUT'
 
+
+
 if __name__ == "__main__":
-    agent = ServerlessSaasIntegrationAgent()
-    
-    # Customer provides temporary credentials
-    access_key = input("Enter AWS Access Key: ")
-    secret_key = input("Enter AWS Secret Key: ")
-    session_token = input("Enter Session Token (optional): ") or None
-    
-    stack_id = agent.deploy_integration(access_key, secret_key, session_token)
-    print(f"Deployed stack: {stack_id}")
+    print("ServerlessSaasIntegrationAgent - Use this agent through the Streamlit app or import it in your code.")
+    print("This agent requires actual product data from the listing creation workflow.")
+    print("Run the Streamlit app to use this agent with real product data.")

@@ -15,9 +15,17 @@ class WorkflowOrchestrator(Agent):
     def __init__(self, strands_agent=None):
         super().__init__(name="WorkflowOrchestrator")
         self.strands_agent = strands_agent
-        self.metering_agent = MeteringAgent()
-        self.visibility_agent = PublicVisibilityAgent()
-        self.buyer_experience_agent = BuyerExperienceAgent(strands_agent=strands_agent)
+        print(f"[DEBUG] WorkflowOrchestrator initialized with strands_agent: {strands_agent is not None}")
+        try:
+            self.metering_agent = MeteringAgent()
+            self.visibility_agent = PublicVisibilityAgent()
+            self.buyer_experience_agent = BuyerExperienceAgent(strands_agent=strands_agent)
+            print(f"[DEBUG] All sub-agents initialized successfully")
+        except Exception as e:
+            print(f"[DEBUG] Error initializing sub-agents: {e}")
+            self.metering_agent = None
+            self.visibility_agent = None
+            self.buyer_experience_agent = None
     
     def _validate_credentials(self, access_key, secret_key, session_token=None):
         """Validate AWS credentials"""
@@ -209,7 +217,6 @@ class WorkflowOrchestrator(Agent):
                 if metering_result.get("status") not in ["success", "skipped"]:
                     workflow_status.update({"status": "failed", "error": f"Metering failed: {metering_result}"})
                     return workflow_status
-                    return workflow_status
                 
                 # Step 5: Trigger Lambda function to send metering to AWS Marketplace
                 if lambda_function_name and metering_result.get("status") == "success":
@@ -261,9 +268,9 @@ class WorkflowOrchestrator(Agent):
                 
 
                 
-                print("\n✓ Complete workflow executed successfully!")
-                print("  → Monitor AWS Marketplace console for approval status")
-                workflow_status.update({"status": "success", "step": "completed"})
+            print("\n✓ Complete workflow executed successfully!")
+            print("  → Monitor AWS Marketplace console for approval status")
+            workflow_status.update({"status": "success", "step": "completed"})
             
             return workflow_status
             
@@ -275,17 +282,6 @@ class WorkflowOrchestrator(Agent):
             })
             return workflow_status
 
-if __name__ == "__main__":
-    orchestrator = WorkflowOrchestrator()
-    
-    access_key = input("Enter AWS Access Key: ")
-    secret_key = input("Enter AWS Secret Key: ")
-    session_token = input("Enter Session Token (optional): ") or None
-    lambda_function_name = input("Enter Hourly Lambda Function Name (optional): ") or None
-    
-    result = orchestrator.execute_full_workflow(access_key, secret_key, session_token, lambda_function_name)
-    print(f"Workflow result: {result}")
-    
     @tool
     def get_workflow_status(self, workflow_result):
         """Get detailed workflow status and next steps"""
@@ -345,6 +341,18 @@ if __name__ == "__main__":
             return {"error": f"Cannot retry step: {failed_step}"}
 
 if __name__ == "__main__":
+    # Test the execute_full_workflow method
+    orchestrator = WorkflowOrchestrator()
+    
+    result = orchestrator.execute_full_workflow(
+        access_key="test-key",
+        secret_key="test-secret",
+        session_token=None,
+        lambda_function_name="test-lambda"
+    )
+    print(f"Test result: {result}")
+
+if __name__ == "__main__old":
     orchestrator = WorkflowOrchestrator()
     
     try:
