@@ -365,100 +365,141 @@ class SellerRegistrationTools:
             
             # Try to check seller status using marketplace APIs
             try:
-                # Method 1: Check if we can list entities - this indicates marketplace access
-                seller_status = "NOT_REGISTERED"  # Default assumption
+                # Default assumption - account is not registered as seller
+                seller_status = "NOT_REGISTERED"
+                owned_products = []
+                marketplace_accessible = False
                 
+                # Method 1: Try to describe the account as a marketplace entity
+                # This is the most direct way to check if account is a registered seller
                 try:
-                    # Try to list entities - if successful, account has marketplace access
-                    entities_response = self.marketplace_client.list_entities(
+                    account_entity = self.marketplace_client.describe_entity(
                         Catalog="AWSMarketplace",
-                        EntityType="SaaSProduct",
-                        MaxResults=10  # Get more entities to check ownership
+                        EntityId=account_info["account_id"]
                     )
                     
-                    # If we can successfully list entities, the account has marketplace access
-                    # This typically means the account is a registered seller
-                    marketplace_accessible = True
+                    # If we can describe the account as an entity, it's a registered seller
+                    if account_entity:
+                        seller_status = "APPROVED"
+                        marketplace_accessible = True
+                        
+                except Exception as describe_error:
+                    # Check the specific error to understand why it failed
+                    error_code = getattr(describe_error, 'response', {}).get('Error', {}).get('Code', '')
+                    error_message = getattr(describe_error, 'response', {}).get('Error', {}).get('Message', '')
                     
-                    # Check if this account owns any products
-                    owned_products = []
-                    if entities_response.get("EntitySummaryList"):
-                        for entity in entities_response["EntitySummaryList"]:
-                            # Try to describe the entity to get more details
+                    if (error_code in ['ResourceNotFoundException', 'ResourceNotSupportedException'] or 
+                        'does not exist' in error_message or 'not supported' in error_message):
+                        # Account ID is not a valid marketplace entity - this is expected
+                        # Continue to check for owned products
+                        seller_status = "NOT_REGISTERED"
+                    elif error_code in ['AccessDenied', 'UnauthorizedOperation']:
+                        # Insufficient permissions to check
+                        seller_status = "UNKNOWN"
+                    else:
+                        # Other errors - continue to product ownership check
+                        seller_status = "NOT_REGISTERED"
+                
+                # Method 2: Check if account owns any marketplace products
+                # Only do this if we haven't already confirmed seller status
+                if seller_status == "NOT_REGISTERED":
+                    try:
+                        # List entities to see if account owns any products
+                        entities_response = self.marketplace_client.list_entities(
+                            Catalog="AWSMarketplace",
+                            EntityType="SaaSProduct",
+                            MaxResults=50  # Check more entities
+                        )
+                        
+                        marketplace_accessible = True
+                        
+                        # Check if this account owns any products
+                        if entities_response.get("EntitySummaryList"):
+                            for entity in entities_response["EntitySummaryList"]:
+                                try:
+                                    entity_details = self.marketplace_client.describe_entity(
+                                        Catalog="AWSMarketplace",
+                                        EntityId=entity["EntityId"]
+                                    )
+                                    
+                                    # Check ownership through entity ARN or details
+                                    entity_arn = entity_details.get("EntityArn", "")
+                                    entity_details_json = entity_details.get("Details", "{}")
+                                    
+                                    if (account_info["account_id"] in entity_arn or 
+                                        account_info["account_id"] in entity_details_json):
+                                        owned_products.append(entity["EntityId"])
+                                        
+                                except Exception:
+                                    # Can't describe this entity, skip it
+                                    continue
+                            
+                            # If we found owned products, account is a registered seller
+                            if owned_products:
+                                seller_status = "APPROVED"
+                        
+                        # Also check other product types
+                        for product_type in ["ContainerProduct", "AmiProduct"]:
                             try:
-                                entity_details = self.marketplace_client.describe_entity(
+                                entities_response = self.marketplace_client.list_entities(
                                     Catalog="AWSMarketplace",
-                                    EntityId=entity["EntityId"]
+                                    EntityType=product_type,
+                                    MaxResults=10
                                 )
                                 
-                                # Check if this entity belongs to the current account
-                                # The entity details should contain ownership information
-                                entity_arn = entity_details.get("EntityArn", "")
-                                if account_info["account_id"] in entity_arn:
-                                    owned_products.append(entity["EntityId"])
-                                    
+                                if entities_response.get("EntitySummaryList"):
+                                    for entity in entities_response["EntitySummaryList"]:
+                                        try:
+                                            entity_details = self.marketplace_client.describe_entity(
+                                                Catalog="AWSMarketplace",
+                                                EntityId=entity["EntityId"]
+                                            )
+                                            
+                                            entity_arn = entity_details.get("EntityArn", "")
+                                            if account_info["account_id"] in entity_arn:
+                                                owned_products.append(entity["EntityId"])
+                                                seller_status = "APPROVED"
+                                                break
+                                                
+                                        except Exception:
+                                            continue
+                                            
                             except Exception:
-                                # Can't describe this entity, might not own it
+                                # Can't list this product type, continue
                                 continue
-                    
-                    # Determine seller status based on marketplace access and ownership
-                    if marketplace_accessible:
-                        # If account can access marketplace catalog, it's likely a registered seller
-                        # Even if they don't have products yet
-                        seller_status = "APPROVED"
+                                
+                    except Exception as list_error:
+                        # If we can't list entities, check the error type
+                        error_code = getattr(list_error, 'response', {}).get('Error', {}).get('Code', '')
                         
-                        # Additional verification: Try to create a changeset (dry run)
-                        # This is a more definitive test of seller status
-                        try:
-                            # Note: This would be a dry-run changeset creation
-                            # For now, we'll assume if we got this far, seller is registered
-                            pass
-                        except Exception:
-                            pass
-                    
-                except Exception as list_error:
-                    # If we can't list entities at all, check the error type
-                    error_code = getattr(list_error, 'response', {}).get('Error', {}).get('Code', '')
-                    
-                    if error_code == 'AccessDenied':
-                        # Access denied might mean not a registered seller
-                        seller_status = "NOT_REGISTERED"
-                    elif error_code == 'UnauthorizedOperation':
-                        # Unauthorized might mean not a registered seller
-                        seller_status = "NOT_REGISTERED"
-                    else:
-                        # Other errors might be temporary - assume unknown status
-                        seller_status = "UNKNOWN"
+                        if error_code in ['AccessDenied', 'UnauthorizedOperation']:
+                            seller_status = "UNKNOWN"  # Can't determine due to permissions
+                        else:
+                            seller_status = "UNKNOWN"  # Other API errors
                 
-                # Method 2: Check for specific known registered accounts
-                # Check for registered seller accounts (would be determined via API in production)
-                # Note: In production, this would use proper AWS APIs to determine seller status
-                # rather than hardcoded account lists
-                
-                # In production, this would use actual AWS Marketplace Management API
-                # to determine seller registration status
-                
-                # Method 3: Try to check change set capabilities
-                # Registered sellers should be able to work with change sets
-                try:
-                    # Try to list change sets - this is a seller-specific operation
-                    changeset_response = self.marketplace_client.list_change_sets(
-                        Catalog="AWSMarketplace",
-                        MaxResults=1
-                    )
-                    
-                    # If we can list change sets, account is likely a registered seller
-                    if seller_status == "NOT_REGISTERED":
-                        seller_status = "APPROVED"
+                # Method 3: Final verification - if still not registered, confirm with changeset check
+                # Note: Being able to list changesets doesn't mean you're a seller
+                # This is just for additional context
+                if seller_status == "NOT_REGISTERED":
+                    try:
+                        changeset_response = self.marketplace_client.list_change_sets(
+                            Catalog="AWSMarketplace",
+                            MaxResults=1
+                        )
                         
-                except Exception as changeset_error:
-                    # If we can't list change sets, check the error
-                    error_code = getattr(changeset_error, 'response', {}).get('Error', {}).get('Code', '')
-                    
-                    if error_code in ['AccessDenied', 'UnauthorizedOperation']:
-                        # These errors suggest not a registered seller
-                        if seller_status != "APPROVED":  # Don't override if already approved
-                            seller_status = "NOT_REGISTERED"
+                        # Can list changesets - but this alone doesn't confirm seller status
+                        # Keep status as NOT_REGISTERED unless we have definitive proof
+                        marketplace_accessible = True
+                        
+                    except Exception as changeset_error:
+                        error_code = getattr(changeset_error, 'response', {}).get('Error', {}).get('Code', '')
+                        
+                        if error_code in ['AccessDenied', 'UnauthorizedOperation']:
+                            # Expected for non-sellers or insufficient permissions
+                            pass
+                        else:
+                            # Other errors don't necessarily indicate non-seller status
+                            pass
                 
                 # Determine verification status based on seller status
                 if seller_status == "APPROVED":
@@ -471,7 +512,22 @@ class SellerRegistrationTools:
                         "disbursement_method": "completed"
                     }
                     required_steps = []
-                    message = "Account is registered as AWS Marketplace seller"
+                    message = f"Account {account_info['account_id']} is registered as AWS Marketplace seller with {len(owned_products)} products"
+                elif seller_status == "UNKNOWN":
+                    verification_status = {
+                        "business_profile": "unknown",
+                        "public_profile": "unknown",
+                        "tax_information": "unknown",
+                        "banking_information": "unknown", 
+                        "identity_verification": "unknown",
+                        "disbursement_method": "unknown"
+                    }
+                    required_steps = [
+                        "Check AWS permissions for marketplace access",
+                        "Verify account credentials",
+                        "Visit AWS Marketplace Management Portal directly"
+                    ]
+                    message = f"Unable to determine seller status for account {account_info['account_id']} - insufficient permissions or API errors"
                 else:
                     verification_status = {
                         "business_profile": "not_started",
@@ -482,6 +538,8 @@ class SellerRegistrationTools:
                         "disbursement_method": "not_started"
                     }
                     required_steps = [
+                        "Visit AWS Marketplace Management Portal",
+                        "Complete seller registration process",
                         "Create business profile",
                         "Create public profile", 
                         "Submit tax information",
@@ -489,7 +547,7 @@ class SellerRegistrationTools:
                         "Complete identity verification",
                         "Select disbursement method"
                     ]
-                    message = "Account is not registered as AWS Marketplace seller"
+                    message = f"Account {account_info['account_id']} is NOT registered as AWS Marketplace seller"
                 
                 return {
                     "success": True,
@@ -500,6 +558,9 @@ class SellerRegistrationTools:
                     "registration_date": datetime.utcnow().isoformat() if seller_status == "APPROVED" else None,
                     "verification_status": verification_status,
                     "required_steps": required_steps,
+                    "owned_products": owned_products,
+                    "owned_products_count": len(owned_products),
+                    "marketplace_accessible": marketplace_accessible,
                     "marketplace_permissions": marketplace_access,
                     "portal_url": "https://aws.amazon.com/marketplace/management/seller-registration",
                     "message": message
