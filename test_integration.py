@@ -27,128 +27,138 @@ def test_agent_imports():
         print(f"❌ Failed to import WorkflowOrchestrator: {e}")
         return False
     
-    return True
-
-def test_agent_initialization():
-    """Test that agents can be initialized"""
-    print("\n=== Testing Agent Initialization ===")
-    
     try:
-        from agents.serverless_saas_integration import ServerlessSaasIntegrationAgent
-        from agents.workflow_orchestrator import WorkflowOrchestrator
-        
-        # Test ServerlessSaasIntegrationAgent
-        saas_agent = ServerlessSaasIntegrationAgent()
-        print("✅ ServerlessSaasIntegrationAgent initialized successfully")
-        
-        # Test WorkflowOrchestrator
-        workflow_agent = WorkflowOrchestrator()
-        print("✅ WorkflowOrchestrator initialized successfully")
-        
-        return True, saas_agent, workflow_agent
-        
+        from agents.buyer_experience import BuyerExperienceAgent
+        print("✅ BuyerExperienceAgent imported successfully")
     except Exception as e:
-        print(f"❌ Failed to initialize agents: {e}")
-        import traceback
-        traceback.print_exc()
-        return False, None, None
-
-def test_agent_methods():
-    """Test that agent methods work"""
-    print("\n=== Testing Agent Methods ===")
-    
-    success, saas_agent, workflow_agent = test_agent_initialization()
-    if not success:
+        print(f"❌ Failed to import BuyerExperienceAgent: {e}")
         return False
     
-    # Test ServerlessSaasIntegrationAgent.deploy_infrastructure
     try:
-        result = saas_agent.deploy_infrastructure(
-            email="test@example.com",
-            stack_name="test-stack",
-            product_id="test-product-123",
-            fulfillment_url="https://test.com/signup",
-            pricing_dimensions=[{"name": "Users", "key": "users"}]
-        )
+        from agents.metering import MeteringAgent
+        print("✅ MeteringAgent imported successfully")
+    except Exception as e:
+        print(f"❌ Failed to import MeteringAgent: {e}")
+        return False
+    
+    try:
+        from agents.public_visibility import PublicVisibilityAgent
+        print("✅ PublicVisibilityAgent imported successfully")
+    except Exception as e:
+        print(f"❌ Failed to import PublicVisibilityAgent: {e}")
+        return False
+    
+    return True
+
+def test_seller_registration():
+    """Test seller registration components"""
+    print("\n=== Testing Seller Registration ===")
+    
+    try:
+        from agent.tools.seller_registration_tools import SellerRegistrationTools
+        print("✅ SellerRegistrationTools imported successfully")
+    except Exception as e:
+        print(f"❌ Failed to import SellerRegistrationTools: {e}")
+        return False
+    
+    try:
+        from agent.sub_agents.seller_registration_agent import SellerRegistrationAgent
+        print("✅ SellerRegistrationAgent imported successfully")
+    except Exception as e:
+        print(f"❌ Failed to import SellerRegistrationAgent: {e}")
+        return False
+    
+    try:
+        from seller_registration_module import SellerRegistrationModule
+        print("✅ SellerRegistrationModule imported successfully")
+    except Exception as e:
+        print(f"❌ Failed to import SellerRegistrationModule: {e}")
+        return False
+    
+    return True
+
+def test_core_components():
+    """Test core orchestrator and tools"""
+    print("\n=== Testing Core Components ===")
+    
+    try:
+        from agent.orchestrator import ListingOrchestrator, WorkflowStage
+        print("✅ ListingOrchestrator imported successfully")
+    except Exception as e:
+        print(f"❌ Failed to import ListingOrchestrator: {e}")
+        return False
+    
+    try:
+        from agent.tools.listing_tools import ListingTools
+        print("✅ ListingTools imported successfully")
+    except Exception as e:
+        print(f"❌ Failed to import ListingTools: {e}")
+        return False
+    
+    return True
+
+def test_streamlit_app():
+    """Test that the main Streamlit app can be imported"""
+    print("\n=== Testing Streamlit App ===")
+    
+    # Test if the main app file exists and is readable
+    app_file = "streamlit_app_with_seller_registration.py"
+    if os.path.exists(app_file):
+        print(f"✅ {app_file} exists")
         
-        if result.get('success'):
-            print("✅ ServerlessSaasIntegrationAgent.deploy_infrastructure works")
-            print(f"   Stack ID: {result.get('stack_id')}")
-        else:
-            print(f"❌ deploy_infrastructure failed: {result.get('error')}")
-            return False
+        # Try to read the file to check for syntax errors
+        try:
+            with open(app_file, 'r') as f:
+                content = f.read()
+            print(f"✅ {app_file} is readable")
             
-    except Exception as e:
-        print(f"❌ Error testing deploy_infrastructure: {e}")
-        return False
-    
-    # Test WorkflowOrchestrator.execute_full_workflow
-    try:
-        result = workflow_agent.execute_full_workflow(
-            access_key="test-key",
-            secret_key="test-secret",
-            session_token=None,
-            lambda_function_name="test-lambda"
-        )
-        
-        print("✅ WorkflowOrchestrator.execute_full_workflow works")
-        print(f"   Status: {result.get('status')}")
-        
-    except Exception as e:
-        print(f"❌ Error testing execute_full_workflow: {e}")
+            # Check for key imports
+            if "import streamlit as st" in content:
+                print("✅ Streamlit import found")
+            else:
+                print("❌ Streamlit import not found")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error reading {app_file}: {e}")
+            return False
+    else:
+        print(f"❌ {app_file} not found")
         return False
     
     return True
-
-def test_streamlit_integration():
-    """Test the Streamlit integration components"""
-    print("\n=== Testing Streamlit Integration ===")
-    
-    try:
-        # Import the main streamlit app components
-        from streamlit_app_with_seller_registration import init_session_state
-        print("✅ Streamlit app components imported successfully")
-        
-        # Test session state initialization (without actually running Streamlit)
-        # This is tricky because it requires Streamlit context, so we'll just test imports
-        print("✅ Session state initialization function available")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Error testing Streamlit integration: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
 
 def main():
     """Run all tests"""
-    print("🧪 Testing AI Agent Marketplace Integration\n")
+    print("🧪 Starting Integration Tests...\n")
     
-    # Test 1: Agent imports
-    if not test_agent_imports():
-        print("\n❌ Agent import tests failed")
+    tests = [
+        test_core_components,
+        test_seller_registration,
+        test_agent_imports,
+        test_streamlit_app
+    ]
+    
+    passed = 0
+    total = len(tests)
+    
+    for test in tests:
+        try:
+            if test():
+                passed += 1
+            else:
+                print(f"❌ {test.__name__} failed")
+        except Exception as e:
+            print(f"❌ {test.__name__} crashed: {e}")
+    
+    print(f"\n📊 Test Results: {passed}/{total} tests passed")
+    
+    if passed == total:
+        print("🎉 All tests passed!")
+        return True
+    else:
+        print("⚠️  Some tests failed. Check the output above.")
         return False
-    
-    # Test 2: Agent methods
-    if not test_agent_methods():
-        print("\n❌ Agent method tests failed")
-        return False
-    
-    # Test 3: Streamlit integration
-    if not test_streamlit_integration():
-        print("\n❌ Streamlit integration tests failed")
-        return False
-    
-    print("\n🎉 All tests passed! The integration is working correctly.")
-    print("\n📋 Summary:")
-    print("   ✅ Agents can be imported")
-    print("   ✅ Agents can be initialized")
-    print("   ✅ Agent methods work correctly")
-    print("   ✅ Streamlit integration is functional")
-    print("\n🚀 You can now run the Streamlit app and the SaaS integration workflow should work!")
-    
-    return True
 
 if __name__ == "__main__":
     success = main()

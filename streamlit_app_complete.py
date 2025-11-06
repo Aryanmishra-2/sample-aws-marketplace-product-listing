@@ -48,9 +48,8 @@ def sanitize_text_for_marketplace(text: str) -> str:
     ]
     
     for unicode_char, ascii_char in replacements:
-        text = text.replace(unicode_char, ascii_char)
-    
-    # Remove any remaining non-ASCII characters (but preserve newlines and tabs)
+        text = text.replace(unicode_char, ascii_char)    # R
+emove any remaining non-ASCII characters (but preserve newlines and tabs)
     # Split by lines to preserve line breaks
     lines = text.split('\n')
     cleaned_lines = []
@@ -68,178 +67,18 @@ def sanitize_text_for_marketplace(text: str) -> str:
 
 
 def init_session_state():
-    """Initialize session state"""
-    if 'orchestrator' not in st.session_state:
-        # Use Strands agent
-        from agent.strands_marketplace_agent import StrandsMarketplaceAgent
-        strands_agent = StrandsMarketplaceAgent()
-        st.session_state.orchestrator = strands_agent.orchestrator
-    
-    # Add seller registration components
-    if 'seller_registration_tools' not in st.session_state:
-        from agent.tools.seller_registration_tools import SellerRegistrationTools
-        st.session_state.seller_registration_tools = SellerRegistrationTools()
-    
-    if 'seller_registration_agent' not in st.session_state:
-        from agent.sub_agents.seller_registration_agent import SellerRegistrationAgent
-        st.session_state.seller_registration_agent = SellerRegistrationAgent()
-    
-    if 'conversation_history' not in st.session_state:
-        st.session_state.conversation_history = []
+    """Initialize session state variables"""
+    if 'current_step' not in st.session_state:
+        st.session_state.current_step = 'gather_context'
     
     if 'product_context' not in st.session_state:
         st.session_state.product_context = {}
     
-    if 'current_step' not in st.session_state:
-        st.session_state.current_step = "welcome"
+    if 'ai_suggestions' not in st.session_state:
+        st.session_state.ai_suggestions = {}
     
-    # Add seller registration state
-    if 'seller_status' not in st.session_state:
-        st.session_state.seller_status = None
-    
-    if 'registration_data' not in st.session_state:
-        st.session_state.registration_data = {}
-
-
-def call_bedrock_llm(prompt: str, system_prompt: str = None, model_id: str = None) -> str:
-    """Call Amazon Bedrock to generate responses"""
-    try:
-        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
-        
-        messages = [{"role": "user", "content": prompt}]
-        
-        request_body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 4096,
-            "messages": messages,
-            "temperature": 0.7
-        }
-        
-        if system_prompt:
-            request_body["system"] = system_prompt
-        
-        # Model priority list (try in order)
-        if not model_id:
-            model_ids = [
-                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",  # Claude 3.5 Sonnet v2 (inference profile)
-                "anthropic.claude-3-5-sonnet-20241022-v2:0",     # Claude 3.5 Sonnet v2 (direct)
-                "anthropic.claude-3-5-sonnet-20240620-v1:0",     # Claude 3.5 Sonnet v1 (stable)
-                "anthropic.claude-3-sonnet-20240229-v1:0"        # Claude 3 Sonnet (fallback)
-            ]
-        else:
-            model_ids = [model_id]
-        
-        last_error = None
-        for mid in model_ids:
-            try:
-                response = bedrock.invoke_model(
-                    modelId=mid,
-                    body=json.dumps(request_body)
-                )
-                response_body = json.loads(response['body'].read())
-                return response_body['content'][0]['text']
-            except Exception as e:
-                last_error = e
-                continue
-        
-        # If all models failed, raise the last error
-        raise last_error
-    
-    except Exception as e:
-        st.error(f"Error calling Bedrock: {str(e)}")
-        st.info("💡 Tip: Make sure you have requested access to Claude models in the Bedrock console")
-        return None
-
-
-def welcome_screen():
-    """Welcome screen with seller status check and workflow selection"""
-    st.title("🚀 AWS Marketplace Seller Registration & Listing Creation")
-    
-    st.markdown("""
-    ### Welcome! Let's get you set up on AWS Marketplace.
-    
-    This comprehensive workflow will:
-    
-    **Step 1: Seller Registration** 🏢
-    - Check your current seller status
-    - Guide you through AWS Marketplace seller registration
-    - Handle business profile, tax information, and banking setup
-    
-    **Step 2: Listing Creation** 🛍️
-    - Analyze your product documentation
-    - Generate all required listing content automatically
-    - Select optimal pricing models and dimensions
-    - Create and publish your marketplace listing
-    
-    **Complete end-to-end solution!**
-    """)
-    
-    st.divider()
-    
-    # Check seller status first
-    if st.session_state.seller_status is None:
-        with st.spinner("Checking your AWS Marketplace seller status..."):
-            try:
-                status = st.session_state.seller_registration_tools.check_seller_status()
-                st.session_state.seller_status = status
-            except Exception as e:
-                st.error(f"Unable to check seller status: {str(e)}")
-                st.session_state.seller_status = {"success": False, "error": str(e)}
-    
-    status = st.session_state.seller_status
-    
-    if status and status.get("success"):
-        seller_status = status.get("seller_status", "UNKNOWN")
-        
-        if seller_status == "APPROVED":
-            st.success("✅ **You're already registered as an AWS Marketplace seller!**")
-            st.info("You can proceed directly to creating product listings.")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🔄 Re-check Seller Status", use_container_width=True):
-                    st.session_state.seller_status = None
-                    st.rerun()
-            
-            with col2:
-                if st.button("Start AI-Guided Creation →", type="primary", use_container_width=True):
-                    st.session_state.current_step = "gather_context"
-                    st.rerun()
-        
-        elif seller_status == "PENDING":
-            st.warning("⏳ **Your seller registration is under review by AWS**")
-            st.info("This typically takes 2-3 business days. You can check the status in your AWS Marketplace Management Console.")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🔄 Re-check Status", use_container_width=True):
-                    st.session_state.seller_status = None
-                    st.rerun()
-            
-            with col2:
-                if st.button("View Management Console", use_container_width=True):
-                    st.markdown("[Open AWS Marketplace Management Console](https://console.aws.amazon.com/marketplace/management/)")
-        
-        else:  # NOT_REGISTERED or other status
-            st.info("📋 **You need to register as an AWS Marketplace seller first**")
-            st.markdown("Don't worry - we'll guide you through the entire process step by step.")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🔄 Re-check Status", use_container_width=True):
-                    st.session_state.seller_status = None
-                    st.rerun()
-            
-            with col2:
-                if st.button("Start Seller Registration →", type="primary", use_container_width=True):
-                    st.session_state.current_step = "seller_registration"
-                    st.rerun()
-    
-    else:
-        st.error("❌ Unable to check seller status. Please check your AWS credentials and try again.")
-        if st.button("Retry", type="primary"):
-            st.session_state.seller_status = None
-            st.rerun()
+    if 'listing_data' not in st.session_state:
+        st.session_state.listing_data = {}
 
 
 def gather_context_screen():
@@ -264,36 +103,45 @@ def gather_context_screen():
     pricing_url = st.text_input(
         "Pricing Page (optional)", 
         placeholder="https://yourproduct.com/pricing",
-        help="Your existing pricing page if available"
+        help="Pricing information page"
     )
     
-    st.divider()
+    st.write("**Additional Information:**")
+    product_description = st.text_area(
+        "Brief Product Description *",
+        placeholder="Describe what your product does in 2-3 sentences...",
+        help="This helps our AI understand your product better"
+    )
     
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        if st.button("← Back"):
-            st.session_state.current_step = "welcome"
-            st.rerun()
+    target_audience = st.text_input(
+        "Target Audience *",
+        placeholder="e.g., Software developers, Data scientists, DevOps teams",
+        help="Who is your primary customer?"
+    )
     
-    with col2:
-        if st.button("Continue →", type="primary", use_container_width=True):
-            # Validate at least website URL is provided
-            if not website_url:
-                st.error("Please provide at least your product website URL")
-                return
-            
-            # Store context
-            context = {
-                "website_url": website_url,
-                "docs_url": docs_url,
-                "pricing_url": pricing_url,
-                "product_description": "",
-                "uploaded_file": None
-            }
-            
-            st.session_state.product_context = context
-            st.session_state.current_step = "analyze_product"
-            st.rerun()
+    key_features = st.text_area(
+        "Key Features (optional)",
+        placeholder="List your main features, one per line...",
+        help="What makes your product unique?"
+    )
+    
+    if st.button("🔍 Analyze Product", type="primary"):
+        if not website_url or not product_description or not target_audience:
+            st.error("❌ Please fill in all required fields (marked with *)")
+            return
+        
+        context = {
+            "website_url": website_url,
+            "docs_url": docs_url,
+            "pricing_url": pricing_url,
+            "product_description": product_description,
+            "target_audience": target_audience,
+            "key_features": key_features
+        }
+        
+        st.session_state.product_context = context
+        st.session_state.current_step = "analyze_product"
+        st.rerun()
 
 
 def analyze_product_screen():
@@ -307,178 +155,45 @@ def analyze_product_screen():
         if context.get("website_url"):
             st.write(f"🔗 Website: {context['website_url']}")
         if context.get("docs_url"):
-            st.write(f"📄 Documentation: {context['docs_url']}")
-        if context.get("product_description"):
-            st.write(f"📝 Description: {context['product_description'][:200]}...")
+            st.write(f"📚 Documentation: {context['docs_url']}")
+        if context.get("pricing_url"):
+            st.write(f"💰 Pricing: {context['pricing_url']}")
+        st.write(f"📝 Description: {context['product_description']}")
+        st.write(f"🎯 Target Audience: {context['target_audience']}")
+        if context.get("key_features"):
+            st.write(f"⭐ Key Features: {context['key_features']}")
     
-    # Check if analysis already exists (avoid re-analysis)
-    if ('product_analysis' in st.session_state and 
-        'generated_content' in st.session_state and 
-        'pricing_suggestion' in st.session_state):
-        st.success("✅ Analysis already complete! Proceeding to review...")
-        if st.button("Review Suggestions →", type="primary"):
-            st.session_state.current_step = "review_suggestions"
-            st.rerun()
-        
-        if st.button("← Back to Re-analyze"):
-            # Clear existing analysis to force re-analysis
-            del st.session_state.product_analysis
-            del st.session_state.generated_content
-            del st.session_state.pricing_suggestion
-            st.rerun()
-        return
+    # Initialize orchestrator
+    if 'orchestrator' not in st.session_state:
+        st.session_state.orchestrator = ListingOrchestrator()
     
-    # Analysis progress
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    orchestrator = st.session_state.orchestrator
     
-    # Step 1: Analyze product
-    status_text.text("🔍 Understanding your product...")
-    progress_bar.progress(20)
-    
-    analysis_prompt = f"""
-    Analyze this product information and provide a structured analysis:
-    
-    Website: {context.get('website_url', 'Not provided')}
-    Documentation: {context.get('docs_url', 'Not provided')}
-    Description: {context.get('product_description', 'Not provided')}
-    
-    Provide:
-    1. Product Type (SaaS, API, Platform, etc.)
-    2. Target Audience
-    3. Key Features (list 5-10)
-    4. Value Proposition
-    5. Use Cases
-    6. Competitive Advantages
-    
-    Format as JSON.
-    """
-    
-    system_prompt = "You are an AWS Marketplace expert analyzing products for listing creation."
-    
-    with st.spinner("Analyzing product..."):
-        model_id = st.session_state.get('selected_model', None)
-        analysis = call_bedrock_llm(analysis_prompt, system_prompt, model_id)
-    
-    if analysis:
-        st.session_state.product_analysis = analysis
-        progress_bar.progress(40)
-        
-        # Step 2: Generate listing content
-        status_text.text("✍️ Generating listing content...")
-        
-        content_prompt = f"""
-        Based on this product analysis:
-        {analysis}
-        
-        Generate AWS Marketplace listing content:
-        
-        1. Product Title (5-72 chars, compelling and clear - MUST be under 72 characters)
-        2. Short Description (10-500 chars, for search results)
-        3. Long Description (50-5000 chars, detailed with benefits)
-        4. Highlights (3-5 bullet points, 5-250 chars each)
-        5. Search Keywords (5-10 keywords, max 50 chars each)
-        6. Suggested Categories (from AWS Marketplace categories)
-        
-        IMPORTANT: Use only basic ASCII characters. Do NOT use:
-        - Bullet points (•) - use hyphens (-) instead
-        - Smart quotes (" ") - use straight quotes (")
-        - Em/en dashes (— –) - use hyphens (-)
-        - Any Unicode symbols
-        
-        Format as JSON with these exact keys: product_title, short_description, long_description, highlights (array), search_keywords (array), categories (array)
-        """
-        
-        with st.spinner("Generating content..."):
-            model_id = st.session_state.get('selected_model', None)
-            content = call_bedrock_llm(content_prompt, system_prompt, model_id)
-        
-        if content and content.strip():
-            st.session_state.generated_content = content
-            progress_bar.progress(60)
-        else:
-            st.error("❌ Failed to generate content. Using fallback template.")
-            # Fallback content based on context
-            fallback_content = {
-                "product_title": context.get('product_description', 'Your Product')[:100],
-                "short_description": context.get('product_description', 'Product description')[:200],
-                "long_description": context.get('product_description', 'Detailed product description')[:1000],
-                "highlights": [
-                    "Key feature 1",
-                    "Key feature 2",
-                    "Key feature 3"
-                ],
-                "search_keywords": ["saas", "cloud", "software"],
-                "categories": ["Application Development"]
-            }
-            st.session_state.generated_content = json.dumps(fallback_content)
-            progress_bar.progress(60)
-        
-        # Step 3: Suggest pricing model (moved outside the else block)
-        status_text.text("💰 Analyzing pricing model...")
-        
-        pricing_prompt = f"""
-        Based on this product:
-        {analysis}
-        
-        Suggest the best AWS Marketplace pricing model:
-        
-        Options:
-        1. "Contract" - One-time fee with allotted units (e.g., buy 100 users for 12 months upfront)
-        2. "Usage" - Purely subscription/consumption based (e.g., pay per API call, pay per GB used)
-        3. "Contract with Consumption" - One-time fee plus additional charges for excess usage (e.g., buy 100 users upfront + pay extra for additional users beyond that)
-        
-        Return ONLY a valid JSON object with these exact keys (no other text):
-        {{
-            "recommended_model": "Contract" | "Usage" | "Contract with Consumption",
-            "reasoning": "Brief explanation of why this model fits the product",
-            "suggested_dimensions": ["dimension1", "dimension2"],
-            "contract_durations": ["12 Months", "24 Months"]
-        }}
-        
-        Choose the model that best fits the product's business model. Return only the JSON, nothing else.
-        """
-        
-        with st.spinner("Analyzing pricing..."):
-            model_id = st.session_state.get('selected_model', None)
-            pricing = call_bedrock_llm(pricing_prompt, system_prompt, model_id)
-        
-        if pricing and pricing.strip():
-            # Try to extract JSON from the response
-            try:
-                # Look for JSON in the response
-                import re
-                json_match = re.search(r'\{.*\}', pricing, re.DOTALL)
-                if json_match:
-                    pricing_json = json_match.group()
-                    # Validate it's valid JSON
-                    json.loads(pricing_json)
-                    st.session_state.pricing_suggestion = pricing_json
-                else:
-                    # If no JSON found, store as-is and let review screen handle it
-                    st.session_state.pricing_suggestion = pricing
-            except (json.JSONDecodeError, AttributeError):
-                # Store as-is if we can't parse it
-                st.session_state.pricing_suggestion = pricing
-        else:
-            st.warning("⚠️ Could not generate pricing suggestion. Using default.")
-            # Fallback pricing suggestion
-            fallback_pricing = {
-                "recommended_model": "Contract",
-                "reasoning": "Contract-based pricing is recommended for most SaaS products as it provides predictable revenue.",
-                "suggested_dimensions": ["Users", "Features"],
-                "contract_durations": ["12 Months", "24 Months"]
-            }
-            st.session_state.pricing_suggestion = json.dumps(fallback_pricing)
-        
-        progress_bar.progress(100)
-        status_text.text("✅ Analysis complete!")
-        
-        st.success("🎉 Analysis complete! Review the suggestions on the next screen.")
-        
-        if st.button("Review Suggestions →", type="primary"):
-            st.session_state.current_step = "review_suggestions"
-            st.rerun()
+    # Run AI analysis
+    with st.spinner("🤖 AI is analyzing your product and generating marketplace content..."):
+        try:
+            # Analyze the product
+            analysis_result = orchestrator.analyze_product_from_context(context)
+            
+            if analysis_result.get('success'):
+                st.session_state.ai_suggestions = analysis_result.get('suggestions', {})
+                
+                st.success("🎉 Analysis complete! Review the suggestions on the next screen.")
+                
+                if st.button("Review Suggestions →", type="primary"):
+                    st.session_state.current_step = "review_suggestions"
+                    st.rerun()
+            else:
+                st.error(f"❌ Analysis failed: {analysis_result.get('error', 'Unknown error')}")
+                if st.button("← Back to Product Info"):
+                    st.session_state.current_step = "gather_context"
+                    st.rerun()
+                    
+        except Exception as e:
+            st.error(f"❌ Error during analysis: {str(e)}")
+            if st.button("← Back to Product Info"):
+                st.session_state.current_step = "gather_context"
+                st.rerun()
 
 
 def review_suggestions_screen():
@@ -489,586 +204,181 @@ def review_suggestions_screen():
     Review the AI-generated content below. You can edit any field before creating your listing.
     """)
     
-    # Parse generated content
-    try:
-        content = json.loads(st.session_state.generated_content)
-        
-        # Check if content is empty or has blank values
-        if not content or all(not v for v in content.values()):
-            raise ValueError("Empty content")
-            
-    except (json.JSONDecodeError, KeyError, AttributeError, ValueError) as e:
-        st.warning("⚠️ AI-generated content was incomplete. Using template. Please fill in your product details.")
-        # Fallback if JSON parsing fails or content is empty
-        context = st.session_state.get('product_context', {})
-        content = {
-            "product_title": context.get('product_description', 'Your Product Name')[:72] or "Your Product Name",
-            "short_description": context.get('product_description', 'Brief description')[:200] or "Brief description of your product",
-            "long_description": context.get('product_description', 'Detailed description')[:1000] or "Detailed description of your product with features and benefits",
-            "highlights": ["Key feature 1", "Key feature 2", "Key feature 3"],
-            "search_keywords": ["saas", "cloud", "software"],
-            "categories": ["Application Development"]
-        }
+    suggestions = st.session_state.ai_suggestions
     
-    # Truncate product title if AI generated one that's too long
-    ai_title = content.get("product_title", "")
-    if len(ai_title) > 72:
-        st.warning(f"⚠️ AI generated a title that's too long ({len(ai_title)} chars). Truncated to 72 characters.")
-        ai_title = ai_title[:69] + "..."  # Truncate and add ellipsis
+    if not suggestions:
+        st.error("❌ No suggestions found. Please go back and analyze your product first.")
+        if st.button("← Back to Analysis"):
+            st.session_state.current_step = "analyze_product"
+            st.rerun()
+        return
     
-    st.subheader("📦 Product Information")
-    
+    # Product Title
+    st.subheader("📝 Product Title")
     product_title = st.text_input(
-        "Product Title *",
-        value=ai_title,
-        max_chars=72,
-        help="Maximum 72 characters (AWS Marketplace limit)"
+        "Product Title",
+        value=suggestions.get('product_title', ''),
+        help="Keep it concise and descriptive (max 120 characters)"
     )
     
-    # Validate title length
-    if product_title and len(product_title) > 72:
-        st.error(f"⚠️ Product title is too long ({len(product_title)} chars). Maximum is 72 characters.")
-    elif product_title and len(product_title) < 5:
-        st.warning(f"⚠️ Product title is too short ({len(product_title)} chars). Minimum is 5 characters.")
-    
-    logo_s3_url = st.text_input(
-        "Logo S3 URL *",
-        placeholder="https://your-bucket.s3.amazonaws.com/logo.png",
-        help="S3 URL to your product logo (PNG/JPG, min 110x110px, max 5MB)"
-    )
-    
+    # Short Description
+    st.subheader("📄 Short Description")
     short_description = st.text_area(
-        "Short Description *",
-        value=content.get("short_description", ""),
-        max_chars=500,
-        height=100
+        "Short Description",
+        value=suggestions.get('short_description', ''),
+        help="Brief overview for search results (max 120 characters)",
+        max_chars=120
     )
     
+    # Long Description
+    st.subheader("📖 Long Description")
     long_description = st.text_area(
-        "Long Description *",
-        value=content.get("long_description", ""),
-        max_chars=5000,
-        height=200
-    )
-    
-    st.write("**Highlights (1-3 maximum) ***")
-    st.caption("1 mandatory, 2 optional - Key features or benefits")
-    highlights = []
-    
-    # Get AI-generated highlights or use defaults
-    ai_highlights = content.get("highlights", ["", "", ""])
-    
-    # Highlight 1 (mandatory)
-    h1 = st.text_input("Highlight 1 *", value=ai_highlights[0] if len(ai_highlights) > 0 else "", max_chars=250, key="highlight_0")
-    if h1:
-        highlights.append(h1)
-    
-    # Highlight 2 (optional)
-    h2 = st.text_input("Highlight 2 (optional)", value=ai_highlights[1] if len(ai_highlights) > 1 else "", max_chars=250, key="highlight_1")
-    if h2:
-        highlights.append(h2)
-    
-    # Highlight 3 (optional)
-    h3 = st.text_input("Highlight 3 (optional)", value=ai_highlights[2] if len(ai_highlights) > 2 else "", max_chars=250, key="highlight_2")
-    if h3:
-        highlights.append(h3)
-    
-    col1, col2 = st.columns(2)
-    
-    # Complete AWS Marketplace categories list
-    all_categories = [
-        # Infrastructure Software
-        "Backup & Recovery", "Data Analytics", "High Performance Computing", "Migration",
-        "Network Infrastructure", "Operating Systems", "Security", "Storage",
-        # DevOps
-        "Agile Lifecycle Management", "Application Development", "Application Servers",
-        "Application Stacks", "Continuous Integration & Continuous Delivery",
-        "Infrastructure as Code", "Issues & Bug Tracking", "Monitoring", "Log Analysis",
-        "Source Control", "Testing",
-        # Business Applications
-        "Blockchain", "Collaboration & Productivity", "Contact Center", "Content Management",
-        "CRM", "eCommerce", "eLearning", "Human Resources", "IT Business Management",
-        "Business Intelligence", "Project Management",
-        # Machine Learning
-        "ML Solutions", "Data Labeling Services", "Computer Vision",
-        "Natural Language Processing", "Speech Recognition", "Text", "Image", "Video",
-        "Audio", "Structured",
-        # IoT
-        "IoT Analytics", "IoT Applications", "Device Connectivity", "Device Management",
-        "Device Security", "Industrial IoT", "Smart Home & City",
-        # Professional Services
-        "Assessments", "Implementation", "Managed Services", "Premium Support", "Training",
-        # Desktop Applications
-        "Desktop Applications", "AP and Billing", "Application and the Web", "Development",
-        "CAD and CAM", "GIS and Mapping", "Illustration and Design", "Media and Encoding",
-        "Productivity and Collaboration", "Security/Storage/Archiving", "Utilities",
-        # Industries
-        "Education & Research", "Financial Services", "Healthcare & Life Sciences",
-        "Media & Entertainment", "Industrial", "Energy"
-    ]
-    
-    with col1:
-        # Use AI suggestions if available, otherwise show all categories
-        ai_categories = content.get("categories", [])
-        default_categories = [cat for cat in ai_categories if cat in all_categories][:3]
-        
-        categories = st.multiselect(
-            "Categories (1-3) *",
-            options=sorted(all_categories),
-            default=default_categories,
-            max_selections=3,
-            help="AI suggested categories are pre-selected. You can change them."
-        )
-    
-    with col2:
-        keywords_str = ", ".join(content.get("search_keywords", []))
-        keywords_input = st.text_input(
-            "Search Keywords *",
-            value=keywords_str,
-            help="Comma-separated"
-        )
-        keywords = [k.strip() for k in keywords_input.split(",") if k.strip()]
-    
-    st.divider()
-    
-    # Support information
-    st.subheader("📞 Support Information")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        support_email = st.text_input("Support Email *", placeholder="support@example.com")
-    with col2:
-        fulfillment_url = st.text_input("Fulfillment URL *", placeholder="https://yourapp.com/signup")
-    
-    support_description = st.text_area(
-        "Support Description *",
-        placeholder="Describe your support offerings...",
+        "Long Description",
+        value=suggestions.get('long_description', ''),
+        help="Detailed product description (max 2000 characters)",
+        height=200,
         max_chars=2000
     )
     
-    st.divider()
-    
-    # Pricing review
-    st.subheader("💰 Pricing Configuration")
-    
-    # Parse pricing suggestion
-    pricing_suggestion = {}
-    recommended_model_display = "Contract"
-    
-    if 'pricing_suggestion' in st.session_state:
-        try:
-            # Try to parse as JSON if it's a string
-            if isinstance(st.session_state.pricing_suggestion, str):
-                pricing_suggestion = json.loads(st.session_state.pricing_suggestion)
-            else:
-                pricing_suggestion = st.session_state.pricing_suggestion
-            
-            recommended_model = pricing_suggestion.get('recommended_model', 'Contract')
-            
-            # Show AI recommendation
-            st.info(f"💡 **AI Recommendation:** {recommended_model}")
-            if pricing_suggestion.get('reasoning'):
-                st.write(pricing_suggestion.get('reasoning'))
-            
-            # Map AI recommendation to dropdown options
-            model_mapping = {
-                "Contract": "Contract",
-                "Usage": "Usage",
-                "Contract with Consumption": "Contract with Consumption",
-                "contract": "Contract",
-                "usage": "Usage",
-                "contract_consumption": "Contract with Consumption",
-                "hybrid": "Contract with Consumption"
-            }
-            recommended_model_display = model_mapping.get(recommended_model, "Contract")
-            
-        except (json.JSONDecodeError, KeyError, AttributeError, TypeError) as e:
-            # Show debug info in expander
-            with st.expander("🔍 Debug: Pricing Suggestion Issue"):
-                st.error(f"Error parsing pricing suggestion: {str(e)}")
-                st.write("Raw pricing suggestion:")
-                st.code(str(st.session_state.get('pricing_suggestion', 'None')))
-            pricing_suggestion = {}
-            recommended_model_display = "Contract"
-    else:
-        st.warning("⚠️ No pricing suggestion found. Using default Contract model.")
-    
-    # Pricing model options (including hybrid)
-    pricing_options = ["Contract", "Usage", "Contract with Consumption"]
-    
-    default_index = pricing_options.index(recommended_model_display) if recommended_model_display in pricing_options else 0
-    
-    pricing_model = st.selectbox(
-        "Pricing Model *",
-        options=pricing_options,
-        index=default_index,
-        help="AI recommended model is pre-selected. You can change it if needed."
-    )
-    
-    # Show pricing model explanation
-    if pricing_model == "Usage":
-        st.info("💡 **Usage-based**: Customers pay for what they use (metered dimensions)")
-    elif pricing_model == "Contract":
-        st.info("💡 **Contract-based**: Customers pay upfront for entitled dimensions")
-    else:  # Contract with Consumption
-        st.info("💡 **Contract with Consumption**: Customers commit to a contract with entitled dimensions, plus pay for additional usage beyond their entitlement (metered dimensions)")
-    
-    st.write("**Pricing Dimensions ***")
-    st.caption("Define what customers will be charged for")
-    
-    # Show AI suggested dimensions
-    if pricing_suggestion and 'suggested_dimensions' in pricing_suggestion:
-        suggested_dims = pricing_suggestion.get('suggested_dimensions', [])
-        if suggested_dims:
-            st.info(f"💡 **AI Suggested Dimensions:** {', '.join(suggested_dims)}")
-    
-    # Initialize dimensions in session state
-    if 'dimensions' not in st.session_state:
-        st.session_state.dimensions = []
-    
-    # Dimension type based on pricing model
-    if pricing_model == "Usage":
-        dim_type = "Metered"
-        allow_type_selection = False
-    elif pricing_model == "Contract":
-        dim_type = "Entitled"
-        allow_type_selection = False
-    else:  # Contract with Consumption
-        dim_type = "Entitled"  # Default for hybrid
-        allow_type_selection = True
-        st.info("ℹ️ For hybrid pricing, add both **Entitled** dimensions (included in contract) and **Metered** dimensions (pay-per-use overages)")
-    
-    # Add dimension
-    with st.expander("➕ Add Dimension", expanded=len(st.session_state.dimensions) == 0):
-        dim_name = st.text_input("Dimension Name", placeholder="e.g., Active Users", key="dim_name")
-        dim_key = st.text_input("Dimension Key", placeholder="e.g., users", key="dim_key")
-        dim_description = st.text_input("Description", placeholder="e.g., Number of active users per month", key="dim_desc")
-        
-        # For hybrid pricing, allow selecting dimension type
-        if allow_type_selection:
-            selected_dim_type = st.radio(
-                "Dimension Type",
-                options=["Entitled", "Metered"],
-                help="Entitled: Included in contract. Metered: Pay-per-use overages.",
-                key="dim_type_select"
-            )
-        else:
-            selected_dim_type = dim_type
-        
-        if st.button("Add Dimension"):
-            if dim_name and dim_key and dim_description:
-                st.session_state.dimensions.append({
-                    "name": dim_name,
-                    "key": dim_key,
-                    "description": dim_description,
-                    "type": selected_dim_type
-                })
-                st.rerun()
-    
-    # Show added dimensions
-    if st.session_state.dimensions:
-        st.write(f"**Added Dimensions ({dim_type}):**")
-        for i, dim in enumerate(st.session_state.dimensions):
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.write(f"{i+1}. {dim['name']} ({dim['key']}) - {dim['type']}")
-            with col2:
-                if st.button("Remove", key=f"remove_{i}"):
-                    st.session_state.dimensions.pop(i)
-                    st.rerun()
-    
-    all_dimensions = st.session_state.dimensions
-    
-    st.divider()
-    
-    # Contract Durations (for Contract and hybrid pricing)
-    if pricing_model in ["Contract", "Contract with Consumption"]:
-        st.subheader("📅 Contract Durations")
-        st.caption("Select which contract lengths to offer")
-        
-        contract_durations = st.multiselect(
-            "Available Contract Durations *",
-            options=["1 Month", "3 Months", "6 Months", "12 Months", "24 Months", "36 Months"],
-            default=["12 Months"],
-            help="AI recommends 12 and 24 months for most SaaS products"
-        )
-        
-        st.subheader("🛒 Purchasing Options")
-        purchasing_option = st.radio(
-            "How can customers purchase dimensions?",
-            options=[
-                "Multiple dimensions per contract",
-                "Single dimension per contract"
-            ],
-            index=0,
-            help="AI recommends allowing multiple dimensions for flexibility"
-        )
-    else:
-        contract_durations = []
-        purchasing_option = "Multiple dimensions per contract"
-    
-    st.divider()
-    
-    # Refund Policy
-    st.subheader("↩️ Refund Policy")
-    st.caption("AI-generated template - please review and customize")
-    
-    # AI-generated refund policy template
-    refund_template = f"""We offer a 30-day money-back guarantee for {product_title}. If you're not satisfied with the product, please contact {support_email} within 30 days of purchase to request a full refund. Refunds are processed within 5-7 business days to the original payment method."""
-    
-    refund_policy = st.text_area(
-        "Refund Policy *",
-        value=refund_template,
-        max_chars=5000,
-        height=150,
-        help="50-5000 characters - Edit the AI-generated template as needed"
-    )
-    
-    st.divider()
-    
-    # EULA Configuration
-    st.subheader("📄 EULA Configuration")
-    st.caption("AI recommends SCMP for most SaaS products")
-    
-    eula_type = st.radio(
-        "EULA Type *",
-        options=["SCMP (Standard Contract for AWS Marketplace)", "Custom EULA"],
-        index=0,
-        help="SCMP is pre-approved by AWS and recommended for most products"
-    )
-    
-    custom_eula_url = None
-    if eula_type == "Custom EULA":
-        custom_eula_url = st.text_input(
-            "Custom EULA S3 URL *",
-            placeholder="https://your-bucket.s3.amazonaws.com/eula.pdf",
-            help="S3 URL to your custom EULA PDF file"
-        )
-    
-    st.divider()
-    
-    # Geographic Availability
-    st.subheader("🌍 Geographic Availability")
-    st.caption("AI recommends worldwide availability for most products")
-    
-    availability_type = st.radio(
-        "Where should your offer be available? *",
-        options=[
-            "All countries (worldwide)",
-            "All countries except specific ones",
-            "Only specific countries"
-        ],
-        index=0,
-        help="Most SaaS products are available worldwide"
-    )
-    
-    excluded_countries = []
-    allowed_countries = []
-    
-    if availability_type == "All countries except specific ones":
-        excluded_input = st.text_input(
-            "Excluded Country Codes",
-            placeholder="US, GB, DE (comma-separated ISO codes)",
-            help="ISO 3166-1 alpha-2 country codes to exclude"
-        )
-        if excluded_input:
-            excluded_countries = [c.strip().upper() for c in excluded_input.split(",")]
-    
-    elif availability_type == "Only specific countries":
-        allowed_input = st.text_input(
-            "Allowed Country Codes *",
-            placeholder="US, GB, DE (comma-separated ISO codes)",
-            help="ISO 3166-1 alpha-2 country codes to allow"
-        )
-        if allowed_input:
-            allowed_countries = [c.strip().upper() for c in allowed_input.split(",")]
-    
-    st.divider()
-    
-    # Account Allowlist (Optional)
-    st.subheader("🔐 Account Allowlist (Optional)")
-    st.caption("AI recommends public offer for maximum reach")
-    
-    offer_type = st.radio(
-        "Offer Type",
-        options=["Public Offer (Recommended)", "Private Offer (Specific AWS Accounts)"],
-        index=0,
-        help="Public offers are visible to all AWS Marketplace customers"
-    )
-    
-    buyer_accounts = []
-    if offer_type == "Private Offer (Specific AWS Accounts)":
-        accounts_input = st.text_area(
-            "AWS Account IDs",
-            placeholder="123456789012, 987654321098 (comma-separated 12-digit account IDs)",
-            help="Enter AWS account IDs that can access this offer"
-        )
-        if accounts_input:
-            buyer_accounts = [a.strip() for a in accounts_input.split(",") if a.strip()]
-    
-    st.divider()
-    
-    # Auto-publish to Limited option
-    st.subheader("🚀 Publishing Options")
-    
-    auto_publish = st.checkbox(
-        "Automatically publish to Limited stage after creation",
-        value=True,
-        help="Publishes product and offer to Limited stage for testing. You can test with your AWS account immediately."
-    )
-    
-    if auto_publish:
-        st.info("✅ Your listing will be published to Limited stage automatically. You can test it immediately with your AWS account.")
-        
-        # Offer information (required for Limited)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            offer_name = st.text_input(
-                "Offer Name",
-                value=product_title,
-                help="Name for your offer (defaults to product title)"
-            )
-        with col_b:
-            offer_description = st.text_input(
-                "Offer Description",
-                value=short_description[:200] if len(short_description) <= 200 else short_description[:197] + "...",
-                help="Brief description of your offer"
-            )
-        
-        # Optional: Buyer accounts for Limited testing
-        with st.expander("🔐 Add Buyer Accounts for Limited Testing (Optional)"):
-            st.caption("Add AWS account IDs that can access your Limited listing for testing")
-            buyer_accounts_limited = st.text_area(
-                "AWS Account IDs",
-                placeholder="123456789012, 987654321098 (comma-separated)",
-                help="Leave empty to test with only your account"
-            )
-            buyer_accounts_for_limited = []
-            if buyer_accounts_limited:
-                buyer_accounts_for_limited = [a.strip() for a in buyer_accounts_limited.split(",") if a.strip()]
-    else:
-        st.info("ℹ️ Your listing will be created in Draft state. You'll need to publish manually through AWS Marketplace Management Portal.")
-        offer_name = product_title
-        offer_description = short_description
-        buyer_accounts_for_limited = []
-    
-    st.divider()
-    
-    # Action buttons
-    col1, col2, col3 = st.columns([1, 1, 2])
+    # Categories
+    st.subheader("🏷️ Categories")
+    col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("← Back"):
+        primary_category = st.selectbox(
+            "Primary Category",
+            options=[
+                "Application Development",
+                "Business Applications", 
+                "Data & Analytics",
+                "DevOps",
+                "Infrastructure Software",
+                "IoT",
+                "Machine Learning",
+                "Migration",
+                "Monitoring & Logging",
+                "Networking",
+                "Operating Systems",
+                "Security",
+                "Storage"
+            ],
+            index=0 if not suggestions.get('primary_category') else None
+        )
+    
+    with col2:
+        secondary_category = st.selectbox(
+            "Secondary Category (optional)",
+            options=["None"] + [
+                "Application Development",
+                "Business Applications", 
+                "Data & Analytics",
+                "DevOps",
+                "Infrastructure Software",
+                "IoT",
+                "Machine Learning",
+                "Migration",
+                "Monitoring & Logging",
+                "Networking",
+                "Operating Systems",
+                "Security",
+                "Storage"
+            ],
+            index=0
+        )
+    
+    # Keywords
+    st.subheader("🔍 Search Keywords")
+    keywords = st.text_area(
+        "Keywords (comma-separated)",
+        value=suggestions.get('keywords', ''),
+        help="Keywords that customers might use to find your product"
+    )
+    
+    # Highlights
+    st.subheader("⭐ Product Highlights")
+    highlights = st.text_area(
+        "Key Features/Benefits (one per line)",
+        value=suggestions.get('highlights', ''),
+        help="Up to 3 key selling points",
+        height=100
+    )
+    
+    # Support Information
+    st.subheader("🛠️ Support Information")
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        support_description = st.text_area(
+            "Support Description",
+            value=suggestions.get('support_description', ''),
+            help="Describe the support you provide"
+        )
+    
+    with col4:
+        support_email = st.text_input(
+            "Support Email",
+            value=suggestions.get('support_email', ''),
+            help="Email for customer support"
+        )
+        
+        support_url = st.text_input(
+            "Support URL (optional)",
+            value=suggestions.get('support_url', ''),
+            help="Link to support documentation or portal"
+        )
+    
+    # Pricing Model
+    st.subheader("💰 Pricing Model")
+    pricing_model = st.selectbox(
+        "Pricing Model",
+        options=[
+            "Free",
+            "Paid",
+            "Free Trial",
+            "Freemium",
+            "Bring Your Own License (BYOL)"
+        ],
+        index=1  # Default to "Paid"
+    )
+    
+    # Usage Instructions
+    st.subheader("📋 Usage Instructions")
+    usage_instructions = st.text_area(
+        "Usage Instructions",
+        value=suggestions.get('usage_instructions', ''),
+        help="Brief instructions on how to get started",
+        height=150
+    )
+    
+    # Action buttons
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        if st.button("← Back to Analysis"):
             st.session_state.current_step = "analyze_product"
             st.rerun()
     
-    with col3:
-        if st.button("Create Listing 🚀", type="primary", use_container_width=True):
-            # Validate product title length (AWS limit)
-            if len(product_title) > 72:
-                st.error(f"❌ Product title is too long ({len(product_title)} characters). Maximum is 72 characters.")
-                return
-            
-            if len(product_title) < 5:
-                st.error(f"❌ Product title is too short ({len(product_title)} characters). Minimum is 5 characters.")
-                return
-            
+    with col6:
+        if st.button("Create Listing →", type="primary"):
             # Validate required fields
-            if not all([product_title, logo_s3_url, short_description, long_description, highlights, 
-                       categories, keywords, support_email, fulfillment_url, support_description,
-                       refund_policy]):
-                st.error("Please fill in all required fields")
+            if not product_title or not short_description or not long_description:
+                st.error("❌ Please fill in all required fields")
                 return
             
-            # Validate logo URL format
-            if not logo_s3_url.startswith("https://") or ".s3" not in logo_s3_url:
-                st.error("Logo S3 URL must be a valid HTTPS S3 URL")
-                return
-            
-            # Validate dimensions
-            if not all_dimensions or len(all_dimensions) == 0:
-                st.error("Please add at least one pricing dimension")
-                return
-            
-            # Validate contract durations for contract and hybrid pricing
-            if pricing_model in ["Contract", "Contract with Consumption"] and not contract_durations:
-                st.error("Please select at least one contract duration")
-                return
-            
-            # Validate hybrid pricing has both dimension types
-            if pricing_model == "Contract with Consumption":
-                dim_types = set(dim["type"] for dim in all_dimensions)
-                if "Entitled" not in dim_types or "Metered" not in dim_types:
-                    st.error("Contract with Consumption requires at least one Entitled dimension and one Metered dimension")
-                    return
-            
-            # Validate custom EULA URL if custom chosen
-            if eula_type == "Custom EULA" and not custom_eula_url:
-                st.error("Please provide Custom EULA S3 URL")
-                return
-            
-            # Validate country codes for restricted availability
-            if availability_type == "Only specific countries" and not allowed_countries:
-                st.error("Please provide at least one allowed country code")
-                return
-            
-            # Map pricing model to API format
-            # API only accepts: "Usage", "Contract", or "Free"
-            # "Contract with Consumption" uses "Contract" with both Entitled and Metered dimensions
-            if pricing_model == "Usage":
-                api_pricing_model = "Usage"
-            else:  # Contract or Contract with Consumption
-                api_pricing_model = "Contract"
-            
-            # Sanitize text fields to remove unsupported characters
-            sanitized_product_title = sanitize_text_for_marketplace(product_title)
-            sanitized_short_description = sanitize_text_for_marketplace(short_description)
-            sanitized_long_description = sanitize_text_for_marketplace(long_description)
-            sanitized_highlights = [sanitize_text_for_marketplace(h) for h in highlights]
-            sanitized_support_description = sanitize_text_for_marketplace(support_description)
-            sanitized_refund_policy = sanitize_text_for_marketplace(refund_policy)
-            
-            # Check if any sanitization occurred
-            sanitization_occurred = (
-                sanitized_product_title != product_title or
-                sanitized_short_description != short_description or
-                sanitized_long_description != long_description or
-                any(sanitized_highlights[i] != highlights[i] for i in range(len(highlights))) or
-                sanitized_support_description != support_description or
-                sanitized_refund_policy != refund_policy
-            )
-            
-            if sanitization_occurred:
-                st.info("ℹ️ Special characters (like • – " ") were converted to ASCII equivalents for AWS Marketplace compatibility.")
-            
-            # Store all data and proceed to creation
+            # Store the final listing data
             listing_data = {
-                "product_title": sanitized_product_title,
-                "logo_s3_url": logo_s3_url,
-                "short_description": sanitized_short_description,
-                "long_description": sanitized_long_description,
-                "highlights": sanitized_highlights,
-                "categories": categories,
-                "search_keywords": keywords,
+                "product_title": sanitize_text_for_marketplace(product_title),
+                "short_description": sanitize_text_for_marketplace(short_description),
+                "long_description": sanitize_text_for_marketplace(long_description),
+                "primary_category": primary_category,
+                "secondary_category": secondary_category if secondary_category != "None" else "",
+                "keywords": sanitize_text_for_marketplace(keywords),
+                "highlights": sanitize_text_for_marketplace(highlights),
+                "support_description": sanitize_text_for_marketplace(support_description),
                 "support_email": support_email,
-                "fulfillment_url": fulfillment_url,
-                "support_description": sanitized_support_description,
-                "pricing_model": api_pricing_model,
-                "ui_pricing_model": pricing_model,  # Keep original for display
-                "dimensions": all_dimensions,
-                "contract_durations": contract_durations,
-                "purchasing_option": purchasing_option,
-                "refund_policy": sanitized_refund_policy,
-                "eula_type": "scmp" if "SCMP" in eula_type else "custom",
-                "custom_eula_url": custom_eula_url,
-                "availability_type": availability_type,
-                "excluded_countries": excluded_countries,
-                "allowed_countries": allowed_countries,
-                "buyer_accounts": buyer_accounts,
-                "auto_publish_to_limited": auto_publish,
-                "offer_name": offer_name,
-                "offer_description": offer_description,
-                "buyer_accounts_for_limited": buyer_accounts_for_limited
+                "support_url": support_url,
+                "pricing_model": pricing_model,
+                "usage_instructions": sanitize_text_for_marketplace(usage_instructions)
             }
             
             st.session_state.listing_data = listing_data
@@ -1078,687 +388,81 @@ def review_suggestions_screen():
 
 def create_listing_screen():
     """Create the listing using the orchestrator"""
-    st.title("🚀 Creating Your Listing...")
+    st.title("🚀 Creating Your Marketplace Listing")
     
     listing_data = st.session_state.listing_data
-    orchestrator = st.session_state.orchestrator
     
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    # Show summary of what will be created
+    with st.expander("📋 Listing Summary", expanded=True):
+        st.write(f"**Title:** {listing_data['product_title']}")
+        st.write(f"**Category:** {listing_data['primary_category']}")
+        st.write(f"**Pricing:** {listing_data['pricing_model']}")
+        st.write(f"**Short Description:** {listing_data['short_description']}")
     
-    # Stage 1: Product Information
-    status_text.text("📦 Creating product...")
-    progress_bar.progress(10)
+    if 'listing_created' not in st.session_state:
+        st.session_state.listing_created = False
     
-    # Set Stage 1 data
-    orchestrator.set_stage_data("product_title", listing_data["product_title"])
-    orchestrator.set_stage_data("logo_s3_url", listing_data["logo_s3_url"])
-    orchestrator.set_stage_data("short_description", listing_data["short_description"])
-    orchestrator.set_stage_data("long_description", listing_data["long_description"])
-    orchestrator.set_stage_data("highlights", listing_data["highlights"])
-    orchestrator.set_stage_data("support_email", listing_data["support_email"])
-    orchestrator.set_stage_data("support_description", listing_data["support_description"])
-    orchestrator.set_stage_data("categories", listing_data["categories"])
-    orchestrator.set_stage_data("search_keywords", listing_data["search_keywords"])
-    
-    result1 = orchestrator.complete_current_stage()
-    
-    if result1.get("status") != "complete":
-        st.error(f"Failed to create product: {result1.get('message')}")
-        return
-    
-    progress_bar.progress(25)
-    
-    # Stage 2: Fulfillment
-    status_text.text("🔗 Adding fulfillment options...")
-    orchestrator.set_stage_data("fulfillment_url", listing_data["fulfillment_url"])
-    orchestrator.set_stage_data("quick_launch_enabled", False)
-    
-    result2 = orchestrator.complete_current_stage()
-    progress_bar.progress(40)
-    
-    # Stage 3: Pricing Dimensions
-    status_text.text("💰 Configuring pricing...")
-    dimensions = listing_data["dimensions"]
-    
-    # Convert dimensions to API format
-    api_dimensions = []
-    for dim in dimensions:
-        # AWS Marketplace requires specific dimension type combinations:
-        # - Entitled: ["Entitled"]
-        # - Metered: ["Metered", "ExternallyMetered"] (both required!)
-        if dim["type"] == "Metered":
-            types = ["Metered", "ExternallyMetered"]
-        else:
-            types = [dim["type"]]
-        
-        api_dimensions.append({
-            "Key": dim["key"],
-            "Name": dim["name"],
-            "Description": dim["description"],
-            "Types": types,
-            "Unit": "Units"
-        })
-    
-    # Set pricing model (API accepts "Usage" or "Contract")
-    # For "Contract with Consumption", we use "Contract" with both Entitled and Metered dimensions
-    orchestrator.set_stage_data("pricing_model", listing_data["pricing_model"])
-    orchestrator.set_stage_data("dimensions", api_dimensions)
-    
-    result3 = orchestrator.complete_current_stage()
-    print(f"[DEBUG] Stage 3 result: {result3}")
-    print(f"[DEBUG] Current stage after Stage 3: {orchestrator.current_stage}")
-    progress_bar.progress(55)
-    
-    # Stage 4: Price Review
-    status_text.text("💵 Applying pricing terms...")
-    print(f"[DEBUG] Setting Stage 4 data...")
-    
-    # For Usage pricing, these fields are not applicable but required by the agent
-    # Set dummy values that won't be used by the API
-    if listing_data["pricing_model"] == "Usage":
-        orchestrator.set_stage_data("contract_durations", ["12 Months"])  # Dummy value, not used for Usage
-        orchestrator.set_stage_data("multiple_dimension_selection", "Allowed")
-        orchestrator.set_stage_data("quantity_configuration", "Allowed")
-    else:
-        # For Contract pricing
-        orchestrator.set_stage_data("contract_durations", listing_data.get("contract_durations", ["12 Months"]))
-        
-        # Set purchasing options based on user selection
-        if listing_data.get("purchasing_option") == "Multiple dimensions per contract":
-            orchestrator.set_stage_data("multiple_dimension_selection", "Allowed")
-            orchestrator.set_stage_data("quantity_configuration", "Allowed")
-        else:
-            orchestrator.set_stage_data("multiple_dimension_selection", "Disallowed")
-            orchestrator.set_stage_data("quantity_configuration", "Disallowed")
-    
-    print(f"[DEBUG] About to complete Stage 4...")
-    print(f"[DEBUG] Stage 4 agent: {orchestrator.get_current_agent()}")
-    print(f"[DEBUG] Stage 4 is complete: {orchestrator.check_stage_completion()}")
-    result4 = orchestrator.complete_current_stage()
-    print(f"[DEBUG] Stage 4 result: {result4}")
-    progress_bar.progress(70)
-    
-    # Stage 5: Refund Policy
-    status_text.text("↩️ Setting refund policy...")
-    orchestrator.set_stage_data("refund_policy", listing_data["refund_policy"])
-    
-    result5 = orchestrator.complete_current_stage()
-    progress_bar.progress(80)
-    
-    # Stage 6: EULA
-    status_text.text("📄 Configuring EULA...")
-    orchestrator.set_stage_data("eula_type", listing_data["eula_type"])
-    if listing_data.get("custom_eula_url"):
-        orchestrator.set_stage_data("custom_eula_s3_url", listing_data["custom_eula_url"])
-    
-    result6 = orchestrator.complete_current_stage()
-    progress_bar.progress(90)
-    
-    # Stage 7: Availability
-    status_text.text("🌍 Setting availability...")
-    
-    # Map availability type to orchestrator format
-    if listing_data["availability_type"] == "All countries (worldwide)":
-        orchestrator.set_stage_data("availability_type", "all_countries")
-    elif listing_data["availability_type"] == "All countries except specific ones":
-        orchestrator.set_stage_data("availability_type", "all_with_exclusions")
-        orchestrator.set_stage_data("excluded_countries", listing_data.get("excluded_countries", []))
-    else:  # Only specific countries
-        orchestrator.set_stage_data("availability_type", "allowlist_only")
-        orchestrator.set_stage_data("allowed_countries", listing_data.get("allowed_countries", []))
-    
-    result7 = orchestrator.complete_current_stage()
-    progress_bar.progress(95)
-    
-    # Stage 8: Allowlist
-    status_text.text("✅ Finalizing...")
-    buyer_accounts = listing_data.get("buyer_accounts", [])
-    if buyer_accounts:
-        orchestrator.set_stage_data("allowlist_account_ids", buyer_accounts)
-    
-    result8 = orchestrator.complete_current_stage()
-    
-    progress_bar.progress(95)
-    
-    # Check if all stages completed successfully
-    # Each result has api_result nested inside
-    all_stages_successful = all([
-        result1.get("api_result", {}).get("success", False),
-        result2.get("api_result", {}).get("success", False),
-        result3.get("api_result", {}).get("success", False),
-        result4.get("api_result", {}).get("success", False),
-        result5.get("api_result", {}).get("success", False),
-        result6.get("api_result", {}).get("success", False),
-        result7.get("api_result", {}).get("success", False),
-        result8.get("api_result", {}).get("success", False)
-    ])
-    
-    # Get IDs for display
-    api_result = result1.get("api_result", {})
-    offer_id = api_result.get("offer_id")
-    product_id = api_result.get("product_id")
-    
-    # Auto-publish to Limited if requested
-    published_to_limited = False
-    if all_stages_successful and product_id and offer_id and listing_data.get("auto_publish_to_limited"):
-        status_text.text("📤 Publishing to Limited stage...")
-        progress_bar.progress(97)
-        
-        tools = st.session_state.orchestrator.listing_tools
-        
-        # Prepare offer information
-        offer_name = listing_data.get("offer_name", listing_data["product_title"])
-        offer_description = listing_data.get("offer_description", listing_data["short_description"])
-        buyer_accounts = listing_data.get("buyer_accounts_for_limited", [])
-        pricing_model = listing_data.get("pricing_model", "Usage")
-        
-        release_result = tools.release_product_and_offer_to_limited(
-            product_id=product_id,
-            offer_id=offer_id,
-            offer_name=offer_name,
-            offer_description=offer_description,
-            pricing_model=pricing_model,
-            buyer_accounts=buyer_accounts if buyer_accounts else None
-        )
-        
-        if release_result.get("success"):
-            # Wait for release changeset to complete
-            change_set_id = release_result.get("change_set_id")
-            if change_set_id:
-                import time
-                max_attempts = 15
-                for attempt in range(1, max_attempts + 1):
-                    time.sleep(3)
-                    status_result = tools.get_listing_status(change_set_id)
-                    status = status_result.get("status", "UNKNOWN")
+    if not st.session_state.listing_created:
+        if st.button("🚀 Create Listing Now", type="primary"):
+            with st.spinner("Creating your marketplace listing..."):
+                try:
+                    orchestrator = st.session_state.orchestrator
                     
-                    if status == "SUCCEEDED":
-                        published_to_limited = True
-                        break
-                    elif status == "FAILED":
-                        st.warning(f"⚠️ Release to Limited failed: {status_result.get('error', 'Unknown error')}")
-                        break
-                    elif attempt == max_attempts:
-                        st.info("ℹ️ Release to Limited is in progress. Check AWS Marketplace Management Portal for status.")
-        else:
-            st.warning(f"⚠️ Could not publish to Limited: {release_result.get('error', 'Unknown error')}")
-    
-    progress_bar.progress(100)
-    status_text.text("🎉 Listing created successfully!")
-    
-    # Show results
-    st.success("🎉 Your AWS Marketplace listing has been created!")
-    
-    if product_id:
-        st.info(f"🆔 **Product ID:** `{product_id}`")
-    if offer_id:
-        st.info(f"🆔 **Offer ID:** `{offer_id}`")
-    
-    if all_stages_successful:
-        if published_to_limited:
-            st.success("📋 **Status:** Limited (published and ready for testing!)")
-            st.markdown("""
-            ### 🎉 Your listing is now LIVE in Limited stage!
-            
-            Your product and offer have been successfully published to Limited stage:
-            - ✅ Product information
-            - ✅ Fulfillment configuration
-            - ✅ Pricing and dimensions
-            - ✅ Support terms
-            - ✅ EULA
-            - ✅ Geographic availability
-            - ✅ **Published to Limited stage**
-            
-            ---
-            
-            ### 🧪 Test Your Listing
-            
-            1. **Find your product:**
-               - Go to [AWS Marketplace](https://aws.amazon.com/marketplace)
-               - Search for your product title
-               - Or use the Product ID above
-            
-            2. **Subscribe and test:**
-               - Click "Continue to Subscribe"
-               - Accept terms
-               - Click "Set Up Your Account"
-               - You'll be redirected to your fulfillment URL
-            
-            3. **Verify integration:**
-               - Test the subscription flow
-               - Verify fulfillment URL works
-               - Check metering/entitlement (if applicable)
-            
-            ---
-            
-            ### 📈 Next Steps: Go Public
-            
-            When you're ready to make your listing public:
-            
-            1. **Update pricing** from test values ($0.001) to production prices
-            2. **Go to** [AWS Marketplace Management Portal](https://aws.amazon.com/marketplace/management/products)
-            3. **Find your product** and click "Update visibility"
-            4. **Select "Public"** and submit for AWS review
-            5. **AWS reviews** your listing (typically 1-2 weeks)
-            6. **Once approved**, your listing is publicly available!
-            
-            ---
-            
-            ### 📚 Resources
-            - [SaaS Product Guidelines](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-guidelines.html)
-            - [Testing Your Product](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-prepare.html)
-            - [Seller Support](https://aws.amazon.com/marketplace/management/contact-us/)
-            """)
-        else:
-            st.info("📋 **Status:** Draft (ready to publish)")
-            st.markdown("""
-            ### ✅ Your listing is ready!
-            
-            The listing has been created in **Draft** state with all configurations complete:
-            - ✅ Product information
-        - ✅ Fulfillment configuration
-        - ✅ Pricing and dimensions
-        - ✅ Support terms
-        - ✅ EULA
-        - ✅ Geographic availability
-        
-        ---
-        
-        ### 📋 Next Steps: Publish to Limited Stage
-        
-        Follow these steps to publish your listing to Limited stage for testing:
-        
-        #### Step 1: Open AWS Marketplace Management Portal
-        1. Go to [AWS Marketplace Management Portal](https://aws.amazon.com/marketplace/management/products)
-        2. Sign in with your AWS seller account
-        
-        #### Step 2: Find Your Product
-        1. In the left sidebar, click **"Products"**
-        2. Find your product by searching for the Product ID above
-        3. Click on the product name to open it
-        
-        #### Step 3: Add Offer Description (Required)
-        1. Navigate to the **"Offers"** tab
-        2. Click on your offer
-        3. Click **"Edit offer information"**
-        4. Add a description (e.g., your product's short description)
-        5. Click **"Save"**
-        
-        #### Step 4: Publish Product to Limited
-        1. Go back to the product overview page
-        2. Click **"Request changes"** → **"Publish product"**
-        3. Select **"Limited"** as the target audience
-        4. Review and submit the request
-        5. Wait for the changeset to complete (usually 5-10 minutes)
-        
-        #### Step 5: Publish Offer to Limited
-        1. Once the product is in Limited stage, go to the **"Offers"** tab
-        2. Click on your offer
-        3. Click **"Request changes"** → **"Publish offer"**
-        4. Select **"Limited"** as the target audience
-        5. Review and submit the request
-        
-        #### Step 6: Test Your Listing
-        - Your listing is now visible to your AWS account
-        - Test the subscription flow
-        - Verify fulfillment URL integration
-        - Check metering/entitlement (if applicable)
-        
-        #### Step 7: Publish to Public (When Ready)
-        1. Update pricing to production values (currently set to $0.001 for testing)
-        2. Submit for AWS Marketplace review
-        3. Once approved, your listing will be publicly available
-        
-        ---
-        
-        ### 📚 Additional Resources
-        - [AWS Marketplace Seller Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/what-is-marketplace.html)
-        - [SaaS Product Guidelines](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-guidelines.html)
-        - [Testing Your SaaS Product](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-prepare.html)
-        """)
+                    # Create the listing
+                    result = orchestrator.create_marketplace_listing(listing_data)
+                    
+                    if result.get('success'):
+                        st.session_state.listing_created = True
+                        st.session_state.listing_result = result
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Failed to create listing: {result.get('error', 'Unknown error')}")
+                        
+                except Exception as e:
+                    st.error(f"❌ Error creating listing: {str(e)}")
     else:
-        st.warning("⚠️ Some stages may have failed. Please check the logs above.")
+        # Show success message
+        result = st.session_state.listing_result
+        
+        st.success("🎉 Listing Created Successfully!")
+        
+        if result.get('listing_id'):
+            st.info(f"**Listing ID:** {result['listing_id']}")
+        
+        if result.get('status'):
+            st.info(f"**Status:** {result['status']}")
+        
         st.markdown("""
-        ### Next Steps:
-        1. Review any errors in the terminal output
-        2. Check your listing in the AWS Marketplace Management Portal
-        3. Complete any missing configurations manually
-        4. Publish to Limited stage for testing
+        ### ✅ Next Steps:
+        1. **Review** your listing in the AWS Marketplace Management Portal
+        2. **Upload** product images and additional assets
+        3. **Submit** for AWS review (typically takes 2-3 business days)
+        4. **Monitor** your listing performance once live
         """)
-    
-    if st.button("Create Another Listing"):
-        # Reset
-        st.session_state.clear()
-        st.rerun()
-
-
-def seller_registration_screen():
-    """Seller registration workflow"""
-    st.title("🏢 AWS Marketplace Seller Registration")
-    
-    st.markdown("""
-    Let's get you registered as an AWS Marketplace seller. This process involves:
-    
-    1. **Business Profile** - Legal business information
-    2. **Public Profile** - Customer-facing company profile  
-    3. **Tax Information** - Tax forms and identification
-    4. **Banking Information** - Payment account setup
-    5. **Verification** - AWS review process (2-3 business days)
-    6. **Disbursement** - Payment method selection
-    """)
-    
-    # Show current registration status
-    with st.expander("📊 Registration Progress", expanded=True):
-        workflow_status = st.session_state.seller_registration_tools.get_registration_workflow_status()
-        if workflow_status.get("success"):
-            progress = workflow_status.get("progress_percentage", 0)
-            st.progress(progress / 100)
-            st.write(f"**Progress:** {progress}% complete")
-            st.write(f"**Current Step:** {workflow_status.get('current_step', 'Unknown').replace('_', ' ').title()}")
-            st.write(f"**Next Action:** {workflow_status.get('next_action', 'Continue with registration')}")
-        else:
-            st.progress(0)
-            st.write("**Progress:** Starting registration process")
-    
-    st.divider()
-    
-    # Interactive registration form
-    st.subheader("📝 Business Information")
-    
-    # Check if we already have some data
-    if not st.session_state.registration_data:
-        st.session_state.registration_data = {}
-    
-    data = st.session_state.registration_data
-    
-    # Business Information Form
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        business_name = st.text_input(
-            "Business Name *",
-            value=data.get("business_name", ""),
-            placeholder="Your legal business name",
-            help="Enter the legal name of your business as registered"
-        )
         
-        business_type = st.selectbox(
-            "Business Type *",
-            options=["", "Corporation", "LLC", "Partnership", "Sole Proprietorship", "Private Limited Company", "Public Limited Company"],
-            index=0 if not data.get("business_type") else ["", "Corporation", "LLC", "Partnership", "Sole Proprietorship", "Private Limited Company", "Public Limited Company"].index(data.get("business_type", "")),
-            help="Select your business entity type"
-        )
-        
-        business_email = st.text_input(
-            "Business Email *",
-            value=data.get("business_email", ""),
-            placeholder="contact@yourcompany.com",
-            help="Primary business email address"
-        )
-        
-        tax_id = st.text_input(
-            "Tax ID *",
-            value=data.get("tax_id", ""),
-            placeholder="EIN (US), PAN (India), or equivalent",
-            help="Tax identification number (EIN for US, PAN for India)"
-        )
-        
-        primary_contact_name = st.text_input(
-            "Primary Contact Name *",
-            value=data.get("primary_contact_name", ""),
-            placeholder="John Doe",
-            help="Name of the primary business contact"
-        )
-    
-    with col2:
-        business_address = st.text_area(
-            "Business Address *",
-            value=data.get("business_address", ""),
-            placeholder="123 Business St, City, State/Province, Country, ZIP",
-            help="Complete business address",
-            height=100
-        )
-        
-        business_phone = st.text_input(
-            "Business Phone *",
-            value=data.get("business_phone", ""),
-            placeholder="+1-555-123-4567 or +91-9876543210",
-            help="Business phone number with country code"
-        )
-        
-        primary_contact_email = st.text_input(
-            "Primary Contact Email *",
-            value=data.get("primary_contact_email", ""),
-            placeholder="john@yourcompany.com",
-            help="Email of the primary contact person"
-        )
-        
-        primary_contact_phone = st.text_input(
-            "Primary Contact Phone *",
-            value=data.get("primary_contact_phone", ""),
-            placeholder="+1-555-123-4567",
-            help="Phone number of the primary contact"
-        )
-        
-        website_url = st.text_input(
-            "Website URL (Optional)",
-            value=data.get("website_url", ""),
-            placeholder="https://www.yourcompany.com",
-            help="Your company website"
-        )
-    
-    # Country-specific information
-    st.subheader("🌍 Country-Specific Information")
-    
-    country = st.selectbox(
-        "Country/Region",
-        options=["United States", "India", "Other"],
-        help="Select your country for specific requirements"
-    )
-    
-    if country == "India":
-        st.info("🇮🇳 **India-Specific Requirements**")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            gst_number = st.text_input(
-                "GST Number (if applicable)",
-                value=data.get("gst_number", ""),
-                placeholder="27ABCDE1234F1Z5",
-                help="GST registration number if your turnover exceeds ₹20 lakhs"
-            )
-        with col_b:
-            pan_number = st.text_input(
-                "PAN Number",
-                value=data.get("pan_number", tax_id),
-                placeholder="ABCDE1234F",
-                help="Permanent Account Number (PAN)"
-            )
-        
-        if pan_number:
-            tax_id = pan_number
-        
-        with st.expander("📋 India Registration Requirements", expanded=False):
-            india_req = st.session_state.seller_registration_tools.get_india_specific_requirements()
-            if india_req.get("success"):
-                st.write("**Required Documents:**")
-                for doc in india_req["business_requirements"]["mandatory_documents"]:
-                    st.write(f"• {doc}")
-                
-                st.write("**Tax Benefits:**")
-                st.write(f"• US withholding tax reduced from 30% to 10% with W-8BEN-E form")
-    
-    # Update registration data
-    st.session_state.registration_data.update({
-        "business_name": business_name,
-        "business_type": business_type,
-        "business_address": business_address,
-        "business_phone": business_phone,
-        "business_email": business_email,
-        "tax_id": tax_id,
-        "primary_contact_name": primary_contact_name,
-        "primary_contact_email": primary_contact_email,
-        "primary_contact_phone": primary_contact_phone,
-        "website_url": website_url,
-        "country": country
-    })
-    
-    if country == "India":
-        st.session_state.registration_data.update({
-            "gst_number": gst_number,
-            "pan_number": pan_number
-        })
-    
-    st.divider()
-    
-    # Action buttons
-    col1, col2, col3 = st.columns([1, 1, 2])
-    
-    with col1:
-        if st.button("← Back"):
-            st.session_state.current_step = "welcome"
-            st.rerun()
-    
-    with col2:
-        if st.button("Validate Info"):
-            # Validate the information
-            if country == "India":
-                validation = st.session_state.seller_registration_tools.validate_india_business_info(st.session_state.registration_data)
-            else:
-                validation = st.session_state.seller_registration_tools.validate_business_info(st.session_state.registration_data)
-            
-            if validation["success"]:
-                st.success("✅ All information is valid!")
-            else:
-                st.error("❌ Validation errors:")
-                for error in validation.get("errors", []):
-                    st.error(f"• {error}")
-                if validation.get("warnings"):
-                    for warning in validation.get("warnings", []):
-                        st.warning(f"• {warning}")
-    
-    with col3:
-        if st.button("Continue to AWS Portal →", type="primary", use_container_width=True):
-            # Validate required fields
-            required_fields = ["business_name", "business_type", "business_address", "business_phone", 
-                             "business_email", "tax_id", "primary_contact_name", "primary_contact_email", 
-                             "primary_contact_phone"]
-            
-            missing_fields = [field for field in required_fields if not st.session_state.registration_data.get(field)]
-            
-            if missing_fields:
-                st.error(f"Please fill in all required fields: {', '.join(missing_fields)}")
-            else:
-                # Validate the information
-                if country == "India":
-                    validation = st.session_state.seller_registration_tools.validate_india_business_info(st.session_state.registration_data)
-                else:
-                    validation = st.session_state.seller_registration_tools.validate_business_info(st.session_state.registration_data)
-                
-                if validation["success"]:
-                    st.session_state.current_step = "registration_portal"
-                    st.rerun()
-                else:
-                    st.error("Please fix validation errors before continuing")
-
-
-def registration_portal_screen():
-    """Guide user to AWS Marketplace Management Portal"""
-    st.title("🌐 AWS Marketplace Management Portal")
-    
-    st.markdown("""
-    Great! Your business information is ready. Now you need to complete the registration 
-    in the AWS Marketplace Management Portal.
-    """)
-    
-    # Show collected information summary
-    with st.expander("📋 Your Business Information Summary", expanded=True):
-        data = st.session_state.registration_data
-        col1, col2 = st.columns(2)
+        # Action buttons
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.write(f"**Business Name:** {data.get('business_name', 'N/A')}")
-            st.write(f"**Business Type:** {data.get('business_type', 'N/A')}")
-            st.write(f"**Email:** {data.get('business_email', 'N/A')}")
-            st.write(f"**Phone:** {data.get('business_phone', 'N/A')}")
-            st.write(f"**Tax ID:** {data.get('tax_id', 'N/A')}")
+            if st.button("🔄 Create Another Listing"):
+                # Reset session state for new listing
+                st.session_state.current_step = 'gather_context'
+                st.session_state.product_context = {}
+                st.session_state.ai_suggestions = {}
+                st.session_state.listing_data = {}
+                st.session_state.listing_created = False
+                if 'listing_result' in st.session_state:
+                    del st.session_state.listing_result
+                st.rerun()
         
         with col2:
-            st.write(f"**Address:** {data.get('business_address', 'N/A')}")
-            st.write(f"**Contact Person:** {data.get('primary_contact_name', 'N/A')}")
-            st.write(f"**Contact Email:** {data.get('primary_contact_email', 'N/A')}")
-            st.write(f"**Contact Phone:** {data.get('primary_contact_phone', 'N/A')}")
-            if data.get('website_url'):
-                st.write(f"**Website:** {data.get('website_url')}")
-    
-    st.divider()
-    
-    # Portal access instructions
-    portal_info = st.session_state.seller_registration_tools.get_marketplace_portal_url()
-    
-    st.subheader("🚀 Next Steps")
-    
-    st.markdown(f"""
-    **1. Access the AWS Marketplace Management Portal:**
-    
-    👉 **[Open AWS Marketplace Management Portal]({portal_info.get('portal_url', '#')})**
-    
-    **2. Complete the registration process in the portal**
-    """)
-    
-    # Show step-by-step instructions
-    requirements = st.session_state.seller_registration_tools.get_registration_requirements()
-    if requirements.get("success"):
-        workflow_steps = requirements["workflow_steps"]
+            st.markdown("[📊 View in AWS Portal](https://aws.amazon.com/marketplace/management/)")
         
-        for step_key, step_info in workflow_steps.items():
-            step_num = step_key.split('_')[0]
-            st.markdown(f"""
-            **Step {step_num}: {step_info['title']}**
-            - Estimated time: {step_info['estimated_time']}
-            """)
-    
-    st.divider()
-    
-    # Action buttons
-    col1, col2, col3 = st.columns([1, 1, 2])
-    
-    with col1:
-        if st.button("← Back to Edit Info"):
-            st.session_state.current_step = "seller_registration"
-            st.rerun()
-    
-    with col2:
-        if st.button("Check Status"):
-            # Re-check seller status
-            st.session_state.seller_status = None
-            with st.spinner("Checking registration status..."):
-                status = st.session_state.seller_registration_tools.check_seller_status()
-                st.session_state.seller_status = status
-            
-            if status.get("seller_status") == "APPROVED":
-                st.success("🎉 Registration approved! You can now create listings.")
-                st.session_state.current_step = "welcome"
+        with col3:
+            if st.button("📝 Edit This Listing"):
+                st.session_state.current_step = "review_suggestions"
+                st.session_state.listing_created = False
                 st.rerun()
-            elif status.get("seller_status") == "PENDING":
-                st.info("⏳ Registration is still under review.")
-            else:
-                st.info("📋 Registration not yet submitted or approved.")
-    
-    with col3:
-        if st.button("I've Completed Registration →", type="primary", use_container_width=True):
-            # Check status and proceed
-            st.session_state.seller_status = None
-            with st.spinner("Verifying registration..."):
-                status = st.session_state.seller_registration_tools.check_seller_status()
-                st.session_state.seller_status = status
-            
-            if status.get("seller_status") == "APPROVED":
-                st.success("🎉 Registration verified! Proceeding to listing creation.")
-                st.session_state.current_step = "gather_context"
-                st.rerun()
-            else:
-                st.warning("Registration not yet approved. Please complete the process in the AWS Portal first.")
 
 
 def main():
@@ -1770,38 +474,10 @@ def main():
         st.title("🤖 AI-Guided Listing")
         st.divider()
         
-        # Model selection
-        with st.expander("⚙️ Settings", expanded=False):
-            model_choice = st.selectbox(
-                "AI Model",
-                options=[
-                    "Auto (Try all models)",
-                    "Claude 3.5 Sonnet v2 (Latest)",
-                    "Claude 3.5 Sonnet v1 (Stable)",
-                    "Claude 3 Sonnet (Fallback)"
-                ],
-                index=0,
-                help="Select which Claude model to use. Auto will try models in order until one works."
-            )
-            
-            model_map = {
-                "Auto (Try all models)": None,
-                "Claude 3.5 Sonnet v2 (Latest)": "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-                "Claude 3.5 Sonnet v1 (Stable)": "anthropic.claude-3-5-sonnet-20240620-v1:0",
-                "Claude 3 Sonnet (Fallback)": "anthropic.claude-3-sonnet-20240229-v1:0"
-            }
-            
-            st.session_state.selected_model = model_map[model_choice]
-        
-        st.divider()
-        
         # Show progress
         steps = {
-            "welcome": "🏠 Welcome",
-            "seller_registration": "🏢 Seller Registration",
-            "registration_portal": "🌐 AWS Portal", 
             "gather_context": "📄 Product Info",
-            "analyze_product": "🔍 AI Analysis",
+            "analyze_product": "🔍 AI Analysis", 
             "review_suggestions": "📝 Review",
             "create_listing": "🚀 Create"
         }
@@ -1814,34 +490,21 @@ def main():
                 st.markdown(f"   {label}")
         
         st.divider()
-        
-        # Show seller status
-        if st.session_state.seller_status:
-            status = st.session_state.seller_status.get("seller_status", "UNKNOWN")
-            if status == "APPROVED":
-                st.success("✅ Seller Registered")
-            elif status == "PENDING":
-                st.warning("⏳ Registration Pending")
-            else:
-                st.info("📋 Registration Needed")
-        
         st.caption("Powered by Amazon Bedrock")
     
     # Main content
-    if st.session_state.current_step == "welcome":
-        welcome_screen()
-    elif st.session_state.current_step == "seller_registration":
-        seller_registration_screen()
-    elif st.session_state.current_step == "registration_portal":
-        registration_portal_screen()
-    elif st.session_state.current_step == "gather_context":
+    current_step = st.session_state.current_step
+    
+    if current_step == "gather_context":
         gather_context_screen()
-    elif st.session_state.current_step == "analyze_product":
+    elif current_step == "analyze_product":
         analyze_product_screen()
-    elif st.session_state.current_step == "review_suggestions":
+    elif current_step == "review_suggestions":
         review_suggestions_screen()
-    elif st.session_state.current_step == "create_listing":
+    elif current_step == "create_listing":
         create_listing_screen()
+    else:
+        st.error(f"Unknown step: {current_step}")
 
 
 if __name__ == "__main__":

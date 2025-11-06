@@ -40,6 +40,280 @@ st.set_page_config(
     layout="wide"
 )
 
+# Amazon Professional Styling
+st.markdown("""
+<style>
+    /* Import Amazon's Ember font family */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    /* Global styling with Amazon design system */
+    .main .block-container {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        background-color: #fafafa !important;
+        padding-top: 2rem !important;
+    }
+    
+    /* Amazon-style form containers */
+    .stForm {
+        border: 1px solid #d5d9d9 !important;
+        border-radius: 8px !important;
+        padding: 24px !important;
+        background-color: #ffffff !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        margin: 16px 0 !important;
+    }
+    
+    /* Amazon-style input fields */
+    .stTextInput > div > div > input {
+        border: 1px solid #d5d9d9 !important;
+        border-radius: 4px !important;
+        padding: 8px 12px !important;
+        font-size: 14px !important;
+        font-family: 'Inter', sans-serif !important;
+        background-color: #ffffff !important;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out !important;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #007eb9 !important;
+        box-shadow: 0 0 0 2px rgba(0, 126, 185, 0.2) !important;
+        outline: none !important;
+    }
+    
+    .stTextArea > div > div > textarea {
+        border: 1px solid #d5d9d9 !important;
+        border-radius: 4px !important;
+        padding: 8px 12px !important;
+        font-size: 14px !important;
+        font-family: 'Inter', sans-serif !important;
+        background-color: #ffffff !important;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out !important;
+    }
+    
+    .stTextArea > div > div > textarea:focus {
+        border-color: #007eb9 !important;
+        box-shadow: 0 0 0 2px rgba(0, 126, 185, 0.2) !important;
+        outline: none !important;
+    }
+    
+    .stSelectbox > div > div > div {
+        border: 1px solid #d5d9d9 !important;
+        border-radius: 4px !important;
+        background-color: #ffffff !important;
+        font-family: 'Inter', sans-serif !important;
+    }
+    
+    /* Amazon-style buttons */
+    .stButton > button {
+        border: 1px solid #d5d9d9 !important;
+        border-radius: 4px !important;
+        padding: 8px 16px !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        font-family: 'Inter', sans-serif !important;
+        background-color: #ffffff !important;
+        color: #0f1111 !important;
+        transition: all 0.15s ease !important;
+        cursor: pointer !important;
+    }
+    
+    .stButton > button:hover {
+        background-color: #f7f8f8 !important;
+        border-color: #c7c7c7 !important;
+    }
+    
+    /* Amazon primary button (orange) */
+    .stButton > button[kind="primary"] {
+        background-color: #ff9900 !important;
+        border-color: #ff9900 !important;
+        color: #0f1111 !important;
+        font-weight: 600 !important;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background-color: #fa8900 !important;
+        border-color: #fa8900 !important;
+    }
+    
+    /* Amazon-style section containers */
+    .credentials-section {
+        border: 1px solid #d5d9d9 !important;
+        border-radius: 8px !important;
+        padding: 24px !important;
+        background-color: #ffffff !important;
+        margin: 16px 0 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    .registration-section {
+        border: 1px solid #d5d9d9 !important;
+        border-radius: 8px !important;
+        padding: 24px !important;
+        background-color: #ffffff !important;
+        margin: 16px 0 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    .product-section {
+        border: 1px solid #d5d9d9 !important;
+        border-radius: 8px !important;
+        padding: 24px !important;
+        background-color: #ffffff !important;
+        margin: 16px 0 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    /* Amazon-style headers */
+    h1, h2, h3 {
+        font-family: 'Inter', sans-serif !important;
+        color: #0f1111 !important;
+        font-weight: 600 !important;
+    }
+    
+    h1 {
+        font-size: 28px !important;
+        line-height: 36px !important;
+        margin-bottom: 16px !important;
+    }
+    
+    h2 {
+        font-size: 24px !important;
+        line-height: 32px !important;
+        margin-bottom: 12px !important;
+    }
+    
+    h3 {
+        font-size: 18px !important;
+        line-height: 24px !important;
+        margin-bottom: 8px !important;
+    }
+    
+    /* Amazon-style labels */
+    .stTextInput > label, .stTextArea > label, .stSelectbox > label {
+        font-family: 'Inter', sans-serif !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        color: #0f1111 !important;
+        margin-bottom: 4px !important;
+    }
+    
+    /* Amazon-style alerts */
+    .stAlert {
+        border-radius: 4px !important;
+        border: 1px solid !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 14px !important;
+    }
+    
+    .stSuccess {
+        background-color: #dff0d8 !important;
+        border-color: #d6e9c6 !important;
+        color: #3c763d !important;
+    }
+    
+    .stError {
+        background-color: #f2dede !important;
+        border-color: #ebccd1 !important;
+        color: #a94442 !important;
+    }
+    
+    .stInfo {
+        background-color: #d9edf7 !important;
+        border-color: #bce8f1 !important;
+        color: #31708f !important;
+    }
+    
+    .stWarning {
+        background-color: #fcf8e3 !important;
+        border-color: #faebcc !important;
+        color: #8a6d3b !important;
+    }
+    
+    /* Amazon-style sidebar */
+    .css-1d391kg {
+        background-color: #ffffff !important;
+        border-right: 1px solid #d5d9d9 !important;
+        font-family: 'Inter', sans-serif !important;
+    }
+    
+    /* Amazon-style form submit buttons */
+    .stForm > div:last-child button {
+        background-color: #ff9900 !important;
+        border: 1px solid #ff9900 !important;
+        color: #0f1111 !important;
+        border-radius: 4px !important;
+        padding: 12px 24px !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        font-family: 'Inter', sans-serif !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        transition: all 0.15s ease !important;
+    }
+    
+    .stForm > div:last-child button:hover {
+        background-color: #fa8900 !important;
+        border-color: #fa8900 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+    }
+    
+    /* Amazon-style navigation buttons */
+    .nav-buttons {
+        border: 1px solid #d5d9d9;
+        border-radius: 4px;
+        padding: 16px;
+        background-color: #ffffff;
+        margin: 16px 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    /* Amazon-style dividers */
+    hr {
+        border: none !important;
+        height: 1px !important;
+        background-color: #d5d9d9 !important;
+        margin: 16px 0 !important;
+    }
+    
+    /* Amazon-style expandable sections */
+    .streamlit-expanderHeader {
+        background-color: #f7f8f8 !important;
+        border: 1px solid #d5d9d9 !important;
+        border-radius: 4px !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Amazon-style required field indicators */
+    .stTextInput label:after, .stTextArea label:after, .stSelectbox label:after {
+        content: " *" !important;
+        color: #cc0c39 !important;
+        font-weight: bold !important;
+    }
+    
+    /* Amazon-style help text */
+    .stTextInput small, .stTextArea small, .stSelectbox small {
+        font-family: 'Inter', sans-serif !important;
+        font-size: 12px !important;
+        color: #565959 !important;
+    }
+    
+    /* Amazon-style progress indicators */
+    .stProgress > div > div {
+        background-color: #ff9900 !important;
+    }
+    
+    /* Amazon-style metrics */
+    .metric-container {
+        background-color: #ffffff !important;
+        border: 1px solid #d5d9d9 !important;
+        border-radius: 4px !important;
+        padding: 16px !important;
+        font-family: 'Inter', sans-serif !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 
 def sanitize_text_for_marketplace(text: str) -> str:
     """
@@ -87,9 +361,857 @@ def sanitize_text_for_marketplace(text: str) -> str:
     return text.strip()
 
 
+def validate_aws_account_region(access_key, secret_key, session_token=None):
+    """
+    Validate AWS account and determine if it belongs to AWS Inc or AWS India
+    
+    Returns:
+        dict: {
+            'success': bool,
+            'account_id': str,
+            'region_type': 'AWS_INC' | 'AWS_INDIA' | 'UNKNOWN',
+            'user_arn': str,
+            'organization': str,
+            'error': str (if failed)
+        }
+    """
+    try:
+        # Create session with provided credentials
+        session = boto3.Session(
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            aws_session_token=session_token,
+            region_name='us-east-1'
+        )
+        
+        # Get caller identity
+        sts = session.client('sts')
+        identity = sts.get_caller_identity()
+        
+        account_id = identity.get('Account')
+        user_arn = identity.get('Arn')
+        
+        # Determine region type based on account patterns and ARN
+        region_type = 'UNKNOWN'
+        organization = 'Unknown'
+        
+        # Check for AWS Inc patterns
+        if (account_id.startswith(('123456789', '533719170361', '518237894409')) or 
+            'aws.amazon.com' in user_arn.lower() or
+            'amazon.com' in user_arn.lower()):
+            region_type = 'AWS_INC'
+            organization = 'Amazon Web Services Inc.'
+        
+        # Check for AWS India patterns
+        elif (account_id.startswith(('797583073197', '999999999')) or
+              'aws.amazon.in' in user_arn.lower() or
+              'amazon.in' in user_arn.lower()):
+            region_type = 'AWS_INDIA'
+            organization = 'Amazon Web Services India Pvt Ltd'
+        
+        # Try to get more information from organizations API
+        try:
+            orgs = session.client('organizations')
+            org_info = orgs.describe_organization()
+            
+            # Check master account email domain
+            master_email = org_info.get('Organization', {}).get('MasterAccountEmail', '')
+            if 'amazon.com' in master_email:
+                region_type = 'AWS_INC'
+                organization = 'Amazon Web Services Inc.'
+            elif 'amazon.in' in master_email:
+                region_type = 'AWS_INDIA'
+                organization = 'Amazon Web Services India Pvt Ltd'
+                
+        except Exception:
+            # Organizations API might not be accessible
+            pass
+        
+        # Additional heuristics based on account ID ranges
+        if region_type == 'UNKNOWN':
+            account_num = int(account_id)
+            if account_num < 600000000000:  # Older AWS Inc accounts
+                region_type = 'AWS_INC'
+                organization = 'Amazon Web Services Inc.'
+            else:  # Newer accounts, could be either
+                region_type = 'UNKNOWN'
+                organization = 'Unknown Organization'
+        
+        return {
+            'success': True,
+            'account_id': account_id,
+            'region_type': region_type,
+            'user_arn': user_arn,
+            'organization': organization,
+            'session': session
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e)
+        }
+
+def credentials_input_screen():
+    """AWS Credentials input and validation screen"""
+    st.title("🔐 AWS Marketplace Seller Registration")
+    st.markdown("### Step 1: AWS Credentials & Account Validation")
+    
+    # Amazon-style breadcrumb
+    st.markdown('<div style="color: #565959; font-size: 12px; margin-bottom: 16px;">AWS Marketplace > Seller Registration > Credentials</div>', unsafe_allow_html=True)
+    
+    # Show that this is the home screen
+    st.caption("🏠 This is the home screen - all navigation leads back here")
+    
+    st.info("""
+    **Enter your AWS credentials to:**
+    - Validate your AWS account
+    - Determine organization (AWS Inc vs AWS India)
+    - Check current seller registration status
+    - Proceed with appropriate registration process
+    """)
+    
+    # Check if credentials are already validated
+    if 'aws_credentials' in st.session_state and 'account_validation' in st.session_state:
+        # Show validation results in styled container
+        st.markdown('<div class="credentials-section">', unsafe_allow_html=True)
+        validation_result = st.session_state.account_validation
+        
+        st.success("✅ AWS Credentials Validated Successfully!")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"""
+            **Account Details:**
+            - **Account ID**: {validation_result['account_id']}
+            - **Organization**: {validation_result['organization']}
+            - **Region Type**: {validation_result['region_type']}
+            """)
+        
+        with col2:
+            if validation_result['region_type'] == 'AWS_INC':
+                st.success("""
+                **🇺🇸 AWS Inc Account Detected**
+                - US-based registration process
+                - Standard AWS Marketplace requirements
+                - USD currency and US tax forms
+                """)
+            elif validation_result['region_type'] == 'AWS_INDIA':
+                st.info("""
+                **🇮🇳 AWS India Account Detected**
+                - India-specific registration process
+                - Additional compliance requirements
+                - INR currency and Indian tax forms
+                """)
+            else:
+                st.warning("""
+                **❓ Unknown Organization**
+                - Will use standard registration process
+                - Manual verification may be required
+                """)
+        
+        # Check seller registration status
+        st.markdown("### Current Seller Registration Status")
+        seller_status = check_seller_registration_status()
+        
+        # Navigation buttons (outside form)
+        col3, col4, col5, col6 = st.columns(4)
+        
+        with col3:
+            if st.button("🔄 Re-validate Credentials"):
+                # Clear credentials to re-enter
+                if 'aws_credentials' in st.session_state:
+                    del st.session_state.aws_credentials
+                if 'account_validation' in st.session_state:
+                    del st.session_state.account_validation
+                st.rerun()
+        
+        with col6:
+            if st.button("🗑️ Clear All Data", help="Clear all stored data and start fresh"):
+                # Clear all session state data
+                keys_to_clear = [
+                    'aws_credentials', 
+                    'account_validation', 
+                    'seller_status',
+                    'product_context',
+                    'ai_suggestions',
+                    'listing_data',
+                    'workflow_data',
+                    'registration_completed'
+                ]
+                for key in keys_to_clear:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                
+                # Reset to credentials step
+                st.session_state.current_step = "credentials"
+                st.success("🗑️ All data cleared! You can now enter new AWS credentials.")
+                st.rerun()
+        
+        with col4:
+            if seller_status == 'APPROVED':
+                if st.button("🚀 Create Product Listing"):
+                    st.session_state.current_step = "gather_context"
+                    st.rerun()
+            elif seller_status == 'NOT_REGISTERED':
+                if st.button("🚀 Register via API"):
+                    st.session_state.current_step = "registration_details"
+                    st.rerun()
+        
+        with col5:
+            if st.button("ℹ️ View Portal"):
+                st.markdown("[AWS Marketplace Management Portal](https://aws.amazon.com/marketplace/management/seller-registration)")
+        
+        st.markdown('</div>', unsafe_allow_html=True)  # Close credentials-section container
+        return True
+    
+    # Clear data section with info
+    with st.expander("🗑️ Clear All Data", expanded=False):
+        st.info("""
+        **What gets cleared:**
+        - AWS credentials and account validation
+        - Seller registration status
+        - Product information and AI suggestions
+        - Listing data and workflow progress
+        
+        **Use this to:**
+        - Switch to different AWS credentials
+        - Start fresh with a new product
+        - Reset after completing a workflow
+        """)
+        
+        if st.button("🗑️ Clear All Data", help="Clear all stored data and start fresh", key="clear_data_main"):
+            st.session_state.show_clear_confirmation = True
+    
+    # Show confirmation dialog if requested
+    if st.session_state.get('show_clear_confirmation', False):
+        with col_clear2:
+            st.warning("⚠️ This will clear ALL stored data including credentials, registration info, and product data.")
+            col_confirm1, col_confirm2 = st.columns(2)
+            
+            with col_confirm1:
+                if st.button("✅ Yes, Clear All", key="confirm_clear_main"):
+                    # Clear all session state data
+                    keys_to_clear = [
+                        'aws_credentials', 
+                        'account_validation', 
+                        'seller_status',
+                        'product_context',
+                        'ai_suggestions',
+                        'listing_data',
+                        'workflow_data',
+                        'registration_completed',
+                        'show_clear_confirmation'
+                    ]
+                    for key in keys_to_clear:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    
+                    # Reset to credentials step
+                    st.session_state.current_step = "credentials"
+                    st.success("🗑️ All data cleared! You can now enter new AWS credentials.")
+                    st.rerun()
+            
+            with col_confirm2:
+                if st.button("❌ Cancel", key="cancel_clear_main"):
+                    st.session_state.show_clear_confirmation = False
+                    st.rerun()
+    
+    st.divider()
+    
+    # Show credentials input form in styled container
+    st.markdown('<div class="credentials-section">', unsafe_allow_html=True)
+    with st.form("aws_credentials_form"):
+        st.markdown('<h3 style="color: #0f1111; font-weight: 600; margin-bottom: 16px;">🔐 AWS Credentials</h3>', unsafe_allow_html=True)
+        st.markdown('<hr style="margin: 16px 0; border: none; height: 1px; background-color: #d5d9d9;">', unsafe_allow_html=True)
+        
+        access_key = st.text_input(
+            "AWS Access Key ID *",
+            placeholder="AKIA...",
+            help="Your AWS Access Key ID (starts with AKIA)"
+        )
+        
+        secret_key = st.text_input(
+            "AWS Secret Access Key *",
+            type="password",
+            help="Your AWS Secret Access Key"
+        )
+        
+        session_token = st.text_input(
+            "AWS Session Token (Optional)",
+            type="password",
+            help="Required only for temporary credentials"
+        )
+        
+        submitted = st.form_submit_button("🔍 Validate Credentials & Check Status")
+        
+        if submitted:
+            if not access_key or not secret_key:
+                st.error("❌ Please provide both Access Key ID and Secret Access Key")
+                return False
+            
+            # Validate credentials and determine organization
+            with st.spinner("🔍 Validating AWS credentials and checking account..."):
+                validation_result = validate_aws_account_region(
+                    access_key, 
+                    secret_key, 
+                    session_token if session_token else None
+                )
+            
+            if validation_result['success']:
+                # Store credentials and validation results in session state
+                st.session_state.aws_credentials = {
+                    'access_key': access_key,
+                    'secret_key': secret_key,
+                    'session_token': session_token if session_token else None,
+                    'session': validation_result['session']
+                }
+                st.session_state.account_validation = validation_result
+                
+                st.success("✅ Credentials validated! Refreshing page...")
+                st.rerun()
+                
+            else:
+                st.error(f"❌ Credential validation failed: {validation_result['error']}")
+                return False
+    
+    st.markdown('</div>', unsafe_allow_html=True)  # Close credentials-section container
+    return False
+
+def check_seller_registration_status():
+    """Check and display current seller registration status"""
+    if 'aws_credentials' not in st.session_state:
+        st.error("❌ AWS credentials not available")
+        return 'UNKNOWN'
+    
+    try:
+        # Initialize seller registration tools
+        seller_tools = SellerRegistrationTools(
+            region='us-east-1',
+            aws_access_key_id=st.session_state.aws_credentials['access_key'],
+            aws_secret_access_key=st.session_state.aws_credentials['secret_key'],
+            aws_session_token=st.session_state.aws_credentials['session_token']
+        )
+        
+        # Check seller status
+        status_result = seller_tools.check_seller_status()
+        
+        if status_result.get('success'):
+            seller_status = status_result.get('seller_status', 'UNKNOWN')
+            
+            if seller_status == 'APPROVED':
+                st.success("""
+                🎉 **Seller Registration: APPROVED**
+                
+                Your account is already registered as an AWS Marketplace seller!
+                You can proceed directly to creating product listings.
+                """)
+                
+                # Show verification status
+                if 'verification_status' in status_result:
+                    st.write("**Verification Status:**")
+                    for key, value in status_result['verification_status'].items():
+                        status_icon = "✅" if value == "completed" else "❌"
+                        st.write(f"{status_icon} {key.replace('_', ' ').title()}: {value}")
+                    
+            elif seller_status == 'PENDING':
+                st.warning("""
+                ⏳ **Seller Registration: PENDING**
+                
+                Your seller registration is currently under review by AWS.
+                Estimated completion: 2-3 business days.
+                """)
+                
+            elif seller_status == 'NOT_REGISTERED':
+                st.info("""
+                📝 **Seller Registration: NOT REGISTERED**
+                
+                Your account is not yet registered as an AWS Marketplace seller.
+                
+                **We'll help you register using AWS APIs directly through this application.**
+                
+                ✨ **What we'll do:**
+                - Create your business profile via AWS API
+                - Set up your public seller profile
+                - Configure tax and banking information
+                - Submit everything to AWS for approval
+                
+                **Estimated time:** 10-15 minutes to complete the forms
+                **AWS Review:** 2-3 business days for approval
+                """)
+                
+            else:
+                st.warning(f"❓ **Seller Registration: {seller_status}**")
+                st.write("Status unclear. Manual verification may be required.")
+            
+            return seller_status
+        
+        else:
+            st.error(f"❌ Failed to check seller status: {status_result.get('error', 'Unknown error')}")
+            return 'ERROR'
+    
+    except Exception as e:
+        st.error(f"❌ Error checking seller status: {str(e)}")
+        return 'ERROR'
+
+def registration_details_screen():
+    """Collect seller registration details based on organization type"""
+    st.title("🚀 AWS Marketplace Seller Registration via API")
+    
+    # Add navigation buttons at the top
+    show_navigation_buttons(show_back=True, show_home=True, back_step="credentials")
+    st.divider()
+    
+    if 'account_validation' not in st.session_state:
+        st.error("❌ Account validation required. Please go back to credentials step.")
+        return
+    
+    account_info = st.session_state.account_validation
+    region_type = account_info.get('region_type', 'UNKNOWN')
+    
+    st.success("""
+    **🎯 API-Driven Registration Process**
+    
+    We'll register your account as an AWS Marketplace seller using direct AWS API calls.
+    This ensures faster processing and immediate submission to AWS for review.
+    """)
+    
+    st.info(f"""
+    **Account**: {account_info.get('account_id')}  
+    **Organization**: {account_info.get('organization')}  
+    **Registration Type**: {region_type}
+    """)
+    
+    # Show appropriate registration form based on region type
+    if region_type == 'AWS_INDIA':
+        show_india_registration_form()
+    else:
+        show_standard_registration_form()
+
+def show_india_registration_form():
+    """Show India-specific registration form"""
+    st.markdown("### 🇮🇳 AWS India Seller Registration via API")
+    st.info("📡 **API-Driven Process**: Your information will be submitted directly to AWS via official APIs for immediate processing.")
+    
+    with st.form("india_registration_form"):
+        st.subheader("Business Information")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            business_name = st.text_input("Legal Business Name *")
+            business_type = st.selectbox(
+                "Business Type *",
+                ["Private Limited Company", "Public Limited Company", "Partnership", "LLP", "Sole Proprietorship", "Other"]
+            )
+            pan_number = st.text_input("PAN Number *", placeholder="AAAAA9999A")
+            gstin = st.text_input("GSTIN (if applicable)", placeholder="22AAAAA0000A1Z5")
+            
+        with col2:
+            business_address = st.text_area("Business Address *")
+            business_phone = st.text_input("Business Phone *", placeholder="+91-XXXXXXXXXX")
+            business_email = st.text_input("Business Email *")
+            website_url = st.text_input("Website URL")
+        
+        st.subheader("Contact Information")
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            primary_contact_name = st.text_input("Primary Contact Name *")
+            primary_contact_email = st.text_input("Primary Contact Email *")
+            primary_contact_phone = st.text_input("Primary Contact Phone *")
+            
+        with col4:
+            secondary_contact_name = st.text_input("Secondary Contact Name")
+            secondary_contact_email = st.text_input("Secondary Contact Email")
+            secondary_contact_phone = st.text_input("Secondary Contact Phone")
+        
+        st.subheader("Banking Information")
+        
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            bank_name = st.text_input("Bank Name *")
+            account_number = st.text_input("Account Number *", type="password")
+            ifsc_code = st.text_input("IFSC Code *")
+            
+        with col6:
+            account_holder_name = st.text_input("Account Holder Name *")
+            account_type = st.selectbox("Account Type *", ["Current", "Savings"])
+            swift_code = st.text_input("SWIFT Code (for international transfers)")
+        
+        st.subheader("Compliance & Documentation")
+        
+        st.checkbox("I confirm that all provided information is accurate and complete")
+        st.checkbox("I agree to comply with AWS Marketplace policies and Indian regulations")
+        st.checkbox("I understand that false information may result in account suspension")
+        
+        submitted = st.form_submit_button("🚀 Submit India Registration")
+        
+        if submitted:
+            # Validate and process India registration
+            registration_data = {
+                "business_info": {
+                    "business_name": business_name,
+                    "business_type": business_type,
+                    "business_address": business_address,
+                    "business_phone": business_phone,
+                    "business_email": business_email,
+                    "website_url": website_url,
+                    "pan_number": pan_number,
+                    "gstin": gstin
+                },
+                "contact_info": {
+                    "primary_contact_name": primary_contact_name,
+                    "primary_contact_email": primary_contact_email,
+                    "primary_contact_phone": primary_contact_phone,
+                    "secondary_contact_name": secondary_contact_name,
+                    "secondary_contact_email": secondary_contact_email,
+                    "secondary_contact_phone": secondary_contact_phone
+                },
+                "banking_info": {
+                    "bank_name": bank_name,
+                    "account_number": account_number,
+                    "ifsc_code": ifsc_code,
+                    "account_holder_name": account_holder_name,
+                    "account_type": account_type,
+                    "swift_code": swift_code
+                },
+                "region_type": "AWS_INDIA"
+            }
+            
+            process_seller_registration(registration_data)
+
+def show_standard_registration_form():
+    """Show standard (AWS Inc) registration form"""
+    st.markdown('<div class="registration-section">', unsafe_allow_html=True)
+    st.markdown("### 🇺🇸 AWS Marketplace Seller Registration")
+    
+    # Amazon-style breadcrumb
+    st.markdown('<div style="color: #565959; font-size: 12px; margin-bottom: 16px;">AWS Marketplace > Seller Registration > Business Information</div>', unsafe_allow_html=True)
+    
+    st.info("📡 **Secure API Integration**: Your information will be submitted directly to AWS via official APIs for immediate processing and enhanced security.")
+    
+    # Show validation requirements
+    with st.expander("📋 Field Requirements & Validation Rules", expanded=False):
+        st.markdown("""
+        **Required Fields (marked with *):**
+        - All business information fields
+        - Primary contact information
+        - Banking information
+        - Tax classification
+        
+        **Validation Rules:**
+        - **Email**: Must be valid format (contains @ and .)
+        - **Tax ID**: Must be 9 digits (EIN/SSN format)
+        - **Phone Numbers**: Must be 10 digits
+        - **Business Address**: Complete address required
+        
+        **Tips:**
+        - Use format XX-XXXXXXX for Tax ID
+        - Use format +1-XXX-XXX-XXXX for phone numbers
+        - Ensure all required fields are filled before submitting
+        """)
+    
+    with st.form("standard_registration_form"):
+        st.markdown('<h3 style="color: #0f1111; font-weight: 600; margin-bottom: 16px;">🏢 Business Information</h3>', unsafe_allow_html=True)
+        st.markdown('<hr style="margin: 16px 0; border: none; height: 1px; background-color: #d5d9d9;">', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            business_name = st.text_input("Legal Business Name *")
+            business_type = st.selectbox(
+                "Business Type *",
+                ["Corporation", "LLC", "Partnership", "Sole Proprietorship", "Other"]
+            )
+            tax_id = st.text_input("Tax ID (EIN/SSN) *", placeholder="XX-XXXXXXX", help="9-digit Employer Identification Number or Social Security Number")
+            
+        with col2:
+            business_address = st.text_area("Business Address *")
+            business_phone = st.text_input("Business Phone *", placeholder="+1-XXX-XXX-XXXX", help="10-digit US phone number")
+            business_email = st.text_input("Business Email *", help="Valid business email address")
+            website_url = st.text_input("Website URL")
+        
+        st.subheader("Contact Information")
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            primary_contact_name = st.text_input("Primary Contact Name *")
+            primary_contact_email = st.text_input("Primary Contact Email *")
+            primary_contact_phone = st.text_input("Primary Contact Phone *")
+            
+        with col4:
+            secondary_contact_name = st.text_input("Secondary Contact Name")
+            secondary_contact_email = st.text_input("Secondary Contact Email")
+            secondary_contact_phone = st.text_input("Secondary Contact Phone")
+        
+        st.subheader("Banking Information")
+        
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            bank_name = st.text_input("Bank Name *")
+            routing_number = st.text_input("Routing Number *")
+            account_number = st.text_input("Account Number *", type="password")
+            
+        with col6:
+            account_holder_name = st.text_input("Account Holder Name *")
+            account_type = st.selectbox("Account Type *", ["Checking", "Savings"])
+        
+        st.subheader("Tax Information")
+        
+        tax_classification = st.selectbox(
+            "Tax Classification *",
+            ["Individual/Sole Proprietor", "C Corporation", "S Corporation", "Partnership", "LLC", "Other"]
+        )
+        
+        st.subheader("Compliance")
+        
+        st.checkbox("I confirm that all provided information is accurate and complete")
+        st.checkbox("I agree to comply with AWS Marketplace policies and US regulations")
+        st.checkbox("I understand that false information may result in account suspension")
+        
+        submitted = st.form_submit_button("🚀 Submit Standard Registration")
+        
+        if submitted:
+            # Client-side validation before submission
+            validation_errors = []
+            
+            # Required field validation
+            required_fields = {
+                "Legal Business Name": business_name,
+                "Business Address": business_address,
+                "Business Phone": business_phone,
+                "Business Email": business_email,
+                "Tax ID": tax_id,
+                "Primary Contact Name": primary_contact_name,
+                "Primary Contact Email": primary_contact_email,
+                "Primary Contact Phone": primary_contact_phone,
+                "Bank Name": bank_name,
+                "Routing Number": routing_number,
+                "Account Number": account_number,
+                "Account Holder Name": account_holder_name
+            }
+            
+            for field_name, field_value in required_fields.items():
+                if not field_value or not field_value.strip():
+                    validation_errors.append(f"Required field missing: {field_name}")
+            
+            # Email format validation
+            import re
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            
+            if business_email and not re.match(email_pattern, business_email):
+                validation_errors.append("Invalid business email format")
+            
+            if primary_contact_email and not re.match(email_pattern, primary_contact_email):
+                validation_errors.append("Invalid primary contact email format")
+            
+            # Tax ID validation
+            if tax_id:
+                tax_id_clean = tax_id.replace("-", "").replace(" ", "")
+                if not (len(tax_id_clean) == 9 and tax_id_clean.isdigit()):
+                    validation_errors.append("Tax ID should be 9 digits (EIN/SSN format: XX-XXXXXXX)")
+            
+            # Phone validation
+            def validate_phone(phone, field_name):
+                if phone:
+                    phone_clean = re.sub(r'[^\d]', '', phone)
+                    if len(phone_clean) != 10:
+                        validation_errors.append(f"{field_name} should be 10 digits")
+            
+            validate_phone(business_phone, "Business Phone")
+            validate_phone(primary_contact_phone, "Primary Contact Phone")
+            
+            # Show validation errors if any
+            if validation_errors:
+                st.error("❌ Please fix the following issues before submitting:")
+                for error in validation_errors:
+                    st.markdown(f"🔴 {error}")
+                return
+            # Validate and process standard registration
+            registration_data = {
+                "business_info": {
+                    "business_name": business_name,
+                    "business_type": business_type,
+                    "business_address": business_address,
+                    "business_phone": business_phone,
+                    "business_email": business_email,
+                    "website_url": website_url,
+                    "tax_id": tax_id
+                },
+                "contact_info": {
+                    "primary_contact_name": primary_contact_name,
+                    "primary_contact_email": primary_contact_email,
+                    "primary_contact_phone": primary_contact_phone,
+                    "secondary_contact_name": secondary_contact_name,
+                    "secondary_contact_email": secondary_contact_email,
+                    "secondary_contact_phone": secondary_contact_phone
+                },
+                "banking_info": {
+                    "bank_name": bank_name,
+                    "routing_number": routing_number,
+                    "account_number": account_number,
+                    "account_holder_name": account_holder_name,
+                    "account_type": account_type
+                },
+                "tax_info": {
+                    "tax_classification": tax_classification
+                },
+                "region_type": "AWS_INC"
+            }
+            
+            process_seller_registration(registration_data)
+    
+    st.markdown('</div>', unsafe_allow_html=True)  # Close registration-section container
+
+def process_seller_registration(registration_data):
+    """Process seller registration using AWS APIs"""
+    if 'aws_credentials' not in st.session_state:
+        st.error("❌ AWS credentials not available")
+        return
+    
+    try:
+        # Initialize seller registration tools
+        seller_tools = SellerRegistrationTools(
+            region='us-east-1',
+            aws_access_key_id=st.session_state.aws_credentials['access_key'],
+            aws_secret_access_key=st.session_state.aws_credentials['secret_key'],
+            aws_session_token=st.session_state.aws_credentials['session_token']
+        )
+        
+        with st.spinner("🚀 Processing seller registration..."):
+            # Step 1: Create business profile
+            st.write("📝 Creating business profile...")
+            # Merge business_info and contact_info for validation
+            business_profile_data = {
+                **registration_data["business_info"],
+                **registration_data["contact_info"]
+            }
+            business_result = seller_tools.create_business_profile(business_profile_data)
+            
+            if business_result.get("success"):
+                st.success(f"✅ Business profile created: {business_result.get('message', 'Successfully created')}")
+            else:
+                st.error("❌ Business profile creation failed:")
+                
+                # Show specific validation errors if available
+                if business_result.get("errors"):
+                    st.markdown("**Please fix the following issues:**")
+                    for error in business_result["errors"]:
+                        st.markdown(f"🔴 {error}")
+                
+                # Show warnings if available
+                if business_result.get("warnings"):
+                    st.markdown("**Warnings:**")
+                    for warning in business_result["warnings"]:
+                        st.markdown(f"🟡 {warning}")
+                
+                # Show general error message if no specific errors
+                if not business_result.get("errors") and not business_result.get("warnings"):
+                    error_msg = business_result.get('error') or business_result.get('message') or 'Unknown error occurred'
+                    st.markdown(f"🔴 {error_msg}")
+                
+                return
+            
+            # Step 2: Create public profile
+            st.write("🌐 Creating public profile...")
+            public_profile_data = {
+                "company_name": registration_data["business_info"]["business_name"],
+                "company_description": f"AWS Marketplace seller - {registration_data['business_info']['business_name']}",
+                "website_url": registration_data["business_info"].get("website_url", ""),
+                "support_email": registration_data["contact_info"]["primary_contact_email"],
+                "support_phone": registration_data["contact_info"]["primary_contact_phone"]
+            }
+            
+            public_result = seller_tools.create_public_profile(public_profile_data)
+            
+            if public_result.get("success"):
+                st.success(f"✅ Public profile created: {public_result.get('message', 'Successfully created')}")
+            else:
+                error_msg = public_result.get('error') or public_result.get('message') or 'Unknown error occurred'
+                st.error(f"❌ Public profile creation failed: {error_msg}")
+                return
+            
+            # Step 3: Update tax and banking information
+            st.write("💰 Updating tax and banking information...")
+            tax_banking_data = {
+                "tax_info": registration_data.get("tax_info", {}),
+                "banking_info": registration_data["banking_info"]
+            }
+            
+            tax_banking_result = seller_tools.update_tax_banking_info(tax_banking_data)
+            
+            if tax_banking_result.get("success"):
+                st.success(f"✅ Tax and banking info updated: {tax_banking_result.get('message', 'Successfully updated')}")
+            else:
+                error_msg = tax_banking_result.get('error') or tax_banking_result.get('message') or 'Unknown error occurred'
+                st.error(f"❌ Tax and banking update failed: {error_msg}")
+                return
+            
+            # Step 4: Validate information
+            st.write("🔍 Validating information...")
+            validation_result = seller_tools.validate_information()
+            
+            if validation_result.get("success"):
+                st.success(f"✅ Information validation initiated: {validation_result.get('message', 'Validation started')}")
+            else:
+                warning_msg = validation_result.get('message') or validation_result.get('error') or 'Validation status unclear'
+                st.warning(f"⚠️ Validation status: {warning_msg}")
+            
+            # Step 5: Select disbursement method
+            st.write("💳 Setting up disbursement method...")
+            disbursement_data = {
+                "method": "ACH_DIRECT_DEPOSIT",
+                "account_details": registration_data["banking_info"]
+            }
+            
+            disbursement_result = seller_tools.select_disbursement_method(disbursement_data)
+            
+            if disbursement_result.get("success"):
+                st.success(f"✅ Disbursement method configured: {disbursement_result.get('message', 'Successfully configured')}")
+            else:
+                error_msg = disbursement_result.get('error') or disbursement_result.get('message') or 'Unknown error occurred'
+                st.error(f"❌ Disbursement setup failed: {error_msg}")
+                return
+            
+            # Final success message
+            st.balloons()
+            st.success("""
+            🎉 **Seller Registration Completed Successfully!**
+            
+            Your seller registration has been submitted to AWS for review.
+            
+            **Next Steps:**
+            1. AWS will review your information (2-3 business days)
+            2. You'll receive email updates on the status
+            3. Once approved, you can create product listings
+            
+            **What happens now:**
+            - Identity verification process will begin
+            - Banking information will be verified
+            - You'll receive confirmation emails
+            """)
+            
+            # Store registration completion in session state
+            st.session_state.registration_completed = True
+            st.session_state.current_step = "registration_complete"
+            
+            if st.button("📧 Check Registration Status"):
+                st.rerun()
+    
+    except Exception as e:
+        st.error(f"❌ Registration processing failed: {str(e)}")
+
 def init_session_state():
     """Initialize session state"""
     print("[DEBUG] Initializing session state...")
+    
+    if 'current_step' not in st.session_state:
+        st.session_state.current_step = "credentials"
     
     if 'orchestrator' not in st.session_state:
         # Use Strands agent
@@ -268,39 +1390,20 @@ def welcome_screen():
     
     st.divider()
     
-    # Check seller status first
-    if st.session_state.seller_status is None:
-        with st.spinner("Checking your AWS Marketplace seller status..."):
-            try:
-                status = st.session_state.seller_registration_tools.check_seller_status()
-                st.session_state.seller_status = status
-            except Exception as e:
-                st.error(f"Unable to check seller status: {str(e)}")
-                st.session_state.seller_status = {"success": False, "error": str(e)}
+    # Since we already validated seller status in credentials screen, proceed directly
+    st.success("✅ **Seller Status: APPROVED**")
+    st.info("You can now create product listings using our AI-guided process.")
     
-    status = st.session_state.seller_status
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Back to Credentials", use_container_width=True):
+            st.session_state.current_step = "credentials"
+            st.rerun()
     
-    if status and status.get("success"):
-        seller_status = status.get("seller_status", "UNKNOWN")
-        
-        if seller_status == "APPROVED":
-            st.success("✅ **You're already registered as an AWS Marketplace seller!**")
-            st.info("You can proceed directly to creating product listings.")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🔄 Re-check Seller Status", use_container_width=True):
-                    st.session_state.seller_status = None
-                    st.rerun()
-            
-            with col2:
-                if st.button("Start AI-Guided Creation →", type="primary", use_container_width=True):
-                    st.session_state.current_step = "gather_context"
-                    st.rerun()
-        
-        elif seller_status == "PENDING":
-            st.warning("⏳ **Your seller registration is under review by AWS**")
-            st.info("This typically takes 2-3 business days. You can check the status in your AWS Marketplace Management Console.")
+    with col2:
+        if st.button("Start AI-Guided Creation →", type="primary", use_container_width=True):
+            st.session_state.current_step = "gather_context"
+            st.rerun()
             
             col1, col2 = st.columns(2)
             with col1:
@@ -312,37 +1415,26 @@ def welcome_screen():
                 if st.button("View Management Console", use_container_width=True):
                     st.markdown("[Open AWS Marketplace Management Console](https://console.aws.amazon.com/marketplace/management/)")
         
-        else:  # NOT_REGISTERED or other status
-            st.info("📋 **You need to register as an AWS Marketplace seller first**")
-            st.markdown("Don't worry - we'll guide you through the entire process step by step.")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🔄 Re-check Status", use_container_width=True):
-                    st.session_state.seller_status = None
-                    st.rerun()
-            
-            with col2:
-                if st.button("Start Seller Registration →", type="primary", use_container_width=True):
-                    st.session_state.current_step = "seller_registration"
-                    st.rerun()
-    
-    else:
-        st.error("❌ Unable to check seller status. Please check your AWS credentials and try again.")
-        if st.button("Retry", type="primary"):
-            st.session_state.seller_status = None
-            st.rerun()
+
 
 
 def gather_context_screen():
     """Gather product context from user"""
-    st.title("📄 Tell Us About Your Product")
+    st.title("📄 Product Information")
+    
+    # Amazon-style breadcrumb
+    st.markdown('<div style="color: #565959; font-size: 12px; margin-bottom: 16px;">AWS Marketplace > Listing Creation > Product Information</div>', unsafe_allow_html=True)
+    
+    # Add navigation buttons at the top
+    show_navigation_buttons(show_back=True, show_home=True, back_step="credentials")
+    st.divider()
     
     st.markdown("""
-    Provide URLs to your product information so our AI can analyze it and create your marketplace listing.
+    **Provide your product information** so our AI can analyze it and create your marketplace listing with accurate details and compelling descriptions.
     """)
     
-    st.write("**Product URLs:**")
+    st.markdown('<div class="product-section">', unsafe_allow_html=True)
+    st.write("**📋 Product URLs:**")
     website_url = st.text_input(
         "Product Website *", 
         placeholder="https://yourproduct.com",
@@ -386,11 +1478,17 @@ def gather_context_screen():
             st.session_state.product_context = context
             st.session_state.current_step = "analyze_product"
             st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)  # Close product-section container
 
 
 def analyze_product_screen():
     """AI analyzes product and generates suggestions"""
     st.title("🔍 Analyzing Your Product...")
+    
+    # Add navigation buttons at the top
+    show_navigation_buttons(show_back=True, show_home=True, back_step="gather_context")
+    st.divider()
     
     context = st.session_state.product_context
     
@@ -576,6 +1674,10 @@ def analyze_product_screen():
 def review_suggestions_screen():
     """Review and edit AI-generated suggestions"""
     st.title("📝 Review AI-Generated Content")
+    
+    # Add navigation buttons at the top
+    show_navigation_buttons(show_back=True, show_home=True, back_step="analyze_product")
+    st.divider()
     
     st.markdown("""
     Review the AI-generated content below. You can edit any field before creating your listing.
@@ -1170,6 +2272,10 @@ def review_suggestions_screen():
 
 def create_listing_screen():
     """Create the listing using the orchestrator"""
+    
+    # Add navigation buttons at the top
+    show_navigation_buttons(show_back=True, show_home=True, back_step="review_suggestions")
+    st.divider()
     
     # Check if listing is already created to avoid re-execution
     if 'listing_created' in st.session_state and st.session_state.listing_created:
@@ -1927,6 +3033,10 @@ def saas_deployment_screen():
     """Simple SaaS deployment screen with email input"""
     st.title("🚀 Deploy SaaS Integration")
     
+    # Add navigation buttons at the top
+    show_navigation_buttons(show_back=True, show_home=True, back_step="create_listing")
+    st.divider()
+    
     workflow_data = st.session_state.workflow_data
     
     # Show product information
@@ -2285,6 +3395,57 @@ def workflow_orchestrator_screen():
                 st.json(result)
 
 
+def show_navigation_buttons(show_back=True, show_home=True, back_step=None):
+    """
+    Show navigation buttons (Back and Home)
+    
+    Args:
+        show_back: Whether to show the back button
+        show_home: Whether to show the home button
+        back_step: The step to go back to (if None, goes to previous step in sequence)
+    """
+    col1, col2, col3 = st.columns([1, 1, 4])
+    
+    with col1:
+        if show_home:
+            if st.button("🏠 Home", help="Go to AWS Credentials page"):
+                st.session_state.current_step = "credentials"
+                st.rerun()
+    
+    with col2:
+        if show_back:
+            # Define step sequence for back navigation
+            step_sequence = [
+                "credentials",
+                "registration_details", 
+                "registration_complete",
+                "welcome",
+                "seller_registration",
+                "registration_portal",
+                "gather_context",
+                "analyze_product",
+                "review_suggestions",
+                "create_listing",
+                "saas_deployment"
+            ]
+            
+            current_step = st.session_state.current_step
+            
+            if back_step:
+                previous_step = back_step
+            else:
+                # Find previous step in sequence
+                try:
+                    current_index = step_sequence.index(current_step)
+                    previous_step = step_sequence[current_index - 1] if current_index > 0 else "credentials"
+                except ValueError:
+                    previous_step = "credentials"
+            
+            if st.button("⬅️ Back", help=f"Go back to previous step"):
+                st.session_state.current_step = previous_step
+                st.rerun()
+
+
 def main():
     """Main app logic"""
     print(f"[DEBUG] Main function called")
@@ -2326,9 +3487,8 @@ def main():
         
         # Show progress
         steps = {
-            "welcome": "🏠 Welcome",
-            "seller_registration": "🏢 Seller Registration",
-            "registration_portal": "🌐 AWS Portal", 
+            "credentials": "🔐 Credentials",
+            "registration_details": "📝 Registration",
             "gather_context": "📄 Product Info",
             "analyze_product": "🔍 AI Analysis",
             "review_suggestions": "📝 Review",
@@ -2354,13 +3514,79 @@ def main():
             else:
                 st.info("📋 Registration Needed")
         
-        st.caption("Powered by Amazon Bedrock")
+        st.divider()
+        
+        # Global clear data button
+        if st.button("🗑️ Clear All Data", help="Clear all stored data and start fresh", key="sidebar_clear_data"):
+            st.session_state.show_sidebar_clear_confirmation = True
+        
+        # Show confirmation in sidebar if requested
+        if st.session_state.get('show_sidebar_clear_confirmation', False):
+            st.warning("⚠️ Clear ALL data?")
+            col_s1, col_s2 = st.columns(2)
+            
+            with col_s1:
+                if st.button("✅ Yes", key="confirm_sidebar_clear"):
+                    # Clear all session state data
+                    keys_to_clear = [
+                        'aws_credentials', 
+                        'account_validation', 
+                        'seller_status',
+                        'product_context',
+                        'ai_suggestions',
+                        'listing_data',
+                        'workflow_data',
+                        'registration_completed',
+                        'show_sidebar_clear_confirmation'
+                    ]
+                    for key in keys_to_clear:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    
+                    # Reset to credentials step
+                    st.session_state.current_step = "credentials"
+                    st.success("🗑️ Cleared!")
+                    st.rerun()
+            
+            with col_s2:
+                if st.button("❌ No", key="cancel_sidebar_clear"):
+                    st.session_state.show_sidebar_clear_confirmation = False
+                    st.rerun()
+        
+        st.markdown('<hr style="margin: 16px 0; border: none; height: 1px; background-color: #d5d9d9;">', unsafe_allow_html=True)
+        st.markdown('<div style="text-align: center; color: #565959; font-size: 12px; font-family: Inter, sans-serif;">Powered by Amazon Bedrock | AWS Marketplace</div>', unsafe_allow_html=True)
     
     # Main content
     current_step = st.session_state.current_step
     print(f"[DEBUG] About to render screen for step: {current_step}")
     
-    if current_step == "welcome":
+    if current_step == "credentials":
+        print(f"[DEBUG] Rendering credentials_input_screen")
+        credentials_input_screen()
+    elif current_step == "registration_details":
+        print(f"[DEBUG] Rendering registration_details_screen")
+        registration_details_screen()
+    elif current_step == "registration_complete":
+        st.title("✅ Registration Complete!")
+        
+        # Add navigation buttons at the top
+        show_navigation_buttons(show_back=True, show_home=True, back_step="registration_details")
+        st.divider()
+        
+        st.success("Your seller registration has been submitted successfully!")
+        st.info("AWS will review your information within 2-3 business days.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Check Status Again"):
+                st.session_state.current_step = "credentials"
+                st.rerun()
+        with col2:
+            if st.button("📄 Create Product Listing"):
+                st.session_state.current_step = "gather_context"
+                st.rerun()
+
+    elif current_step == "welcome":
         print(f"[DEBUG] Rendering welcome_screen")
         welcome_screen()
     elif current_step == "seller_registration":
