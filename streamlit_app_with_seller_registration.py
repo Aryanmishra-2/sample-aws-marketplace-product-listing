@@ -1950,7 +1950,9 @@ def review_suggestions_screen():
             selected_dim_type = dim_type
         
         if st.button("Add Dimension"):
-            if dim_name and dim_key and dim_description:
+            if not dim_name or not dim_key or not dim_description:
+                st.error("All three fields (Dimension Name, Dimension Key, and Description) are mandatory")
+            else:
                 st.session_state.dimensions.append({
                     "name": dim_name,
                     "key": dim_key,
@@ -2184,17 +2186,38 @@ def review_suggestions_screen():
                 st.error("Please add at least one pricing dimension")
                 return
             
+            # Validate dimensions based on pricing model
+            dim_types = set(dim["type"] for dim in all_dimensions)
+            
+            if pricing_model == "Contract":
+                # Contract model: at least one Entitled dimension is mandatory
+                if "Entitled" not in dim_types:
+                    st.error("Contract model requires at least one Entitled dimension")
+                    return
+                # Contract model: should not have Metered dimensions
+                if "Metered" in dim_types:
+                    st.error("Contract model should only have Entitled dimensions, not Metered dimensions")
+                    return
+            
+            elif pricing_model == "Usage":
+                # Usage model: only Metered dimensions allowed, at least one is mandatory
+                if "Metered" not in dim_types:
+                    st.error("Usage model requires at least one Metered dimension")
+                    return
+                if "Entitled" in dim_types:
+                    st.error("Usage model should only have Metered dimensions, not Entitled dimensions")
+                    return
+            
+            elif pricing_model == "Contract with Consumption":
+                # Hybrid model: one Entitled and one Metered dimension are mandatory
+                if "Entitled" not in dim_types or "Metered" not in dim_types:
+                    st.error("Contract with Consumption requires at least one Entitled dimension and one Metered dimension")
+                    return
+            
             # Validate contract durations for contract and hybrid pricing
             if pricing_model in ["Contract", "Contract with Consumption"] and not contract_durations:
                 st.error("Please select at least one contract duration")
                 return
-            
-            # Validate hybrid pricing has both dimension types
-            if pricing_model == "Contract with Consumption":
-                dim_types = set(dim["type"] for dim in all_dimensions)
-                if "Entitled" not in dim_types or "Metered" not in dim_types:
-                    st.error("Contract with Consumption requires at least one Entitled dimension and one Metered dimension")
-                    return
             
             # Validate custom EULA URL if custom chosen
             if eula_type == "Custom EULA" and not custom_eula_url:
