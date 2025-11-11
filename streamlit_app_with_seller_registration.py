@@ -699,56 +699,205 @@ def check_seller_registration_status():
         if status_result.get('success'):
             seller_status = status_result.get('seller_status', 'UNKNOWN')
             
-            # Check if we have actual registration data in this session
-            has_registration_data = ('registration_data' in st.session_state and 
-                                    st.session_state.registration_data and
-                                    st.session_state.registration_data.get('tax_info') and
-                                    st.session_state.registration_data.get('banking_info'))
-            
-            if seller_status == 'APPROVED' and has_registration_data:
+            if seller_status == 'APPROVED':
                 st.success("""
                 🎉 **Seller Registration: APPROVED**
                 
-                Your account is already registered as an AWS Marketplace seller!
-                You can proceed directly to creating product listings.
+                Your account is registered as an AWS Marketplace seller!
                 """)
                 
-                # For APPROVED sellers, show that they're already registered
-                # Don't show detailed verification status here as it's confusing
-                st.info("""
-                ✅ **Your seller account is fully registered and verified.**
+                # Get detailed account information
+                account_details = seller_tools.get_seller_account_details()
                 
-                All required information (business profile, tax, banking, etc.) has been 
-                submitted and approved by AWS in this session.
-                
-                You can now:
-                - Create new product listings
-                - Manage existing products
-                - View sales and reports
-                """)
-            
-            elif seller_status == 'APPROVED' and not has_registration_data:
-                st.warning("""
-                ⚠️ **Seller Account Status: APPROVED (with existing products)**
-                
-                Your account has marketplace products, but we don't have your complete 
-                registration information in this session.
-                
-                **Important:** To ensure your seller profile is complete with all required 
-                tax and banking information, please complete the registration form.
-                """)
-                
-                st.write("**📋 Registration Status:**")
-                st.write("❌ Tax Information: Not collected in this session")
-                st.write("❌ Banking Information: Not collected in this session")
-                st.write("❌ Disbursement Method: Not configured in this session")
-                
-                st.info("""
-                **Next Steps:**
-                1. Click "Start Seller Registration" below
-                2. Fill in your tax and banking information
-                3. Submit for AWS verification
-                """)
+                if account_details.get('success'):
+                    products_count = account_details.get('owned_products_count', 0)
+                    
+                    # Show products count if any
+                    if products_count > 0:
+                        st.write(f"� **Arctive Products:** {products_count}")
+                    
+                    st.divider()
+                    
+                    # Manual verification section
+                    st.write("**📋 Seller Profile Validation Required**")
+                    st.warning("""
+                    ⚠️ **Before creating products, you must validate your seller profile.**
+                    
+                    AWS Marketplace requires complete tax and payment information before you can list products.
+                    """)
+                    
+                    st.info("""
+                    **Please complete these steps:**
+                    
+                    1. 🔗 **Open the AWS Marketplace Seller Settings portal:**
+                       👉 [AWS Marketplace Seller Settings](https://aws.amazon.com/marketplace/management/seller-settings/account)
+                    
+                    2. 📋 **Verify Tax Information:**
+                       - Check that your W-9 (US) or W-8 (International) form is submitted
+                       - Ensure your business name and EIN/Tax ID are correct
+                       - Verify your business address is up to date
+                    
+                    3. 💳 **Verify Payment Information:**
+                       - Confirm your bank account details are configured
+                       - Check that your routing number and account number are correct
+                       - Ensure disbursement method is selected
+                    
+                    4. ✅ **Return here and confirm completion below**
+                    """)
+                    
+                    # Initialize session state for manual verification
+                    if 'tax_verified' not in st.session_state:
+                        st.session_state.tax_verified = False
+                    if 'banking_verified' not in st.session_state:
+                        st.session_state.banking_verified = False
+                    if 'tax_details' not in st.session_state:
+                        st.session_state.tax_details = {}
+                    
+                    st.divider()
+                    st.write("**Validation Checklist:**")
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.write("**📋 Tax Information**")
+                        tax_verified = st.checkbox(
+                            "I have verified my tax information is complete in the AWS portal",
+                            value=st.session_state.tax_verified,
+                            key="tax_checkbox",
+                            help="Check this ONLY after verifying your tax information in the AWS Marketplace Seller Settings"
+                        )
+                        st.session_state.tax_verified = tax_verified
+                        
+                        if tax_verified:
+                            with st.expander("📋 Enter Tax Details (Optional)", expanded=False):
+                                st.write("Enter your tax information for reference:")
+                                
+                                tax_classification = st.selectbox(
+                                    "Tax Classification",
+                                    ["", "Individual/Sole Proprietor", "C Corporation", "S Corporation", 
+                                     "Partnership", "Trust/Estate", "LLC", "Other"],
+                                    index=0 if not st.session_state.tax_details.get('classification') else 
+                                          ["", "Individual/Sole Proprietor", "C Corporation", "S Corporation", 
+                                           "Partnership", "Trust/Estate", "LLC", "Other"].index(
+                                               st.session_state.tax_details.get('classification', ''))
+                                )
+                                
+                                business_name = st.text_input(
+                                    "Business Name",
+                                    value=st.session_state.tax_details.get('business_name', ''),
+                                    placeholder="Your legal business name"
+                                )
+                                
+                                ein = st.text_input(
+                                    "EIN/Tax ID",
+                                    value=st.session_state.tax_details.get('ein', ''),
+                                    placeholder="XX-XXXXXXX",
+                                    help="Your Employer Identification Number"
+                                )
+                                
+                                address = st.text_area(
+                                    "Business Address",
+                                    value=st.session_state.tax_details.get('address', ''),
+                                    placeholder="Street, City, State, ZIP",
+                                    height=80
+                                )
+                                
+                                if st.button("Save Tax Details"):
+                                    st.session_state.tax_details = {
+                                        'classification': tax_classification,
+                                        'business_name': business_name,
+                                        'ein': ein,
+                                        'address': address
+                                    }
+                                    st.success("Tax details saved!")
+                                    st.rerun()
+                    
+                    with col2:
+                        st.write("**💳 Payment Information**")
+                        banking_verified = st.checkbox(
+                            "I have verified my payment information is complete in the AWS portal",
+                            value=st.session_state.banking_verified,
+                            key="banking_checkbox",
+                            help="Check this ONLY after verifying your banking/payment information in the AWS Marketplace Seller Settings"
+                        )
+                        st.session_state.banking_verified = banking_verified
+                    
+                    st.divider()
+                    
+                    # Show tax details if saved
+                    if st.session_state.tax_verified and st.session_state.tax_details:
+                        st.write("**📋 Tax Information Summary:**")
+                        with st.expander("View Tax Details", expanded=True):
+                            details = st.session_state.tax_details
+                            if details.get('classification'):
+                                st.write(f"**Tax Classification:** {details['classification']}")
+                            if details.get('business_name'):
+                                st.write(f"**Business Name:** {details['business_name']}")
+                            if details.get('ein'):
+                                # Mask EIN for security
+                                ein_masked = details['ein'][:3] + "****" + details['ein'][-2:] if len(details['ein']) > 5 else "***"
+                                st.write(f"**EIN:** {ein_masked}")
+                            if details.get('address'):
+                                st.write(f"**Address:** {details['address']}")
+                    
+                    st.divider()
+                    
+                    # Show appropriate message and actions based on verification status
+                    if st.session_state.tax_verified and st.session_state.banking_verified:
+                        st.success("""
+                        ✅ **Validation Complete! Your seller profile is ready.**
+                        
+                        You have confirmed that both tax and payment information are configured in AWS.
+                        """)
+                        
+                        st.info("""
+                        **You can now proceed to:**
+                        - Create new product listings
+                        - Manage existing products
+                        - View sales and reports
+                        """)
+                        
+                        # Offer to proceed to product creation
+                        st.divider()
+                        st.write("**🚀 Ready to Create Your First Product?**")
+                        
+                        col_a, col_b, col_c = st.columns([1, 1, 1])
+                        
+                        with col_b:
+                            if st.button("📦 Create Product Listing", type="primary", use_container_width=True):
+                                st.session_state.current_step = "welcome"
+                                st.session_state.seller_profile_validated = True
+                                st.rerun()
+                        
+                    else:
+                        missing_items = []
+                        if not st.session_state.tax_verified:
+                            missing_items.append("Tax Information")
+                        if not st.session_state.banking_verified:
+                            missing_items.append("Payment Information")
+                        
+                        st.error(f"""
+                        ❌ **Validation Incomplete**
+                        
+                        Please complete validation for: {', '.join(missing_items)}
+                        """)
+                        
+                        st.warning("""
+                        **You must validate both tax and payment information before creating products.**
+                        
+                        1. Click the link above to open AWS Marketplace Seller Settings
+                        2. Verify your tax and payment information are complete
+                        3. Return here and check both boxes
+                        4. Then you can proceed to create products
+                        """)
+                else:
+                    # Fallback if we can't get account details
+                    st.info("""
+                    ✅ **Your seller account is approved.**
+                    
+                    Please verify your tax and banking information at:
+                    👉 [AWS Marketplace Seller Settings](https://aws.amazon.com/marketplace/management/seller-settings/account)
+                    """)
                     
             elif seller_status == 'PENDING':
                 st.warning("""
@@ -1616,9 +1765,32 @@ def welcome_screen():
     
     st.divider()
     
-    # Since we already validated seller status in credentials screen, proceed directly
-    st.success("✅ **Seller Status: APPROVED**")
-    st.info("You can now create product listings using our AI-guided process.")
+    # Check if seller profile has been validated
+    if not st.session_state.get('seller_profile_validated', False):
+        st.warning("""
+        ⚠️ **Seller Profile Validation Required**
+        
+        Before creating products, you must validate your tax and payment information.
+        """)
+        
+        st.info("""
+        **Please complete these steps:**
+        
+        1. Go back to the credentials screen
+        2. Verify your tax and payment information in the AWS portal
+        3. Confirm validation by checking both boxes
+        4. Return here to create products
+        """)
+        
+        if st.button("← Back to Credentials", type="primary", use_container_width=True):
+            st.session_state.current_step = "credentials"
+            st.rerun()
+        
+        return
+    
+    # Seller profile is validated - proceed
+    st.success("✅ **Seller Status: APPROVED & VALIDATED**")
+    st.info("Your tax and payment information are confirmed. You can now create product listings!")
     
     col1, col2 = st.columns(2)
     with col1:

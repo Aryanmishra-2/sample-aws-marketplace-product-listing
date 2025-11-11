@@ -593,6 +593,62 @@ class SellerRegistrationTools:
                 "message": "Failed to check seller status. Please verify your AWS credentials and permissions."
             }
     
+    def get_seller_account_details(self) -> Dict[str, Any]:
+        """
+        Retrieve seller account details including tax and banking information status
+        
+        Note: AWS Marketplace doesn't provide direct APIs to retrieve sensitive tax/banking data.
+        This method attempts to infer the status based on available information.
+        
+        Returns:
+            Dict with seller account details and verification status
+        """
+        try:
+            # First check if account is a registered seller
+            seller_status_result = self.check_seller_status()
+            
+            if not seller_status_result.get('success'):
+                return seller_status_result
+            
+            seller_status = seller_status_result.get('seller_status')
+            
+            if seller_status != 'APPROVED':
+                return {
+                    "success": True,
+                    "seller_status": seller_status,
+                    "tax_info_configured": False,
+                    "banking_info_configured": False,
+                    "message": "Account is not an approved seller. Complete registration first."
+                }
+            
+            # For APPROVED sellers, we can't directly retrieve tax/banking info via API
+            # AWS doesn't expose this sensitive data through marketplace APIs
+            # We need to rely on user verification from the AWS portal
+            
+            has_products = seller_status_result.get('owned_products_count', 0) > 0
+            
+            # Return status as unknown - user needs to verify manually
+            # Even if they have products, we can't be 100% sure of current status
+            return {
+                "success": True,
+                "seller_status": "APPROVED",
+                "tax_info_configured": None,  # Unknown - needs manual verification
+                "banking_info_configured": None,  # Unknown - needs manual verification
+                "verification_method": "manual_verification_required",
+                "owned_products_count": seller_status_result.get('owned_products_count', 0),
+                "has_products": has_products,
+                "message": "Seller approved. Tax and banking status requires manual verification.",
+                "recommendation": "Please verify your tax and banking information at: https://aws.amazon.com/marketplace/management/seller-settings/account",
+                "note": "AWS Marketplace APIs do not expose sensitive tax and banking information. Please check the portal directly."
+            }
+                
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to retrieve seller account details"
+            }
+    
     def check_registration_progress(self, registration_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Check the actual progress of seller registration based on provided data
