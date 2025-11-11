@@ -668,6 +668,16 @@ def credentials_input_screen():
                 }
                 st.session_state.account_validation = validation_result
                 
+                # Update seller registration agent with credentials
+                if 'seller_registration_agent' in st.session_state:
+                    st.session_state.seller_registration_agent.update_credentials(
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key,
+                        aws_session_token=session_token if session_token else None,
+                        region='us-east-1'
+                    )
+                    print("[DEBUG] Updated seller registration agent credentials")
+                
                 st.success("✅ Credentials validated! Refreshing page...")
                 st.rerun()
                 
@@ -1601,6 +1611,7 @@ def init_session_state():
         print("[DEBUG] Seller registration tools initialized")
     
     if 'seller_registration_agent' not in st.session_state:
+        # Initialize without credentials - will be updated when credentials are provided
         st.session_state.seller_registration_agent = SellerRegistrationAgent()
         print("[DEBUG] Seller registration agent initialized")
     

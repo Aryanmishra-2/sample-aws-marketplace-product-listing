@@ -23,10 +23,21 @@ class SellerRegistrationAgent(BaseSubAgent):
     - Status tracking
     """
     
-    def __init__(self):
+    def __init__(self, aws_access_key_id=None, aws_secret_access_key=None, aws_session_token=None, region='us-east-1'):
         super().__init__(stage_number=0, stage_name="Seller Registration")
-        self.seller_tools = SellerRegistrationTools()
+        self.seller_tools = SellerRegistrationTools(
+            region=region,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            aws_session_token=aws_session_token
+        )
         self.registration_status = None
+        self.aws_credentials = {
+            'access_key_id': aws_access_key_id,
+            'secret_access_key': aws_secret_access_key,
+            'session_token': aws_session_token,
+            'region': region
+        }
     
     def get_required_fields(self) -> List[str]:
         """Return list of required field names for seller registration"""
@@ -407,6 +418,23 @@ class SellerRegistrationAgent(BaseSubAgent):
     def get_help_resources(self) -> Dict[str, Any]:
         """Get help resources for seller registration"""
         return self.seller_tools.get_help_resources()
+    
+    def update_credentials(self, aws_access_key_id: str, aws_secret_access_key: str, 
+                          aws_session_token: str = None, region: str = 'us-east-1'):
+        """Update AWS credentials for the seller tools"""
+        self.seller_tools = SellerRegistrationTools(
+            region=region,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            aws_session_token=aws_session_token
+        )
+        self.aws_credentials = {
+            'access_key_id': aws_access_key_id,
+            'secret_access_key': aws_secret_access_key,
+            'session_token': aws_session_token,
+            'region': region
+        }
+        self.registration_status = None  # Reset status when credentials change
     
     def check_seller_status(self) -> Dict[str, Any]:
         """Check current seller registration status"""
