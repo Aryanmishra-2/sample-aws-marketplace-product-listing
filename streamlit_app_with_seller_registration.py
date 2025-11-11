@@ -699,7 +699,13 @@ def check_seller_registration_status():
         if status_result.get('success'):
             seller_status = status_result.get('seller_status', 'UNKNOWN')
             
-            if seller_status == 'APPROVED':
+            # Check if we have actual registration data in this session
+            has_registration_data = ('registration_data' in st.session_state and 
+                                    st.session_state.registration_data and
+                                    st.session_state.registration_data.get('tax_info') and
+                                    st.session_state.registration_data.get('banking_info'))
+            
+            if seller_status == 'APPROVED' and has_registration_data:
                 st.success("""
                 🎉 **Seller Registration: APPROVED**
                 
@@ -707,12 +713,42 @@ def check_seller_registration_status():
                 You can proceed directly to creating product listings.
                 """)
                 
-                # Show verification status
-                if 'verification_status' in status_result:
-                    st.write("**Verification Status:**")
-                    for key, value in status_result['verification_status'].items():
-                        status_icon = "✅" if value == "completed" else "❌"
-                        st.write(f"{status_icon} {key.replace('_', ' ').title()}: {value}")
+                # For APPROVED sellers, show that they're already registered
+                # Don't show detailed verification status here as it's confusing
+                st.info("""
+                ✅ **Your seller account is fully registered and verified.**
+                
+                All required information (business profile, tax, banking, etc.) has been 
+                submitted and approved by AWS in this session.
+                
+                You can now:
+                - Create new product listings
+                - Manage existing products
+                - View sales and reports
+                """)
+            
+            elif seller_status == 'APPROVED' and not has_registration_data:
+                st.warning("""
+                ⚠️ **Seller Account Status: APPROVED (with existing products)**
+                
+                Your account has marketplace products, but we don't have your complete 
+                registration information in this session.
+                
+                **Important:** To ensure your seller profile is complete with all required 
+                tax and banking information, please complete the registration form.
+                """)
+                
+                st.write("**📋 Registration Status:**")
+                st.write("❌ Tax Information: Not collected in this session")
+                st.write("❌ Banking Information: Not collected in this session")
+                st.write("❌ Disbursement Method: Not configured in this session")
+                
+                st.info("""
+                **Next Steps:**
+                1. Click "Start Seller Registration" below
+                2. Fill in your tax and banking information
+                3. Submit for AWS verification
+                """)
                     
             elif seller_status == 'PENDING':
                 st.warning("""
@@ -739,6 +775,39 @@ def check_seller_registration_status():
                 **Estimated time:** 10-15 minutes to complete the forms
                 **AWS Review:** 2-3 business days for approval
                 """)
+                
+                # Check if there's any registration data in progress
+                if 'registration_data' in st.session_state and st.session_state.registration_data:
+                    st.write("---")
+                    st.write("**📊 Current Registration Progress:**")
+                    
+                    # Use the new check_registration_progress method
+                    progress_result = seller_tools.check_registration_progress(st.session_state.registration_data)
+                    
+                    if progress_result.get("success"):
+                        # Show progress bar
+                        progress_pct = progress_result.get("progress_percentage", 0)
+                        st.progress(progress_pct / 100)
+                        st.write(f"**{progress_pct}% Complete**")
+                        
+                        # Show status by section
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write("**Completed:**")
+                            for step in progress_result.get("completed_steps", []):
+                                st.write(f"✅ {step}")
+                        
+                        with col2:
+                            st.write("**Still Required:**")
+                            for step in progress_result.get("required_steps", []):
+                                st.write(f"❌ {step}")
+                else:
+                    st.write("---")
+                    st.write("**📋 Registration Status:**")
+                    st.write("❌ Business Profile: Not started")
+                    st.write("❌ Tax Information: Not started")
+                    st.write("❌ Banking Information: Not started")
+                    st.write("❌ Disbursement Method: Not started")
                 
             else:
                 st.warning(f"❓ **Seller Registration: {seller_status}**")
@@ -1083,6 +1152,41 @@ def process_seller_registration(registration_data):
             aws_session_token=st.session_state.aws_credentials['session_token']
         )
         
+        # Pre-validation: Check all required sections are present
+        st.write("🔍 Pre-validating registration data...")
+        
+        required_sections = {
+            "business_info": "Business Information",
+            "contact_info": "Contact Information",
+            "tax_info": "Tax Information",
+            "banking_info": "Banking Information"
+        }
+        
+        missing_sections = []
+        for section_key, section_name in required_sections.items():
+            if section_key not in registration_data or not registration_data[section_key]:
+                missing_sections.append(section_name)
+        
+        if missing_sections:
+            st.error(f"❌ Missing required sections: {', '.join(missing_sections)}")
+            st.info("Please ensure all sections are filled out before submitting.")
+            return
+        
+        # Validate each section has required data
+        if not registration_data["business_info"].get("business_name"):
+            st.error("❌ Business name is required")
+            return
+        
+        if not registration_data["tax_info"].get("tax_classification"):
+            st.error("❌ Tax classification is required")
+            return
+        
+        if not registration_data["banking_info"].get("bank_name"):
+            st.error("❌ Banking information is incomplete")
+            return
+        
+        st.success("✅ Pre-validation passed")
+        
         with st.spinner("🚀 Processing seller registration..."):
             # Step 1: Create business profile
             st.write("📝 Creating business profile...")
@@ -1136,7 +1240,37 @@ def process_seller_registration(registration_data):
                 st.error(f"❌ Public profile creation failed: {error_msg}")
                 return
             
-            # Step 3: Update tax and banking information
+            # Step 3: Validate tax information
+            st.write("� UValidating tax information...")
+            tax_validation = seller_tools._validate_tax_info(registration_data.get("tax_info", {}))
+            
+            if not tax_validation.get("success"):
+                st.error("❌ Tax information validation failed:")
+                for error in tax_validation.get("errors", []):
+                    st.markdown(f"🔴 {error}")
+                return
+            
+            if tax_validation.get("warnings"):
+                st.warning("⚠️ Tax information warnings:")
+                for warning in tax_validation.get("warnings", []):
+                    st.markdown(f"🟡 {warning}")
+            
+            # Step 4: Validate banking information
+            st.write("🏦 Validating banking information...")
+            banking_validation = seller_tools._validate_banking_info(registration_data["banking_info"])
+            
+            if not banking_validation.get("success"):
+                st.error("❌ Banking information validation failed:")
+                for error in banking_validation.get("errors", []):
+                    st.markdown(f"🔴 {error}")
+                return
+            
+            if banking_validation.get("warnings"):
+                st.warning("⚠️ Banking information warnings:")
+                for warning in banking_validation.get("warnings", []):
+                    st.markdown(f"🟡 {warning}")
+            
+            # Step 5: Update tax and banking information
             st.write("💰 Updating tax and banking information...")
             tax_banking_data = {
                 "tax_info": registration_data.get("tax_info", {}),
@@ -1162,13 +1296,27 @@ def process_seller_registration(registration_data):
                 warning_msg = validation_result.get('message') or validation_result.get('error') or 'Validation status unclear'
                 st.warning(f"⚠️ Validation status: {warning_msg}")
             
-            # Step 5: Select disbursement method
-            st.write("💳 Setting up disbursement method...")
+            # Step 7: Validate and setup disbursement method
+            st.write("💳 Validating disbursement method...")
             disbursement_data = {
                 "method": "ACH_DIRECT_DEPOSIT",
                 "account_details": registration_data["banking_info"]
             }
             
+            disbursement_validation = seller_tools._validate_disbursement_info(disbursement_data)
+            
+            if not disbursement_validation.get("success"):
+                st.error("❌ Disbursement method validation failed:")
+                for error in disbursement_validation.get("errors", []):
+                    st.markdown(f"🔴 {error}")
+                return
+            
+            if disbursement_validation.get("warnings"):
+                st.warning("⚠️ Disbursement method warnings:")
+                for warning in disbursement_validation.get("warnings", []):
+                    st.markdown(f"🟡 {warning}")
+            
+            st.write("💳 Setting up disbursement method...")
             disbursement_result = seller_tools.select_disbursement_method(disbursement_data)
             
             if disbursement_result.get("success"):
@@ -1177,6 +1325,83 @@ def process_seller_registration(registration_data):
                 error_msg = disbursement_result.get('error') or disbursement_result.get('message') or 'Unknown error occurred'
                 st.error(f"❌ Disbursement setup failed: {error_msg}")
                 return
+            
+            # Display comprehensive registration summary
+            st.success("✅ All validation checks passed!")
+            
+            st.markdown("---")
+            st.subheader("📋 Registration Summary")
+            
+            # Business Information
+            with st.expander("🏢 Business Information", expanded=True):
+                business = registration_data["business_info"]
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Business Name:** {business.get('business_name', 'N/A')}")
+                    st.write(f"**Business Type:** {business.get('business_type', 'N/A')}")
+                    st.write(f"**Email:** {business.get('business_email', 'N/A')}")
+                    st.write(f"**Phone:** {business.get('business_phone', 'N/A')}")
+                with col2:
+                    st.write(f"**Address:** {business.get('business_address', 'N/A')}")
+                    st.write(f"**Website:** {business.get('website_url', 'N/A')}")
+                    st.write(f"**Tax ID:** {business.get('tax_id', 'N/A')}")
+            
+            # Contact Information
+            with st.expander("👤 Contact Information"):
+                contact = registration_data["contact_info"]
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Primary Contact:**")
+                    st.write(f"Name: {contact.get('primary_contact_name', 'N/A')}")
+                    st.write(f"Email: {contact.get('primary_contact_email', 'N/A')}")
+                    st.write(f"Phone: {contact.get('primary_contact_phone', 'N/A')}")
+                with col2:
+                    if contact.get('secondary_contact_name'):
+                        st.write("**Secondary Contact:**")
+                        st.write(f"Name: {contact.get('secondary_contact_name', 'N/A')}")
+                        st.write(f"Email: {contact.get('secondary_contact_email', 'N/A')}")
+                        st.write(f"Phone: {contact.get('secondary_contact_phone', 'N/A')}")
+            
+            # Tax Information
+            with st.expander("📋 Tax Information", expanded=True):
+                tax = registration_data["tax_info"]
+                st.write(f"**Tax Classification:** {tax.get('tax_classification', 'N/A')}")
+                if tax.get('w9_form_url'):
+                    st.write(f"**W-9 Form:** Provided")
+                else:
+                    st.warning("⚠️ W-9 form not provided - will be required during AWS review")
+            
+            # Banking Information
+            with st.expander("🏦 Banking Information", expanded=True):
+                banking = registration_data["banking_info"]
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Bank Name:** {banking.get('bank_name', 'N/A')}")
+                    st.write(f"**Account Type:** {banking.get('account_type', 'N/A')}")
+                    st.write(f"**Account Holder:** {banking.get('account_holder_name', 'N/A')}")
+                with col2:
+                    # Mask sensitive information
+                    routing = banking.get('routing_number', 'N/A')
+                    if routing and routing != 'N/A':
+                        routing_masked = f"****{routing[-4:]}"
+                    else:
+                        routing_masked = 'N/A'
+                    
+                    account = banking.get('account_number', 'N/A')
+                    if account and account != 'N/A':
+                        account_masked = f"****{account[-4:]}"
+                    else:
+                        account_masked = 'N/A'
+                    
+                    st.write(f"**Routing Number:** {routing_masked}")
+                    st.write(f"**Account Number:** {account_masked}")
+            
+            # Disbursement Method
+            with st.expander("💳 Disbursement Method"):
+                st.write(f"**Method:** ACH Direct Deposit")
+                st.write(f"**Status:** Configured")
+            
+            st.markdown("---")
             
             # Final success message
             st.balloons()
@@ -1196,8 +1421,9 @@ def process_seller_registration(registration_data):
             - You'll receive confirmation emails
             """)
             
-            # Store registration completion in session state
+            # Store registration completion and data in session state
             st.session_state.registration_completed = True
+            st.session_state.registration_data = registration_data  # Store the registration data
             st.session_state.current_step = "registration_complete"
             
             if st.button("📧 Check Registration Status"):
@@ -3596,16 +3822,170 @@ def main():
         show_navigation_buttons(show_back=True, show_home=True, back_step="registration_details")
         st.divider()
         
-        st.success("Your seller registration has been submitted successfully!")
-        st.info("AWS will review your information within 2-3 business days.")
+        st.success("🎉 Your seller registration has been submitted successfully!")
+        st.info("📧 AWS will review your information within 2-3 business days.")
+        
+        # Display comprehensive registration summary
+        st.markdown("---")
+        st.subheader("� Submiteted Registration Details")
+        
+        # Check if we have registration data in session state
+        if 'registration_data' in st.session_state and st.session_state.registration_data:
+            registration_data = st.session_state.registration_data
+            
+            # Business Information
+            with st.expander("🏢 Business Information", expanded=True):
+                business = registration_data.get("business_info", {})
+                if business:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Business Name:** {business.get('business_name', 'Not provided')}")
+                        st.write(f"**Business Type:** {business.get('business_type', 'Not provided')}")
+                        st.write(f"**Email:** {business.get('business_email', 'Not provided')}")
+                        st.write(f"**Phone:** {business.get('business_phone', 'Not provided')}")
+                    with col2:
+                        st.write(f"**Address:** {business.get('business_address', 'Not provided')}")
+                        st.write(f"**Website:** {business.get('website_url', 'Not provided')}")
+                        st.write(f"**Tax ID:** {business.get('tax_id', 'Not provided')}")
+                else:
+                    st.warning("⚠️ Business information not found in session")
+            
+            # Contact Information
+            with st.expander("👤 Contact Information"):
+                contact = registration_data.get("contact_info", {})
+                if contact:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**Primary Contact:**")
+                        st.write(f"• Name: {contact.get('primary_contact_name', 'Not provided')}")
+                        st.write(f"• Email: {contact.get('primary_contact_email', 'Not provided')}")
+                        st.write(f"• Phone: {contact.get('primary_contact_phone', 'Not provided')}")
+                    with col2:
+                        if contact.get('secondary_contact_name'):
+                            st.write("**Secondary Contact:**")
+                            st.write(f"• Name: {contact.get('secondary_contact_name', 'Not provided')}")
+                            st.write(f"• Email: {contact.get('secondary_contact_email', 'Not provided')}")
+                            st.write(f"• Phone: {contact.get('secondary_contact_phone', 'Not provided')}")
+                        else:
+                            st.info("No secondary contact provided")
+                else:
+                    st.warning("⚠️ Contact information not found in session")
+            
+            # Tax Information
+            with st.expander("📋 Tax Information", expanded=True):
+                tax = registration_data.get("tax_info", {})
+                business = registration_data.get("business_info", {})
+                
+                if tax or business:
+                    # Show business name and address for tax purposes
+                    if business.get('business_name'):
+                        st.write(f"**Name:** {business.get('business_name')}")
+                    if business.get('business_address'):
+                        st.write(f"**Address:** {business.get('business_address')}")
+                    
+                    # Show EIN/Tax ID
+                    if business.get('tax_id'):
+                        st.write(f"**EIN:** {business.get('tax_id')}")
+                    
+                    # Show tax classification
+                    if tax.get('tax_classification'):
+                        st.write(f"**Tax Classification:** {tax.get('tax_classification')}")
+                    
+                    # Show W-9 status
+                    if tax.get('w9_form_url'):
+                        st.write(f"**W-9 Form:** ✅ Provided")
+                    else:
+                        st.warning("⚠️ W-9 form not provided - will be required during AWS review")
+                else:
+                    st.error("❌ Tax information not found - Registration may be incomplete!")
+            
+            # Banking Information
+            with st.expander("🏦 Banking Information", expanded=True):
+                banking = registration_data.get("banking_info", {})
+                if banking:
+                    # Account holder and bank name
+                    st.write(f"**Account Name:** {banking.get('account_holder_name', 'Not provided')}")
+                    st.write(f"**Bank Name:** {banking.get('bank_name', 'Not provided')}")
+                    
+                    # Account details
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Account Type:** {banking.get('account_type', 'Not provided')}")
+                        
+                        # Mask account number
+                        account = banking.get('account_number', '')
+                        if account:
+                            account_masked = f"****{account[-4:]}" if len(account) >= 4 else "****"
+                        else:
+                            account_masked = 'Not provided'
+                        st.write(f"**Account Number:** {account_masked}")
+                        
+                    with col2:
+                        # Mask routing numbers
+                        routing = banking.get('routing_number', '')
+                        if routing:
+                            routing_masked = f"****{routing[-4:]}" if len(routing) >= 4 else "****"
+                        else:
+                            routing_masked = 'Not provided'
+                        st.write(f"**ABA Routing Number:** {routing_masked}")
+                        
+                        wire_routing = banking.get('wire_routing_number', routing)
+                        if wire_routing and wire_routing != routing:
+                            wire_masked = f"****{wire_routing[-4:]}" if len(wire_routing) >= 4 else "****"
+                            st.write(f"**Wire Routing Number:** {wire_masked}")
+                    
+                    # Bank address
+                    if banking.get('bank_address'):
+                        st.write(f"**Bank Address:** {banking.get('bank_address')}")
+                    
+                    # SWIFT code for international
+                    if banking.get('swift_code'):
+                        st.write(f"**SWIFT Code:** {banking.get('swift_code')}")
+                    
+                    # EIN if provided in banking
+                    business = registration_data.get("business_info", {})
+                    if business.get('tax_id'):
+                        st.write(f"**EIN:** {business.get('tax_id')}")
+                else:
+                    st.error("❌ Banking information not found - Registration may be incomplete!")
+            
+            # Disbursement Method
+            with st.expander("💳 Disbursement Method"):
+                st.write(f"**Method:** ACH Direct Deposit")
+                st.write(f"**Status:** ✅ Configured")
+                st.info("Payments will be deposited directly to your bank account")
+        else:
+            st.error("❌ Registration data not found in session. The registration may not have been completed properly.")
+            st.info("Please go back and complete the registration form again.")
+        
+        st.markdown("---")
+        
+        # Next steps information
+        st.subheader("📌 Next Steps")
+        st.markdown("""
+        **What happens now:**
+        1. ✅ Your registration has been submitted to AWS
+        2. 🔍 AWS will verify your business information
+        3. 🏦 Banking details will be validated
+        4. 📧 You'll receive email updates on verification status
+        5. ⏱️ Approval typically takes 2-3 business days
+        6. 🎉 Once approved, you can create product listings
+        
+        **Important:**
+        - Check your email regularly for updates from AWS
+        - Respond promptly to any verification requests
+        - Keep your contact information up to date
+        """)
+        
+        st.markdown("---")
         
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🔄 Check Status Again"):
+            if st.button("🔄 Check Status Again", use_container_width=True):
                 st.session_state.current_step = "credentials"
                 st.rerun()
         with col2:
-            if st.button("📄 Create Product Listing"):
+            if st.button("📄 Create Product Listing", type="primary", use_container_width=True):
                 st.session_state.current_step = "gather_context"
                 st.rerun()
 

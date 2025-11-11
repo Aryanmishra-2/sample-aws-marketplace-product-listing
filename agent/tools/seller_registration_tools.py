@@ -502,6 +502,7 @@ class SellerRegistrationTools:
                             pass
                 
                 # Determine verification status based on seller status
+                # For APPROVED sellers, they already have everything completed
                 if seller_status == "APPROVED":
                     verification_status = {
                         "business_profile": "completed",
@@ -529,6 +530,7 @@ class SellerRegistrationTools:
                     ]
                     message = f"Unable to determine seller status for account {account_info['account_id']} - insufficient permissions or API errors"
                 else:
+                    # For NOT_REGISTERED accounts, all steps need to be completed
                     verification_status = {
                         "business_profile": "not_started",
                         "public_profile": "not_started",
@@ -589,6 +591,115 @@ class SellerRegistrationTools:
                 "success": False,
                 "error": str(e),
                 "message": "Failed to check seller status. Please verify your AWS credentials and permissions."
+            }
+    
+    def check_registration_progress(self, registration_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Check the actual progress of seller registration based on provided data
+        
+        Args:
+            registration_data: Optional registration data to check progress
+            
+        Returns:
+            Dict with detailed progress status for each section
+        """
+        try:
+            # Initialize progress tracking
+            progress = {
+                "business_profile": "not_started",
+                "public_profile": "not_started",
+                "tax_information": "not_started",
+                "banking_information": "not_started",
+                "identity_verification": "not_started",
+                "disbursement_method": "not_started"
+            }
+            
+            required_steps = []
+            completed_steps = []
+            
+            if registration_data:
+                # Check business profile
+                business_info = registration_data.get("business_info", {})
+                if business_info and business_info.get("business_name"):
+                    progress["business_profile"] = "completed"
+                    completed_steps.append("Business Profile")
+                else:
+                    required_steps.append("Complete business profile information")
+                
+                # Check public profile (usually same as business)
+                if business_info and business_info.get("business_name"):
+                    progress["public_profile"] = "completed"
+                    completed_steps.append("Public Profile")
+                else:
+                    required_steps.append("Create public profile")
+                
+                # Check tax information
+                tax_info = registration_data.get("tax_info", {})
+                if tax_info and tax_info.get("tax_classification"):
+                    progress["tax_information"] = "completed"
+                    completed_steps.append("Tax Information")
+                else:
+                    progress["tax_information"] = "not_started"
+                    required_steps.append("Provide tax classification and information")
+                
+                # Check banking information
+                banking_info = registration_data.get("banking_info", {})
+                if (banking_info and 
+                    banking_info.get("bank_name") and 
+                    banking_info.get("routing_number") and 
+                    banking_info.get("account_number")):
+                    progress["banking_information"] = "completed"
+                    completed_steps.append("Banking Information")
+                else:
+                    progress["banking_information"] = "not_started"
+                    required_steps.append("Provide complete banking information")
+                
+                # Identity verification is pending until AWS reviews
+                if progress["business_profile"] == "completed" and progress["tax_information"] == "completed":
+                    progress["identity_verification"] = "pending"
+                else:
+                    progress["identity_verification"] = "not_started"
+                    if "identity_verification" not in required_steps:
+                        required_steps.append("Complete business and tax info for identity verification")
+                
+                # Disbursement method depends on banking info
+                if progress["banking_information"] == "completed":
+                    progress["disbursement_method"] = "completed"
+                    completed_steps.append("Disbursement Method")
+                else:
+                    progress["disbursement_method"] = "not_started"
+                    required_steps.append("Configure disbursement method (requires banking info)")
+            else:
+                # No data provided, all steps required
+                required_steps = [
+                    "Complete business profile information",
+                    "Create public profile",
+                    "Provide tax classification and information",
+                    "Provide complete banking information",
+                    "Complete identity verification",
+                    "Configure disbursement method"
+                ]
+            
+            # Calculate overall progress percentage
+            total_steps = len(progress)
+            completed_count = sum(1 for status in progress.values() if status == "completed")
+            progress_percentage = int((completed_count / total_steps) * 100)
+            
+            return {
+                "success": True,
+                "verification_status": progress,
+                "completed_steps": completed_steps,
+                "required_steps": required_steps,
+                "progress_percentage": progress_percentage,
+                "is_complete": len(required_steps) == 0,
+                "message": f"Registration is {progress_percentage}% complete"
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to check registration progress"
             }
     
     def create_business_profile(self, business_info: Dict[str, Any]) -> Dict[str, Any]:
@@ -890,36 +1001,165 @@ class SellerRegistrationTools:
     
     def _validate_tax_info(self, tax_info: Dict[str, Any]) -> Dict[str, Any]:
         """Validate tax information"""
-        required_fields = ["tax_classification", "tax_id", "w9_form_url"]
         errors = []
+        warnings = []
         
-        for field in required_fields:
+        # Required fields
+        required_fields = {
+            "tax_classification": "Tax Classification (Individual/Sole Proprietor, C Corporation, S Corporation, Partnership, LLC, Other)"
+        }
+        
+        for field, description in required_fields.items():
             if field not in tax_info or not tax_info[field]:
-                errors.append(f"Missing tax field: {field}")
+                errors.append(f"Missing required field: {description}")
+        
+        # Validate tax classification
+        if "tax_classification" in tax_info and tax_info["tax_classification"]:
+            valid_classifications = [
+                "Individual/Sole Proprietor", 
+                "C Corporation", 
+                "S Corporation", 
+                "Partnership", 
+                "LLC", 
+                "Trust/Estate",
+                "Other"
+            ]
+            if tax_info["tax_classification"] not in valid_classifications:
+                errors.append(f"Invalid tax classification. Must be one of: {', '.join(valid_classifications)}")
+        
+        # Validate tax ID if provided
+        if "tax_id" in tax_info and tax_info["tax_id"]:
+            tax_id = tax_info["tax_id"].replace("-", "").replace(" ", "")
+            if not (len(tax_id) == 9 and tax_id.isdigit()):
+                errors.append("Tax ID must be 9 digits (EIN/SSN format)")
+        
+        # Check for W-9 form (optional but recommended)
+        if "w9_form_url" not in tax_info or not tax_info.get("w9_form_url"):
+            warnings.append("W-9 form not provided - you'll need to submit this during AWS review")
         
         return {
             "success": len(errors) == 0,
-            "errors": errors
+            "errors": errors,
+            "warnings": warnings
         }
     
     def _validate_banking_info(self, banking_info: Dict[str, Any]) -> Dict[str, Any]:
         """Validate banking information"""
-        required_fields = ["bank_name", "account_type", "routing_number", "account_number"]
         errors = []
+        warnings = []
         
-        for field in required_fields:
+        # Required fields with descriptions
+        required_fields = {
+            "bank_name": "Bank Name",
+            "account_type": "Account Type (Checking or Savings)",
+            "routing_number": "Routing Number (9 digits)",
+            "account_number": "Account Number",
+            "account_holder_name": "Account Holder Name"
+        }
+        
+        for field, description in required_fields.items():
             if field not in banking_info or not banking_info[field]:
-                errors.append(f"Missing banking field: {field}")
+                errors.append(f"Missing required field: {description}")
         
-        # Validate routing number format
-        if "routing_number" in banking_info:
-            routing = banking_info["routing_number"].replace("-", "")
-            if not routing.isdigit() or len(routing) != 9:
-                errors.append("Invalid routing number format (should be 9 digits)")
+        # Validate account type
+        if "account_type" in banking_info and banking_info["account_type"]:
+            valid_types = ["Checking", "Savings", "checking", "savings"]
+            if banking_info["account_type"] not in valid_types:
+                errors.append("Account Type must be either 'Checking' or 'Savings'")
+        
+        # Validate routing number format (US banks)
+        if "routing_number" in banking_info and banking_info["routing_number"]:
+            routing = banking_info["routing_number"].replace("-", "").replace(" ", "")
+            if not routing.isdigit():
+                errors.append("Routing Number must contain only digits")
+            elif len(routing) != 9:
+                errors.append("Routing Number must be exactly 9 digits")
+            else:
+                # Validate routing number checksum (ABA routing number validation)
+                try:
+                    checksum = (
+                        3 * (int(routing[0]) + int(routing[3]) + int(routing[6])) +
+                        7 * (int(routing[1]) + int(routing[4]) + int(routing[7])) +
+                        1 * (int(routing[2]) + int(routing[5]) + int(routing[8]))
+                    )
+                    if checksum % 10 != 0:
+                        warnings.append("Routing Number checksum validation failed - please verify the number is correct")
+                except:
+                    pass
+        
+        # Validate account number
+        if "account_number" in banking_info and banking_info["account_number"]:
+            account = banking_info["account_number"].replace("-", "").replace(" ", "")
+            if not account.isdigit():
+                errors.append("Account Number must contain only digits")
+            elif len(account) < 4 or len(account) > 17:
+                errors.append("Account Number must be between 4 and 17 digits")
+        
+        # Validate account holder name
+        if "account_holder_name" in banking_info and banking_info["account_holder_name"]:
+            if len(banking_info["account_holder_name"]) < 2:
+                errors.append("Account Holder Name must be at least 2 characters")
+        
+        # Check for bank address (optional but recommended)
+        if "bank_address" not in banking_info or not banking_info.get("bank_address"):
+            warnings.append("Bank address not provided - may be required for international transfers")
         
         return {
             "success": len(errors) == 0,
-            "errors": errors
+            "errors": errors,
+            "warnings": warnings
+        }
+    
+    def _validate_disbursement_info(self, disbursement_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate disbursement method information"""
+        errors = []
+        warnings = []
+        
+        # Required fields
+        required_fields = {
+            "method": "Disbursement Method (ACH_DIRECT_DEPOSIT, WIRE_TRANSFER, CHECK)"
+        }
+        
+        for field, description in required_fields.items():
+            if field not in disbursement_info or not disbursement_info[field]:
+                errors.append(f"Missing required field: {description}")
+        
+        # Validate disbursement method
+        if "method" in disbursement_info and disbursement_info["method"]:
+            valid_methods = [
+                "ACH_DIRECT_DEPOSIT",
+                "WIRE_TRANSFER", 
+                "CHECK",
+                "INTERNATIONAL_WIRE"
+            ]
+            if disbursement_info["method"] not in valid_methods:
+                errors.append(f"Invalid disbursement method. Must be one of: {', '.join(valid_methods)}")
+        
+        # Validate account details match banking info
+        if "account_details" in disbursement_info:
+            account_validation = self._validate_banking_info(disbursement_info["account_details"])
+            if not account_validation["success"]:
+                errors.extend(account_validation["errors"])
+            if account_validation.get("warnings"):
+                warnings.extend(account_validation["warnings"])
+        else:
+            errors.append("Account details required for disbursement setup")
+        
+        # Method-specific validations
+        if disbursement_info.get("method") == "WIRE_TRANSFER":
+            if "swift_code" not in disbursement_info.get("account_details", {}):
+                warnings.append("SWIFT code recommended for wire transfers")
+        
+        if disbursement_info.get("method") == "INTERNATIONAL_WIRE":
+            required_international = ["swift_code", "bank_address", "intermediary_bank"]
+            for field in required_international:
+                if field not in disbursement_info.get("account_details", {}):
+                    warnings.append(f"{field} may be required for international wire transfers")
+        
+        return {
+            "success": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings
         }
     
     def validate_complete_registration_info(self, registration_data: Dict[str, Any]) -> Dict[str, Any]:
