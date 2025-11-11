@@ -553,10 +553,6 @@ def credentials_input_screen():
                 if st.button("🚀 Create Product Listing"):
                     st.session_state.current_step = "gather_context"
                     st.rerun()
-            elif seller_status == 'NOT_REGISTERED':
-                if st.button("🚀 Register via API"):
-                    st.session_state.current_step = "registration_details"
-                    st.rerun()
         
         with col5:
             if st.button("ℹ️ View Portal"):
@@ -728,18 +724,18 @@ def check_seller_registration_status():
                     
                     st.divider()
                     
-                    # Manual verification section
-                    st.write("**📋 Seller Profile Validation Required**")
+                    # Seller profile validation section
+                    st.write("**📋 Seller Profile Validation**")
                     st.warning("""
-                    ⚠️ **Before creating products, you must validate your seller profile.**
+                    ⚠️ **Before creating products, you must complete your seller profile in the AWS portal.**
                     
                     AWS Marketplace requires complete tax and payment information before you can list products.
                     """)
                     
                     st.info("""
-                    **Please complete these steps:**
+                    **Please complete these steps in the AWS Marketplace Management Portal:**
                     
-                    1. 🔗 **Open the AWS Marketplace Seller Settings portal:**
+                    1. 🔗 **Open AWS Marketplace Seller Settings:**
                        👉 [AWS Marketplace Seller Settings](https://aws.amazon.com/marketplace/management/seller-settings/account)
                     
                     2. 📋 **Verify Tax Information:**
@@ -755,13 +751,11 @@ def check_seller_registration_status():
                     4. ✅ **Return here and confirm completion below**
                     """)
                     
-                    # Initialize session state for manual verification
-                    if 'tax_verified' not in st.session_state:
-                        st.session_state.tax_verified = False
-                    if 'banking_verified' not in st.session_state:
-                        st.session_state.banking_verified = False
-                    if 'tax_details' not in st.session_state:
-                        st.session_state.tax_details = {}
+                    # Initialize session state for validation checkboxes
+                    if 'tax_info_confirmed' not in st.session_state:
+                        st.session_state.tax_info_confirmed = False
+                    if 'payment_info_confirmed' not in st.session_state:
+                        st.session_state.payment_info_confirmed = False
                     
                     st.divider()
                     st.write("**Validation Checklist:**")
@@ -770,106 +764,34 @@ def check_seller_registration_status():
                     
                     with col1:
                         st.write("**📋 Tax Information**")
-                        tax_verified = st.checkbox(
+                        tax_confirmed = st.checkbox(
                             "I have verified my tax information is complete in the AWS portal",
-                            value=st.session_state.tax_verified,
-                            key="tax_checkbox",
+                            value=st.session_state.tax_info_confirmed,
+                            key="tax_confirm_checkbox",
                             help="Check this ONLY after verifying your tax information in the AWS Marketplace Seller Settings"
                         )
-                        st.session_state.tax_verified = tax_verified
-                        
-                        if tax_verified:
-                            with st.expander("📋 Enter Tax Details (Optional)", expanded=False):
-                                st.write("Enter your tax information for reference:")
-                                
-                                tax_classification = st.selectbox(
-                                    "Tax Classification",
-                                    ["", "Individual/Sole Proprietor", "C Corporation", "S Corporation", 
-                                     "Partnership", "Trust/Estate", "LLC", "Other"],
-                                    index=0 if not st.session_state.tax_details.get('classification') else 
-                                          ["", "Individual/Sole Proprietor", "C Corporation", "S Corporation", 
-                                           "Partnership", "Trust/Estate", "LLC", "Other"].index(
-                                               st.session_state.tax_details.get('classification', ''))
-                                )
-                                
-                                business_name = st.text_input(
-                                    "Business Name",
-                                    value=st.session_state.tax_details.get('business_name', ''),
-                                    placeholder="Your legal business name"
-                                )
-                                
-                                ein = st.text_input(
-                                    "EIN/Tax ID",
-                                    value=st.session_state.tax_details.get('ein', ''),
-                                    placeholder="XX-XXXXXXX",
-                                    help="Your Employer Identification Number"
-                                )
-                                
-                                address = st.text_area(
-                                    "Business Address",
-                                    value=st.session_state.tax_details.get('address', ''),
-                                    placeholder="Street, City, State, ZIP",
-                                    height=80
-                                )
-                                
-                                if st.button("Save Tax Details"):
-                                    st.session_state.tax_details = {
-                                        'classification': tax_classification,
-                                        'business_name': business_name,
-                                        'ein': ein,
-                                        'address': address
-                                    }
-                                    st.success("Tax details saved!")
-                                    st.rerun()
+                        st.session_state.tax_info_confirmed = tax_confirmed
                     
                     with col2:
                         st.write("**💳 Payment Information**")
-                        banking_verified = st.checkbox(
+                        payment_confirmed = st.checkbox(
                             "I have verified my payment information is complete in the AWS portal",
-                            value=st.session_state.banking_verified,
-                            key="banking_checkbox",
+                            value=st.session_state.payment_info_confirmed,
+                            key="payment_confirm_checkbox",
                             help="Check this ONLY after verifying your banking/payment information in the AWS Marketplace Seller Settings"
                         )
-                        st.session_state.banking_verified = banking_verified
+                        st.session_state.payment_info_confirmed = payment_confirmed
                     
                     st.divider()
                     
-                    # Show tax details if saved
-                    if st.session_state.tax_verified and st.session_state.tax_details:
-                        st.write("**📋 Tax Information Summary:**")
-                        with st.expander("View Tax Details", expanded=True):
-                            details = st.session_state.tax_details
-                            if details.get('classification'):
-                                st.write(f"**Tax Classification:** {details['classification']}")
-                            if details.get('business_name'):
-                                st.write(f"**Business Name:** {details['business_name']}")
-                            if details.get('ein'):
-                                # Mask EIN for security
-                                ein_masked = details['ein'][:3] + "****" + details['ein'][-2:] if len(details['ein']) > 5 else "***"
-                                st.write(f"**EIN:** {ein_masked}")
-                            if details.get('address'):
-                                st.write(f"**Address:** {details['address']}")
-                    
-                    st.divider()
-                    
-                    # Show appropriate message and actions based on verification status
-                    if st.session_state.tax_verified and st.session_state.banking_verified:
+                    # Show appropriate message based on validation status
+                    if st.session_state.tax_info_confirmed and st.session_state.payment_info_confirmed:
                         st.success("""
                         ✅ **Validation Complete! Your seller profile is ready.**
                         
                         You have confirmed that both tax and payment information are configured in AWS.
+                        You can now proceed to create product listings.
                         """)
-                        
-                        st.info("""
-                        **You can now proceed to:**
-                        - Create new product listings
-                        - Manage existing products
-                        - View sales and reports
-                        """)
-                        
-                        # Offer to proceed to product creation
-                        st.divider()
-                        st.write("**🚀 Ready to Create Your First Product?**")
                         
                         col_a, col_b, col_c = st.columns([1, 1, 1])
                         
@@ -878,12 +800,11 @@ def check_seller_registration_status():
                                 st.session_state.current_step = "welcome"
                                 st.session_state.seller_profile_validated = True
                                 st.rerun()
-                        
                     else:
                         missing_items = []
-                        if not st.session_state.tax_verified:
+                        if not st.session_state.tax_info_confirmed:
                             missing_items.append("Tax Information")
-                        if not st.session_state.banking_verified:
+                        if not st.session_state.payment_info_confirmed:
                             missing_items.append("Payment Information")
                         
                         st.error(f"""
@@ -893,7 +814,7 @@ def check_seller_registration_status():
                         """)
                         
                         st.warning("""
-                        **You must validate both tax and payment information before creating products.**
+                        **You must confirm both tax and payment information before creating products.**
                         
                         1. Click the link above to open AWS Marketplace Seller Settings
                         2. Verify your tax and payment information are complete
@@ -918,55 +839,53 @@ def check_seller_registration_status():
                 """)
                 
             elif seller_status == 'NOT_REGISTERED':
-                st.info("""
+                st.warning("""
                 📝 **Seller Registration: NOT REGISTERED**
                 
                 Your account is not yet registered as an AWS Marketplace seller.
-                
-                **We'll help you register using AWS APIs directly through this application.**
-                
-                ✨ **What we'll do:**
-                - Create your business profile via AWS API
-                - Set up your public seller profile
-                - Configure tax and banking information
-                - Submit everything to AWS for approval
-                
-                **Estimated time:** 10-15 minutes to complete the forms
-                **AWS Review:** 2-3 business days for approval
                 """)
                 
-                # Check if there's any registration data in progress
-                if 'registration_data' in st.session_state and st.session_state.registration_data:
-                    st.write("---")
-                    st.write("**📊 Current Registration Progress:**")
-                    
-                    # Use the new check_registration_progress method
-                    progress_result = seller_tools.check_registration_progress(st.session_state.registration_data)
-                    
-                    if progress_result.get("success"):
-                        # Show progress bar
-                        progress_pct = progress_result.get("progress_percentage", 0)
-                        st.progress(progress_pct / 100)
-                        st.write(f"**{progress_pct}% Complete**")
-                        
-                        # Show status by section
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.write("**Completed:**")
-                            for step in progress_result.get("completed_steps", []):
-                                st.write(f"✅ {step}")
-                        
-                        with col2:
-                            st.write("**Still Required:**")
-                            for step in progress_result.get("required_steps", []):
-                                st.write(f"❌ {step}")
-                else:
-                    st.write("---")
-                    st.write("**📋 Registration Status:**")
-                    st.write("❌ Business Profile: Not started")
-                    st.write("❌ Tax Information: Not started")
-                    st.write("❌ Banking Information: Not started")
-                    st.write("❌ Disbursement Method: Not started")
+                st.info("""
+                **To become an AWS Marketplace seller, you need to:**
+                
+                1. 🏢 **Create your Business Profile** in the AWS Marketplace Management Portal
+                2. 📋 **Complete Tax Information** (W-9 or W-8 form)
+                3. 💳 **Set up Payment Information** (Bank account details)
+                4. ✅ **Submit for AWS Review** (2-3 business days)
+                """)
+                
+                st.divider()
+                st.write("### 🚀 Get Started with Seller Registration")
+                
+                st.markdown("""
+                **Click the button below to create your seller profile:**
+                
+                This will take you to the AWS Marketplace Seller Registration portal where you can:
+                - Register your business information
+                - Complete required tax forms
+                - Set up payment and disbursement methods
+                - Submit your application for AWS review
+                
+                **Estimated time:** 15-20 minutes
+                """)
+                
+                # Prominent button to redirect to registration portal
+                col_left, col_center, col_right = st.columns([1, 2, 1])
+                with col_center:
+                    st.link_button(
+                        "🏢 Create Business Profile →",
+                        "https://aws.amazon.com/marketplace/management/seller-settings/register",
+                        type="primary",
+                        use_container_width=True
+                    )
+                
+                st.divider()
+                st.caption("""
+                💡 **After completing registration in the portal:**
+                - Return to this page
+                - Click "🔄 Re-validate Credentials" to refresh your seller status
+                - Once approved, you can create product listings
+                """)
                 
             else:
                 st.warning(f"❓ **Seller Registration: {seller_status}**")
@@ -981,615 +900,6 @@ def check_seller_registration_status():
     except Exception as e:
         st.error(f"❌ Error checking seller status: {str(e)}")
         return 'ERROR'
-
-def registration_details_screen():
-    """Collect seller registration details based on organization type"""
-    st.title("🚀 AWS Marketplace Seller Registration via API")
-    
-    # Add navigation buttons at the top
-    show_navigation_buttons(show_back=True, show_home=True, back_step="credentials")
-    st.divider()
-    
-    if 'account_validation' not in st.session_state:
-        st.error("❌ Account validation required. Please go back to credentials step.")
-        return
-    
-    account_info = st.session_state.account_validation
-    region_type = account_info.get('region_type', 'UNKNOWN')
-    
-    st.success("""
-    **🎯 API-Driven Registration Process**
-    
-    We'll register your account as an AWS Marketplace seller using direct AWS API calls.
-    This ensures faster processing and immediate submission to AWS for review.
-    """)
-    
-    st.info(f"""
-    **Account**: {account_info.get('account_id')}  
-    **Organization**: {account_info.get('organization')}  
-    **Registration Type**: {region_type}
-    """)
-    
-    # Show appropriate registration form based on region type
-    if region_type == 'AWS_INDIA':
-        show_india_registration_form()
-    else:
-        show_standard_registration_form()
-
-def show_india_registration_form():
-    """Show India-specific registration form"""
-    st.markdown("### 🇮🇳 AWS India Seller Registration via API")
-    st.info("📡 **API-Driven Process**: Your information will be submitted directly to AWS via official APIs for immediate processing.")
-    
-    with st.form("india_registration_form"):
-        st.subheader("Business Information")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            business_name = st.text_input("Legal Business Name *")
-            business_type = st.selectbox(
-                "Business Type *",
-                ["Private Limited Company", "Public Limited Company", "Partnership", "LLP", "Sole Proprietorship", "Other"]
-            )
-            pan_number = st.text_input("PAN Number *", placeholder="AAAAA9999A")
-            gstin = st.text_input("GSTIN (if applicable)", placeholder="22AAAAA0000A1Z5")
-            
-        with col2:
-            business_address = st.text_area("Business Address *")
-            business_phone = st.text_input("Business Phone *", placeholder="+91-XXXXXXXXXX")
-            business_email = st.text_input("Business Email *")
-            website_url = st.text_input("Website URL")
-        
-        st.subheader("Contact Information")
-        
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            primary_contact_name = st.text_input("Primary Contact Name *")
-            primary_contact_email = st.text_input("Primary Contact Email *")
-            primary_contact_phone = st.text_input("Primary Contact Phone *")
-            
-        with col4:
-            secondary_contact_name = st.text_input("Secondary Contact Name")
-            secondary_contact_email = st.text_input("Secondary Contact Email")
-            secondary_contact_phone = st.text_input("Secondary Contact Phone")
-        
-        st.subheader("Banking Information")
-        
-        col5, col6 = st.columns(2)
-        
-        with col5:
-            bank_name = st.text_input("Bank Name *")
-            account_number = st.text_input("Account Number *", type="password")
-            ifsc_code = st.text_input("IFSC Code *")
-            
-        with col6:
-            account_holder_name = st.text_input("Account Holder Name *")
-            account_type = st.selectbox("Account Type *", ["Current", "Savings"])
-            swift_code = st.text_input("SWIFT Code (for international transfers)")
-        
-        st.subheader("Compliance & Documentation")
-        
-        st.checkbox("I confirm that all provided information is accurate and complete")
-        st.checkbox("I agree to comply with AWS Marketplace policies and Indian regulations")
-        st.checkbox("I understand that false information may result in account suspension")
-        
-        submitted = st.form_submit_button("🚀 Submit India Registration")
-        
-        if submitted:
-            # Validate and process India registration
-            registration_data = {
-                "business_info": {
-                    "business_name": business_name,
-                    "business_type": business_type,
-                    "business_address": business_address,
-                    "business_phone": business_phone,
-                    "business_email": business_email,
-                    "website_url": website_url,
-                    "pan_number": pan_number,
-                    "gstin": gstin
-                },
-                "contact_info": {
-                    "primary_contact_name": primary_contact_name,
-                    "primary_contact_email": primary_contact_email,
-                    "primary_contact_phone": primary_contact_phone,
-                    "secondary_contact_name": secondary_contact_name,
-                    "secondary_contact_email": secondary_contact_email,
-                    "secondary_contact_phone": secondary_contact_phone
-                },
-                "banking_info": {
-                    "bank_name": bank_name,
-                    "account_number": account_number,
-                    "ifsc_code": ifsc_code,
-                    "account_holder_name": account_holder_name,
-                    "account_type": account_type,
-                    "swift_code": swift_code
-                },
-                "region_type": "AWS_INDIA"
-            }
-            
-            process_seller_registration(registration_data)
-
-def show_standard_registration_form():
-    """Show standard (AWS Inc) registration form"""
-    st.markdown('<div class="registration-section">', unsafe_allow_html=True)
-    st.markdown("### 🇺🇸 AWS Marketplace Seller Registration")
-    
-    # Amazon-style breadcrumb
-    st.markdown('<div style="color: #565959; font-size: 12px; margin-bottom: 16px;">AWS Marketplace > Seller Registration > Business Information</div>', unsafe_allow_html=True)
-    
-    st.info("📡 **Secure API Integration**: Your information will be submitted directly to AWS via official APIs for immediate processing and enhanced security.")
-    
-    # Show validation requirements
-    with st.expander("📋 Field Requirements & Validation Rules", expanded=False):
-        st.markdown("""
-        **Required Fields (marked with *):**
-        - All business information fields
-        - Primary contact information
-        - Banking information
-        - Tax classification
-        
-        **Validation Rules:**
-        - **Email**: Must be valid format (contains @ and .)
-        - **Tax ID**: Must be 9 digits (EIN/SSN format)
-        - **Phone Numbers**: Must be 10 digits
-        - **Business Address**: Complete address required
-        
-        **Tips:**
-        - Use format XX-XXXXXXX for Tax ID
-        - Use format +1-XXX-XXX-XXXX for phone numbers
-        - Ensure all required fields are filled before submitting
-        """)
-    
-    with st.form("standard_registration_form"):
-        st.markdown('<h3 style="color: #0f1111; font-weight: 600; margin-bottom: 16px;">🏢 Business Information</h3>', unsafe_allow_html=True)
-        st.markdown('<hr style="margin: 16px 0; border: none; height: 1px; background-color: #d5d9d9;">', unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            business_name = st.text_input("Legal Business Name *")
-            business_type = st.selectbox(
-                "Business Type *",
-                ["Corporation", "LLC", "Partnership", "Sole Proprietorship", "Other"]
-            )
-            tax_id = st.text_input("Tax ID (EIN/SSN) *", placeholder="XX-XXXXXXX", help="9-digit Employer Identification Number or Social Security Number")
-            
-        with col2:
-            business_address = st.text_area("Business Address *")
-            business_phone = st.text_input("Business Phone *", placeholder="+1-XXX-XXX-XXXX", help="10-digit US phone number")
-            business_email = st.text_input("Business Email *", help="Valid business email address")
-            website_url = st.text_input("Website URL")
-        
-        st.subheader("Contact Information")
-        
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            primary_contact_name = st.text_input("Primary Contact Name *")
-            primary_contact_email = st.text_input("Primary Contact Email *")
-            primary_contact_phone = st.text_input("Primary Contact Phone *")
-            
-        with col4:
-            secondary_contact_name = st.text_input("Secondary Contact Name")
-            secondary_contact_email = st.text_input("Secondary Contact Email")
-            secondary_contact_phone = st.text_input("Secondary Contact Phone")
-        
-        st.subheader("Banking Information")
-        
-        col5, col6 = st.columns(2)
-        
-        with col5:
-            bank_name = st.text_input("Bank Name *")
-            routing_number = st.text_input("Routing Number *")
-            account_number = st.text_input("Account Number *", type="password")
-            
-        with col6:
-            account_holder_name = st.text_input("Account Holder Name *")
-            account_type = st.selectbox("Account Type *", ["Checking", "Savings"])
-        
-        st.subheader("Tax Information")
-        
-        tax_classification = st.selectbox(
-            "Tax Classification *",
-            ["Individual/Sole Proprietor", "C Corporation", "S Corporation", "Partnership", "LLC", "Other"]
-        )
-        
-        st.subheader("Compliance")
-        
-        st.checkbox("I confirm that all provided information is accurate and complete")
-        st.checkbox("I agree to comply with AWS Marketplace policies and US regulations")
-        st.checkbox("I understand that false information may result in account suspension")
-        
-        submitted = st.form_submit_button("🚀 Submit Standard Registration")
-        
-        if submitted:
-            # Client-side validation before submission
-            validation_errors = []
-            
-            # Required field validation
-            required_fields = {
-                "Legal Business Name": business_name,
-                "Business Address": business_address,
-                "Business Phone": business_phone,
-                "Business Email": business_email,
-                "Tax ID": tax_id,
-                "Primary Contact Name": primary_contact_name,
-                "Primary Contact Email": primary_contact_email,
-                "Primary Contact Phone": primary_contact_phone,
-                "Bank Name": bank_name,
-                "Routing Number": routing_number,
-                "Account Number": account_number,
-                "Account Holder Name": account_holder_name
-            }
-            
-            for field_name, field_value in required_fields.items():
-                if not field_value or not field_value.strip():
-                    validation_errors.append(f"Required field missing: {field_name}")
-            
-            # Email format validation
-            import re
-            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-            
-            if business_email and not re.match(email_pattern, business_email):
-                validation_errors.append("Invalid business email format")
-            
-            if primary_contact_email and not re.match(email_pattern, primary_contact_email):
-                validation_errors.append("Invalid primary contact email format")
-            
-            # Tax ID validation
-            if tax_id:
-                tax_id_clean = tax_id.replace("-", "").replace(" ", "")
-                if not (len(tax_id_clean) == 9 and tax_id_clean.isdigit()):
-                    validation_errors.append("Tax ID should be 9 digits (EIN/SSN format: XX-XXXXXXX)")
-            
-            # Phone validation
-            def validate_phone(phone, field_name):
-                if phone:
-                    phone_clean = re.sub(r'[^\d]', '', phone)
-                    if len(phone_clean) != 10:
-                        validation_errors.append(f"{field_name} should be 10 digits")
-            
-            validate_phone(business_phone, "Business Phone")
-            validate_phone(primary_contact_phone, "Primary Contact Phone")
-            
-            # Show validation errors if any
-            if validation_errors:
-                st.error("❌ Please fix the following issues before submitting:")
-                for error in validation_errors:
-                    st.markdown(f"🔴 {error}")
-                return
-            # Validate and process standard registration
-            registration_data = {
-                "business_info": {
-                    "business_name": business_name,
-                    "business_type": business_type,
-                    "business_address": business_address,
-                    "business_phone": business_phone,
-                    "business_email": business_email,
-                    "website_url": website_url,
-                    "tax_id": tax_id
-                },
-                "contact_info": {
-                    "primary_contact_name": primary_contact_name,
-                    "primary_contact_email": primary_contact_email,
-                    "primary_contact_phone": primary_contact_phone,
-                    "secondary_contact_name": secondary_contact_name,
-                    "secondary_contact_email": secondary_contact_email,
-                    "secondary_contact_phone": secondary_contact_phone
-                },
-                "banking_info": {
-                    "bank_name": bank_name,
-                    "routing_number": routing_number,
-                    "account_number": account_number,
-                    "account_holder_name": account_holder_name,
-                    "account_type": account_type
-                },
-                "tax_info": {
-                    "tax_classification": tax_classification
-                },
-                "region_type": "AWS_INC"
-            }
-            
-            process_seller_registration(registration_data)
-    
-    st.markdown('</div>', unsafe_allow_html=True)  # Close registration-section container
-
-def process_seller_registration(registration_data):
-    """Process seller registration using AWS APIs"""
-    if 'aws_credentials' not in st.session_state:
-        st.error("❌ AWS credentials not available")
-        return
-    
-    try:
-        # Initialize seller registration tools
-        seller_tools = SellerRegistrationTools(
-            region='us-east-1',
-            aws_access_key_id=st.session_state.aws_credentials['access_key'],
-            aws_secret_access_key=st.session_state.aws_credentials['secret_key'],
-            aws_session_token=st.session_state.aws_credentials['session_token']
-        )
-        
-        # Pre-validation: Check all required sections are present
-        st.write("🔍 Pre-validating registration data...")
-        
-        required_sections = {
-            "business_info": "Business Information",
-            "contact_info": "Contact Information",
-            "tax_info": "Tax Information",
-            "banking_info": "Banking Information"
-        }
-        
-        missing_sections = []
-        for section_key, section_name in required_sections.items():
-            if section_key not in registration_data or not registration_data[section_key]:
-                missing_sections.append(section_name)
-        
-        if missing_sections:
-            st.error(f"❌ Missing required sections: {', '.join(missing_sections)}")
-            st.info("Please ensure all sections are filled out before submitting.")
-            return
-        
-        # Validate each section has required data
-        if not registration_data["business_info"].get("business_name"):
-            st.error("❌ Business name is required")
-            return
-        
-        if not registration_data["tax_info"].get("tax_classification"):
-            st.error("❌ Tax classification is required")
-            return
-        
-        if not registration_data["banking_info"].get("bank_name"):
-            st.error("❌ Banking information is incomplete")
-            return
-        
-        st.success("✅ Pre-validation passed")
-        
-        with st.spinner("🚀 Processing seller registration..."):
-            # Step 1: Create business profile
-            st.write("📝 Creating business profile...")
-            # Merge business_info and contact_info for validation
-            business_profile_data = {
-                **registration_data["business_info"],
-                **registration_data["contact_info"]
-            }
-            business_result = seller_tools.create_business_profile(business_profile_data)
-            
-            if business_result.get("success"):
-                st.success(f"✅ Business profile created: {business_result.get('message', 'Successfully created')}")
-            else:
-                st.error("❌ Business profile creation failed:")
-                
-                # Show specific validation errors if available
-                if business_result.get("errors"):
-                    st.markdown("**Please fix the following issues:**")
-                    for error in business_result["errors"]:
-                        st.markdown(f"🔴 {error}")
-                
-                # Show warnings if available
-                if business_result.get("warnings"):
-                    st.markdown("**Warnings:**")
-                    for warning in business_result["warnings"]:
-                        st.markdown(f"🟡 {warning}")
-                
-                # Show general error message if no specific errors
-                if not business_result.get("errors") and not business_result.get("warnings"):
-                    error_msg = business_result.get('error') or business_result.get('message') or 'Unknown error occurred'
-                    st.markdown(f"🔴 {error_msg}")
-                
-                return
-            
-            # Step 2: Create public profile
-            st.write("🌐 Creating public profile...")
-            public_profile_data = {
-                "company_name": registration_data["business_info"]["business_name"],
-                "company_description": f"AWS Marketplace seller - {registration_data['business_info']['business_name']}",
-                "website_url": registration_data["business_info"].get("website_url", ""),
-                "support_email": registration_data["contact_info"]["primary_contact_email"],
-                "support_phone": registration_data["contact_info"]["primary_contact_phone"]
-            }
-            
-            public_result = seller_tools.create_public_profile(public_profile_data)
-            
-            if public_result.get("success"):
-                st.success(f"✅ Public profile created: {public_result.get('message', 'Successfully created')}")
-            else:
-                error_msg = public_result.get('error') or public_result.get('message') or 'Unknown error occurred'
-                st.error(f"❌ Public profile creation failed: {error_msg}")
-                return
-            
-            # Step 3: Validate tax information
-            st.write("� UValidating tax information...")
-            tax_validation = seller_tools._validate_tax_info(registration_data.get("tax_info", {}))
-            
-            if not tax_validation.get("success"):
-                st.error("❌ Tax information validation failed:")
-                for error in tax_validation.get("errors", []):
-                    st.markdown(f"🔴 {error}")
-                return
-            
-            if tax_validation.get("warnings"):
-                st.warning("⚠️ Tax information warnings:")
-                for warning in tax_validation.get("warnings", []):
-                    st.markdown(f"🟡 {warning}")
-            
-            # Step 4: Validate banking information
-            st.write("🏦 Validating banking information...")
-            banking_validation = seller_tools._validate_banking_info(registration_data["banking_info"])
-            
-            if not banking_validation.get("success"):
-                st.error("❌ Banking information validation failed:")
-                for error in banking_validation.get("errors", []):
-                    st.markdown(f"🔴 {error}")
-                return
-            
-            if banking_validation.get("warnings"):
-                st.warning("⚠️ Banking information warnings:")
-                for warning in banking_validation.get("warnings", []):
-                    st.markdown(f"🟡 {warning}")
-            
-            # Step 5: Update tax and banking information
-            st.write("💰 Updating tax and banking information...")
-            tax_banking_data = {
-                "tax_info": registration_data.get("tax_info", {}),
-                "banking_info": registration_data["banking_info"]
-            }
-            
-            tax_banking_result = seller_tools.update_tax_banking_info(tax_banking_data)
-            
-            if tax_banking_result.get("success"):
-                st.success(f"✅ Tax and banking info updated: {tax_banking_result.get('message', 'Successfully updated')}")
-            else:
-                error_msg = tax_banking_result.get('error') or tax_banking_result.get('message') or 'Unknown error occurred'
-                st.error(f"❌ Tax and banking update failed: {error_msg}")
-                return
-            
-            # Step 4: Validate information
-            st.write("🔍 Validating information...")
-            validation_result = seller_tools.validate_information()
-            
-            if validation_result.get("success"):
-                st.success(f"✅ Information validation initiated: {validation_result.get('message', 'Validation started')}")
-            else:
-                warning_msg = validation_result.get('message') or validation_result.get('error') or 'Validation status unclear'
-                st.warning(f"⚠️ Validation status: {warning_msg}")
-            
-            # Step 7: Validate and setup disbursement method
-            st.write("💳 Validating disbursement method...")
-            disbursement_data = {
-                "method": "ACH_DIRECT_DEPOSIT",
-                "account_details": registration_data["banking_info"]
-            }
-            
-            disbursement_validation = seller_tools._validate_disbursement_info(disbursement_data)
-            
-            if not disbursement_validation.get("success"):
-                st.error("❌ Disbursement method validation failed:")
-                for error in disbursement_validation.get("errors", []):
-                    st.markdown(f"🔴 {error}")
-                return
-            
-            if disbursement_validation.get("warnings"):
-                st.warning("⚠️ Disbursement method warnings:")
-                for warning in disbursement_validation.get("warnings", []):
-                    st.markdown(f"🟡 {warning}")
-            
-            st.write("💳 Setting up disbursement method...")
-            disbursement_result = seller_tools.select_disbursement_method(disbursement_data)
-            
-            if disbursement_result.get("success"):
-                st.success(f"✅ Disbursement method configured: {disbursement_result.get('message', 'Successfully configured')}")
-            else:
-                error_msg = disbursement_result.get('error') or disbursement_result.get('message') or 'Unknown error occurred'
-                st.error(f"❌ Disbursement setup failed: {error_msg}")
-                return
-            
-            # Display comprehensive registration summary
-            st.success("✅ All validation checks passed!")
-            
-            st.markdown("---")
-            st.subheader("📋 Registration Summary")
-            
-            # Business Information
-            with st.expander("🏢 Business Information", expanded=True):
-                business = registration_data["business_info"]
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"**Business Name:** {business.get('business_name', 'N/A')}")
-                    st.write(f"**Business Type:** {business.get('business_type', 'N/A')}")
-                    st.write(f"**Email:** {business.get('business_email', 'N/A')}")
-                    st.write(f"**Phone:** {business.get('business_phone', 'N/A')}")
-                with col2:
-                    st.write(f"**Address:** {business.get('business_address', 'N/A')}")
-                    st.write(f"**Website:** {business.get('website_url', 'N/A')}")
-                    st.write(f"**Tax ID:** {business.get('tax_id', 'N/A')}")
-            
-            # Contact Information
-            with st.expander("👤 Contact Information"):
-                contact = registration_data["contact_info"]
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write("**Primary Contact:**")
-                    st.write(f"Name: {contact.get('primary_contact_name', 'N/A')}")
-                    st.write(f"Email: {contact.get('primary_contact_email', 'N/A')}")
-                    st.write(f"Phone: {contact.get('primary_contact_phone', 'N/A')}")
-                with col2:
-                    if contact.get('secondary_contact_name'):
-                        st.write("**Secondary Contact:**")
-                        st.write(f"Name: {contact.get('secondary_contact_name', 'N/A')}")
-                        st.write(f"Email: {contact.get('secondary_contact_email', 'N/A')}")
-                        st.write(f"Phone: {contact.get('secondary_contact_phone', 'N/A')}")
-            
-            # Tax Information
-            with st.expander("📋 Tax Information", expanded=True):
-                tax = registration_data["tax_info"]
-                st.write(f"**Tax Classification:** {tax.get('tax_classification', 'N/A')}")
-                if tax.get('w9_form_url'):
-                    st.write(f"**W-9 Form:** Provided")
-                else:
-                    st.warning("⚠️ W-9 form not provided - will be required during AWS review")
-            
-            # Banking Information
-            with st.expander("🏦 Banking Information", expanded=True):
-                banking = registration_data["banking_info"]
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"**Bank Name:** {banking.get('bank_name', 'N/A')}")
-                    st.write(f"**Account Type:** {banking.get('account_type', 'N/A')}")
-                    st.write(f"**Account Holder:** {banking.get('account_holder_name', 'N/A')}")
-                with col2:
-                    # Mask sensitive information
-                    routing = banking.get('routing_number', 'N/A')
-                    if routing and routing != 'N/A':
-                        routing_masked = f"****{routing[-4:]}"
-                    else:
-                        routing_masked = 'N/A'
-                    
-                    account = banking.get('account_number', 'N/A')
-                    if account and account != 'N/A':
-                        account_masked = f"****{account[-4:]}"
-                    else:
-                        account_masked = 'N/A'
-                    
-                    st.write(f"**Routing Number:** {routing_masked}")
-                    st.write(f"**Account Number:** {account_masked}")
-            
-            # Disbursement Method
-            with st.expander("💳 Disbursement Method"):
-                st.write(f"**Method:** ACH Direct Deposit")
-                st.write(f"**Status:** Configured")
-            
-            st.markdown("---")
-            
-            # Final success message
-            st.balloons()
-            st.success("""
-            🎉 **Seller Registration Completed Successfully!**
-            
-            Your seller registration has been submitted to AWS for review.
-            
-            **Next Steps:**
-            1. AWS will review your information (2-3 business days)
-            2. You'll receive email updates on the status
-            3. Once approved, you can create product listings
-            
-            **What happens now:**
-            - Identity verification process will begin
-            - Banking information will be verified
-            - You'll receive confirmation emails
-            """)
-            
-            # Store registration completion and data in session state
-            st.session_state.registration_completed = True
-            st.session_state.registration_data = registration_data  # Store the registration data
-            st.session_state.current_step = "registration_complete"
-            
-            if st.button("📧 Check Registration Status"):
-                st.rerun()
-    
-    except Exception as e:
-        st.error(f"❌ Registration processing failed: {str(e)}")
 
 def init_session_state():
     """Initialize session state"""
@@ -1781,7 +1091,7 @@ def welcome_screen():
         st.warning("""
         ⚠️ **Seller Profile Validation Required**
         
-        Before creating products, you must validate your tax and payment information.
+        Before creating products, you must confirm your tax and payment information.
         """)
         
         st.info("""
@@ -3849,8 +3159,6 @@ def show_navigation_buttons(show_back=True, show_home=True, back_step=None):
             # Define step sequence for back navigation
             step_sequence = [
                 "credentials",
-                "registration_details", 
-                "registration_complete",
                 "welcome",
                 "seller_registration",
                 "registration_portal",
@@ -3920,11 +3228,10 @@ def main():
         # Show progress
         steps = {
             "credentials": "🔐 Credentials",
-            "registration_details": "📝 Registration",
             "gather_context": "📄 Product Info",
-            "analyze_product": "🔍 AI Analysis",
-            "review_suggestions": "📝 Review",
-            "create_listing": "🚀 Create"
+            "analyze_product": "� AI Acnalysis",
+            "review_suggestions": "� Revliew",
+            "create_listing": "� CreaRte"
         }
         
         current = st.session_state.current_step
@@ -3995,14 +3302,11 @@ def main():
     if current_step == "credentials":
         print(f"[DEBUG] Rendering credentials_input_screen")
         credentials_input_screen()
-    elif current_step == "registration_details":
-        print(f"[DEBUG] Rendering registration_details_screen")
-        registration_details_screen()
     elif current_step == "registration_complete":
         st.title("✅ Registration Complete!")
         
         # Add navigation buttons at the top
-        show_navigation_buttons(show_back=True, show_home=True, back_step="registration_details")
+        show_navigation_buttons(show_back=True, show_home=True, back_step="credentials")
         st.divider()
         
         st.success("🎉 Your seller registration has been submitted successfully!")
