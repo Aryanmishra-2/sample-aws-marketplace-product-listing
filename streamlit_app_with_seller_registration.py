@@ -395,16 +395,14 @@ def validate_aws_account_region(access_key, secret_key, session_token=None):
         region_type = 'UNKNOWN'
         organization = 'Unknown'
         
-        # Check for AWS Inc patterns
-        if (account_id.startswith(('123456789', '533719170361', '518237894409')) or 
-            'aws.amazon.com' in user_arn.lower() or
+        # Check for AWS Inc patterns based on ARN
+        if ('aws.amazon.com' in user_arn.lower() or
             'amazon.com' in user_arn.lower()):
             region_type = 'AWS_INC'
             organization = 'Amazon Web Services Inc.'
         
-        # Check for AWS India patterns
-        elif (account_id.startswith(('797583073197', '999999999')) or
-              'aws.amazon.in' in user_arn.lower() or
+        # Check for AWS India patterns based on ARN
+        elif ('aws.amazon.in' in user_arn.lower() or
               'amazon.in' in user_arn.lower()):
             region_type = 'AWS_INDIA'
             organization = 'Amazon Web Services India Pvt Ltd'
@@ -719,13 +717,45 @@ def check_seller_registration_status():
                 if account_details.get('success'):
                     products_count = account_details.get('owned_products_count', 0)
                     
-                    # Show products count if any
-                    if products_count > 0:
-                        st.write(f"� **Arctive Products:** {products_count}")
-                    
                     st.divider()
                     
-                    # Seller profile validation section
+                    # SCENARIO 1: Seller with existing products - skip validation
+                    if products_count > 0:
+                        st.success(f"""
+                        ✅ **Seller Profile Complete!**
+                        
+                        Your account has {products_count} existing product(s). This confirms your seller profile is fully configured.
+                        """)
+                        
+                        st.info("""
+                        **Your seller account is ready to:**
+                        - Create new product listings
+                        - Manage existing products
+                        - View sales and reports
+                        """)
+                        
+                        st.divider()
+                        st.write("**🚀 Ready to Create a New Product?**")
+                        
+                        col_a, col_b, col_c = st.columns([1, 1, 1])
+                        
+                        with col_b:
+                            if st.button("📦 Create New Product Listing", type="primary", use_container_width=True):
+                                st.session_state.current_step = "welcome"
+                                st.session_state.seller_profile_validated = True
+                                st.rerun()
+                        
+                        # Show link to manage existing products
+                        st.divider()
+                        st.markdown("""
+                        **📋 Manage Existing Products:**
+                        
+                        👉 [AWS Marketplace Management Portal](https://aws.amazon.com/marketplace/management/products)
+                        """)
+                        
+                        return seller_status
+                    
+                    # SCENARIO 2: Seller registered but no products - require validation
                     st.write("**📋 Seller Profile Validation**")
                     st.warning("""
                     ⚠️ **Before creating products, you must complete your seller profile in the AWS portal.**
