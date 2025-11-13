@@ -366,51 +366,65 @@ class SellerRegistrationTools:
                         MaxResults=1
                     )
                     
-                    # Successfully listed change sets - likely a registered seller
-                    # But verify by checking if they can list entities
-                    seller_status = "APPROVED"
-                    marketplace_accessible = True
-                    can_list_entities = False
+                    # Check if there are any change sets - this is a better indicator
+                    # Unregistered accounts might be able to call the API but will have empty results
+                    has_changesets = bool(changeset_response.get("ChangeSetSummaryList"))
+                    
+                    # Try to list entities to check if account has marketplace activity
+                    has_entities = False
+                    try:
+                        test_response = self.marketplace_client.list_entities(
+                            Catalog="AWSMarketplace",
+                            EntityType="SaaSProduct",
+                            MaxResults=1
+                        )
+                        has_entities = bool(test_response.get("EntitySummaryList"))
+                    except Exception:
+                        has_entities = False
+                    
+                    # If BOTH changesets and entities are empty, account is not registered
+                    # Even though the API calls succeed, empty results = not a seller
+                    if not has_changesets and not has_entities:
+                        seller_status = "NOT_REGISTERED"
+                        marketplace_accessible = False
+                    else:
+                        seller_status = "APPROVED"
+                        marketplace_accessible = True
                     
                     # Try to get owned products count by checking each entity
-                    try:
-                        for product_type in ["SaaSProduct", "AmiProduct", "ContainerProduct"]:
-                            try:
-                                entities_response = self.marketplace_client.list_entities(
-                                    Catalog="AWSMarketplace",
-                                    EntityType=product_type,
-                                    MaxResults=50
-                                )
-                                
-                                # If we can list entities, they're a confirmed seller
-                                can_list_entities = True
-                                
-                                if entities_response.get("EntitySummaryList"):
-                                    # Check each entity to verify ownership
-                                    for entity in entities_response["EntitySummaryList"]:
-                                        try:
-                                            # Describe entity to get ownership details
-                                            entity_details = self.marketplace_client.describe_entity(
-                                                Catalog="AWSMarketplace",
-                                                EntityId=entity["EntityId"]
-                                            )
-                                            
-                                            # Check if this account owns the product via EntityArn
-                                            entity_arn = entity_details.get("EntityArn", "")
-                                            if account_info["account_id"] in entity_arn:
-                                                owned_products.append(entity["EntityId"])
-                                        except Exception:
-                                            # Can't describe this entity, skip it
-                                            continue
-                            except Exception:
-                                # Can't list this product type, try next
-                                continue
-                    except Exception:
-                        pass
-                    
-                    # Verification: If they can list changesets but NOT entities, likely not a seller
-                    if not can_list_entities:
-                        seller_status = "NOT_REGISTERED"
+                    # Only check for products if we determined they're approved
+                    if seller_status == "APPROVED":
+                        try:
+                            for product_type in ["SaaSProduct", "AmiProduct", "ContainerProduct"]:
+                                try:
+                                    entities_response = self.marketplace_client.list_entities(
+                                        Catalog="AWSMarketplace",
+                                        EntityType=product_type,
+                                        MaxResults=50
+                                    )
+                                    
+                                    if entities_response.get("EntitySummaryList"):
+                                        # Check each entity to verify ownership
+                                        for entity in entities_response["EntitySummaryList"]:
+                                            try:
+                                                # Describe entity to get ownership details
+                                                entity_details = self.marketplace_client.describe_entity(
+                                                    Catalog="AWSMarketplace",
+                                                    EntityId=entity["EntityId"]
+                                                )
+                                                
+                                                # Check if this account owns the product via EntityArn
+                                                entity_arn = entity_details.get("EntityArn", "")
+                                                if account_info["account_id"] in entity_arn:
+                                                    owned_products.append(entity["EntityId"])
+                                            except Exception:
+                                                # Can't describe this entity, skip it
+                                                continue
+                                except Exception:
+                                    # Can't list this product type, try next
+                                    continue
+                        except Exception:
+                            pass
                         
                 except Exception as changeset_error:
                     # Check the specific error to understand why it failed
