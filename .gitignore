@@ -52,6 +52,11 @@ logs/
 .coverage
 htmlcov/
 
+# Test files (root level only)
+/test_*.py
+/test_integration.py
+/test_seller_*.py
+
 # Streamlit
 .streamlit/
 
