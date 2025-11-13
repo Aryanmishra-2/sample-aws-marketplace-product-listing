@@ -623,6 +623,7 @@ def credentials_input_screen():
         
         access_key = st.text_input(
             "AWS Access Key ID *",
+            type="password",
             placeholder="AKIA...",
             help="Your AWS Access Key ID (starts with AKIA)"
         )
@@ -748,7 +749,11 @@ def check_seller_registration_status():
                        - Check that your routing number and account number are correct
                        - Ensure disbursement method is selected
                     
-                    4. ✅ **Return here and confirm completion below**
+                    4. ✅ **Verify Account Status:**
+                       - Check that the portal shows "Account status: Publish paid and free products"
+                       - This confirms you can publish both free and paid products
+                    
+                    5. ✅ **Return here and confirm completion below**
                     """)
                     
                     # Initialize session state for validation checkboxes
@@ -756,16 +761,18 @@ def check_seller_registration_status():
                         st.session_state.tax_info_confirmed = False
                     if 'payment_info_confirmed' not in st.session_state:
                         st.session_state.payment_info_confirmed = False
+                    if 'account_status_confirmed' not in st.session_state:
+                        st.session_state.account_status_confirmed = False
                     
                     st.divider()
                     st.write("**Validation Checklist:**")
                     
-                    col1, col2 = st.columns(2)
+                    col1, col2, col3 = st.columns(3)
                     
                     with col1:
                         st.write("**📋 Tax Information**")
                         tax_confirmed = st.checkbox(
-                            "I have verified my tax information is complete in the AWS portal",
+                            "Tax information complete",
                             value=st.session_state.tax_info_confirmed,
                             key="tax_confirm_checkbox",
                             help="Check this ONLY after verifying your tax information in the AWS Marketplace Seller Settings"
@@ -775,21 +782,37 @@ def check_seller_registration_status():
                     with col2:
                         st.write("**💳 Payment Information**")
                         payment_confirmed = st.checkbox(
-                            "I have verified my payment information is complete in the AWS portal",
+                            "Payment information complete",
                             value=st.session_state.payment_info_confirmed,
                             key="payment_confirm_checkbox",
                             help="Check this ONLY after verifying your banking/payment information in the AWS Marketplace Seller Settings"
                         )
                         st.session_state.payment_info_confirmed = payment_confirmed
                     
+                    with col3:
+                        st.write("**✅ Account Status**")
+                        account_status_confirmed = st.checkbox(
+                            "Can publish paid/free products",
+                            value=st.session_state.account_status_confirmed,
+                            key="account_status_checkbox",
+                            help="Check this ONLY if AMMP portal shows 'Account status: Publish paid and free products'"
+                        )
+                        st.session_state.account_status_confirmed = account_status_confirmed
+                    
                     st.divider()
                     
                     # Show appropriate message based on validation status
-                    if st.session_state.tax_info_confirmed and st.session_state.payment_info_confirmed:
+                    if (st.session_state.tax_info_confirmed and 
+                        st.session_state.payment_info_confirmed and 
+                        st.session_state.account_status_confirmed):
                         st.success("""
                         ✅ **Validation Complete! Your seller profile is ready.**
                         
-                        You have confirmed that both tax and payment information are configured in AWS.
+                        You have confirmed that:
+                        - Tax information is complete
+                        - Payment information is complete
+                        - Account status allows publishing paid and free products
+                        
                         You can now proceed to create product listings.
                         """)
                         
@@ -806,6 +829,8 @@ def check_seller_registration_status():
                             missing_items.append("Tax Information")
                         if not st.session_state.payment_info_confirmed:
                             missing_items.append("Payment Information")
+                        if not st.session_state.account_status_confirmed:
+                            missing_items.append("Account Status (Publish paid/free products)")
                         
                         st.error(f"""
                         ❌ **Validation Incomplete**
@@ -814,10 +839,11 @@ def check_seller_registration_status():
                         """)
                         
                         st.warning("""
-                        **You must confirm both tax and payment information before creating products.**
+                        **You must confirm all three items before creating products:**
                         
                         1. Click the link above to open AWS Marketplace Seller Settings
                         2. Verify your tax and payment information are complete
+                        3. Check that your account status shows "Publish paid and free products"
                         3. Return here and check both boxes
                         4. Then you can proceed to create products
                         """)
