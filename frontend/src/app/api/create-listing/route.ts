@@ -34,11 +34,13 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      success: true,
+      success: data.success !== false,
       product_id: data.product_id,
       offer_id: data.offer_id,
       published_to_limited: data.published_to_limited || false,
       message: data.message || 'Listing created successfully',
+      stages: data.stages || [],
+      error: data.error,
     });
   } catch (error: any) {
     console.error('Create listing error:', error);

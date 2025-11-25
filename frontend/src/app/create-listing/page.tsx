@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AppLayout,
@@ -62,7 +62,8 @@ export default function CreateListingPage() {
   const [publishedToLimited, setPublishedToLimited] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
-  const [hasStarted, setHasStarted] = useState(false);
+  const hasStartedRef = useRef(false);
+  const isCreatingRef = useRef(false);
 
   useEffect(() => {
     if (!isAuthenticated || !listingData || !credentials) {
@@ -70,10 +71,15 @@ export default function CreateListingPage() {
       return;
     }
 
-    // Start listing creation automatically - but only once!
-    if (!hasStarted && !loading && !success) {
-      setHasStarted(true);
+    // Start listing creation automatically - but ABSOLUTELY only once!
+    // Use ref to survive React StrictMode double-render
+    if (!hasStartedRef.current && !isCreatingRef.current && !loading && !success) {
+      hasStartedRef.current = true;
+      isCreatingRef.current = true;
+      console.log('[DEBUG] useEffect triggering createListing - FIRST TIME ONLY');
       createListing();
+    } else {
+      console.log('[DEBUG] useEffect skipping createListing - already started');
     }
   }, [isAuthenticated, listingData, credentials]);
 
@@ -102,13 +108,19 @@ export default function CreateListingPage() {
   };
 
   const createListing = async () => {
-    // Prevent duplicate calls
+    // CRITICAL: Prevent duplicate calls with multiple checks
+    if (isCreatingRef.current && loading) {
+      console.log('[DEBUG] BLOCKED: Already creating listing');
+      return;
+    }
+    
     if (loading || success) {
-      console.log('[DEBUG] Skipping duplicate createListing call');
+      console.log('[DEBUG] BLOCKED: Loading or already successful');
       return;
     }
 
-    console.log('[DEBUG] Starting createListing...');
+    console.log('[DEBUG] Starting createListing... Setting isCreatingRef to true');
+    isCreatingRef.current = true;
     setLoading(true);
     setError('');
     setStartTime(Date.now());
@@ -166,6 +178,8 @@ export default function CreateListingPage() {
       setSuccess(false);
     } finally {
       setLoading(false);
+      // Keep isCreatingRef true to prevent any retry
+      console.log('[DEBUG] createListing finished');
     }
   };
 
