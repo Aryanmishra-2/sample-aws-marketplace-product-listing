@@ -39,8 +39,13 @@ export async function POST(request: NextRequest) {
       account_id: data.account_id,
       region_type: data.region_type,
       user_arn: data.user_arn,
+      user_type: data.user_type,
+      user_name: data.user_name,
       organization: data.organization,
       session_id: data.session_id || 'session-' + Date.now(),
+      permissions: data.permissions,
+      has_required_permissions: data.has_required_permissions,
+      can_proceed: data.can_proceed,
     });
   } catch (error: any) {
     console.error('Validate credentials error:', error);

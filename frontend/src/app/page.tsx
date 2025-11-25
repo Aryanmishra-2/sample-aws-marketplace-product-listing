@@ -52,6 +52,11 @@ export default function CredentialsPage() {
       return;
     }
 
+    // Prevent duplicate calls
+    if (loading) {
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -97,41 +102,27 @@ export default function CredentialsPage() {
 
         setSellerStatus(statusResponse.data);
         
-        // List marketplace products with intelligent status
-        setLoadingProducts(true);
-        try {
-          const productsResponse = await axios.post('/api/list-marketplace-products', {
-            aws_access_key_id: accessKey,
-            aws_secret_access_key: secretKey,
-            aws_session_token: sessionToken || undefined,
-          });
-          
-          if (productsResponse.data.success) {
-            setMarketplaceProducts(productsResponse.data.products || []);
+        // List marketplace products with intelligent status (only if seller is approved)
+        if (statusResponse.data.seller_status === 'APPROVED') {
+          setLoadingProducts(true);
+          try {
+            const productsResponse = await axios.post('/api/list-marketplace-products', {
+              aws_access_key_id: accessKey,
+              aws_secret_access_key: secretKey,
+              aws_session_token: sessionToken || undefined,
+            });
+            
+            if (productsResponse.data.success) {
+              setMarketplaceProducts(productsResponse.data.products || []);
+            }
+          } catch (productErr) {
+            console.error('Failed to list marketplace products:', productErr);
+          } finally {
+            setLoadingProducts(false);
           }
-        } catch (productErr) {
-          console.error('Failed to list marketplace products:', productErr);
-        } finally {
-          setLoadingProducts(false);
         }
         
-        // List Bedrock agents
-        setLoadingAgents(true);
-        try {
-          const agentsResponse = await axios.post('/api/list-agents', {
-            aws_access_key_id: accessKey,
-            aws_secret_access_key: secretKey,
-            aws_session_token: sessionToken || undefined,
-          });
-          
-          if (agentsResponse.data.success) {
-            setAgents(agentsResponse.data.agents || []);
-          }
-        } catch (agentErr) {
-          console.error('Failed to list agents:', agentErr);
-        } finally {
-          setLoadingAgents(false);
-        }
+        // Skip listing Bedrock agents - not critical for workflow
         
         // Don't auto-navigate - let user review products and permissions first
         setCurrentStep('welcome');
