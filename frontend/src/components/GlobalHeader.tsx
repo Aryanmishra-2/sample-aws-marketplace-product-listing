@@ -15,11 +15,22 @@ const WORKFLOW_STEPS = [
 ];
 
 export default function GlobalHeader() {
-  const { accountInfo, currentStep, productId } = useStore();
+  const { accountInfo, currentStep, productId, clearCredentials } = useStore();
 
   if (!accountInfo) {
     return null;
   }
+
+  const handleClearData = () => {
+    if (confirm('Are you sure you want to clear all data? This will log you out and cannot be undone.')) {
+      clearCredentials();
+      window.location.href = '/';
+    }
+  };
+
+  const handleHome = () => {
+    window.location.href = '/';
+  };
 
   const currentStepData = WORKFLOW_STEPS.find(s => s.key === currentStep) || WORKFLOW_STEPS[0];
   const progressValue = currentStepData.progress;
@@ -88,12 +99,46 @@ export default function GlobalHeader() {
             )}
           </SpaceBetween>
 
-          <div>
-            <div style={{ fontSize: '12px', color: '#aab7b8', textAlign: 'right', marginBottom: '4px' }}>
-              Current Step
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '12px', color: '#aab7b8', textAlign: 'right', marginBottom: '4px' }}>
+                Current Step
+              </div>
+              <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#ff9900' }}>
+                {currentStepData.label}
+              </div>
             </div>
-            <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#ff9900' }}>
-              {currentStepData.label}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={handleHome}
+                style={{
+                  backgroundColor: '#232f3e',
+                  color: 'white',
+                  border: '1px solid #ff9900',
+                  borderRadius: '4px',
+                  padding: '8px 16px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                }}
+              >
+                🏠 Home
+              </button>
+              <button
+                onClick={handleClearData}
+                style={{
+                  backgroundColor: '#d13212',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '8px 16px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                }}
+              >
+                🗑️ Clear Data
+              </button>
             </div>
           </div>
         </div>

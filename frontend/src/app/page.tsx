@@ -135,6 +135,24 @@ export default function CredentialsPage() {
         
         // Don't auto-navigate - let user review products and permissions first
         setCurrentStep('welcome');
+        
+        // Route based on seller status
+        if (statusResponse.data.seller_status === 'NOT_REGISTERED') {
+          // Not registered - go to registration page
+          router.push('/seller-registration');
+        } else if (statusResponse.data.seller_status === 'APPROVED') {
+          // Check if they have products
+          if (marketplaceProducts.length > 0) {
+            // Has products - stay on login page to show products
+            // User can choose to continue existing or create new
+          } else {
+            // No products - go to validation page
+            router.push('/seller-registration');
+          }
+        } else if (statusResponse.data.seller_status === 'PENDING') {
+          // Pending - go to status page
+          router.push('/seller-registration');
+        }
       } else {
         setError(validateResponse.data.error || 'Credential validation failed');
       }
