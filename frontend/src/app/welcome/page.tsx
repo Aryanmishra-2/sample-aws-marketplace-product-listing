@@ -14,6 +14,7 @@ import {
   BreadcrumbGroup,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
+import GlobalHeader from '@/components/GlobalHeader';
 
 export default function WelcomePage() {
   const router = useRouter();
@@ -44,10 +45,12 @@ export default function WelcomePage() {
   const isNotRegistered = sellerStatus?.seller_status === 'NOT_REGISTERED';
 
   return (
-    <AppLayout
-      navigationHide
-      toolsHide
-      breadcrumbs={
+    <>
+      <GlobalHeader />
+      <AppLayout
+        navigationHide
+        toolsHide
+        breadcrumbs={
         <BreadcrumbGroup
           items={[
             { text: 'Home', href: '/' },
@@ -169,6 +172,7 @@ export default function WelcomePage() {
           </SpaceBetween>
         </ContentLayout>
       }
-    />
+      />
+    </>
   );
 }

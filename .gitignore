@@ -76,3 +76,37 @@ progress.json
 agent/agentcore/
 agent/marketplace_agent_v2.py.bak
 frontend/node_modules/
+frontend/.next/
+frontend/next-env.d.ts
+
+# Build artifacts
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Dependencies
+frontend/node_modules/
+node_modules/
+
+# TypeScript
+frontend/next-env.d.ts
+*.tsbuildinfo
+
+# Package manager
+frontend/package-lock.json
+frontend/yarn.lock
+frontend/pnpm-lock.yaml
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+/tmp/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

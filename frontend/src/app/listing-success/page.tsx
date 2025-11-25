@@ -16,6 +16,7 @@ import {
   Link,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
+import GlobalHeader from '@/components/GlobalHeader';
 
 export default function ListingSuccessPage() {
   const router = useRouter();
@@ -47,10 +48,12 @@ export default function ListingSuccessPage() {
   }
 
   return (
-    <AppLayout
-      navigationHide
-      toolsHide
-      breadcrumbs={
+    <>
+      <GlobalHeader />
+      <AppLayout
+        navigationHide
+        toolsHide
+        breadcrumbs={
         <BreadcrumbGroup
           items={[
             { text: 'Home', href: '/' },
@@ -275,6 +278,7 @@ export default function ListingSuccessPage() {
           </SpaceBetween>
         </ContentLayout>
       }
-    />
+      />
+    </>
   );
 }

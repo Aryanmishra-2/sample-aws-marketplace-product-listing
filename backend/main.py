@@ -139,11 +139,31 @@ async def check_seller_status(credentials: Credentials):
             # Get account details
             account_details = seller_tools.get_seller_account_details()
             
+            # Format products with more details
+            products = []
+            if account_details.get('success') and account_details.get('owned_products'):
+                for prod in account_details.get('owned_products', []):
+                    if isinstance(prod, dict):
+                        products.append({
+                            'product_id': prod.get('Id', prod.get('product_id', '')),
+                            'product_name': prod.get('Name', prod.get('product_name', 'Unnamed Product')),
+                            'product_type': prod.get('ProductType', prod.get('product_type', 'SaaS')),
+                            'status': prod.get('Status', prod.get('status', 'UNKNOWN')),
+                        })
+                    else:
+                        # If it's just a string ID
+                        products.append({
+                            'product_id': str(prod),
+                            'product_name': 'Product ' + str(prod)[:8],
+                            'product_type': 'SaaS',
+                            'status': 'UNKNOWN',
+                        })
+            
             return {
                 "success": True,
                 "seller_status": status_result.get('seller_status', 'UNKNOWN'),
                 "account_id": status_result.get('account_id'),
-                "owned_products": account_details.get('owned_products', []) if account_details.get('success') else [],
+                "owned_products": products,
                 "message": status_result.get('message', '')
             }
         else:
@@ -155,6 +175,48 @@ async def check_seller_status(credentials: Credentials):
             
     except Exception as e:
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+# List Bedrock agents
+@app.post("/list-agents")
+async def list_agents(credentials: Credentials):
+    """List Bedrock agents in the account"""
+    try:
+        # Create session with provided credentials
+        session = boto3.Session(
+            aws_access_key_id=credentials.aws_access_key_id,
+            aws_secret_access_key=credentials.aws_secret_access_key,
+            aws_session_token=credentials.aws_session_token,
+            region_name='us-east-1'
+        )
+        
+        # List agents
+        bedrock_agent = session.client('bedrock-agent')
+        response = bedrock_agent.list_agents(maxResults=50)
+        
+        agents = []
+        for agent_summary in response.get('agentSummaries', []):
+            agents.append({
+                'agent_id': agent_summary.get('agentId'),
+                'agent_name': agent_summary.get('agentName'),
+                'agent_status': agent_summary.get('agentStatus'),
+                'description': agent_summary.get('description', ''),
+                'updated_at': agent_summary.get('updatedAt').isoformat() if agent_summary.get('updatedAt') else None,
+            })
+        
+        return {
+            "success": True,
+            "agents": agents,
+            "count": len(agents)
+        }
+        
+    except Exception as e:
+        # Return empty list if no agents or error
+        return {
+            "success": True,
+            "agents": [],
+            "count": 0,
+            "error": str(e)
+        }
 
 # Analyze product
 @app.post("/analyze-product")

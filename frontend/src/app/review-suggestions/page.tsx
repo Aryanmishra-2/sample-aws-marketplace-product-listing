@@ -21,6 +21,7 @@ import {
   ColumnLayout,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
+import GlobalHeader from '@/components/GlobalHeader';
 import DimensionManager from '@/components/DimensionManager';
 
 const AWS_CATEGORIES = [
@@ -260,10 +261,12 @@ export default function ReviewSuggestionsPage() {
   }
 
   return (
-    <AppLayout
-      navigationHide
-      toolsHide
-      breadcrumbs={
+    <>
+      <GlobalHeader />
+      <AppLayout
+        navigationHide
+        toolsHide
+        breadcrumbs={
         <BreadcrumbGroup
           items={[
             { text: 'Home', href: '/' },
@@ -650,6 +653,7 @@ export default function ReviewSuggestionsPage() {
           </form>
         </ContentLayout>
       }
-    />
+      />
+    </>
   );
 }

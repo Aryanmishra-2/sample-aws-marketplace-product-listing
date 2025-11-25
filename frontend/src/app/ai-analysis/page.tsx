@@ -16,6 +16,7 @@ import {
   Spinner,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
+import GlobalHeader from '@/components/GlobalHeader';
 import axios from 'axios';
 
 export default function AIAnalysisPage() {
@@ -147,10 +148,12 @@ export default function AIAnalysisPage() {
   }
 
   return (
-    <AppLayout
-      navigationHide
-      toolsHide
-      breadcrumbs={
+    <>
+      <GlobalHeader />
+      <AppLayout
+        navigationHide
+        toolsHide
+        breadcrumbs={
         <BreadcrumbGroup
           items={[
             { text: 'Home', href: '/' },
@@ -289,6 +292,7 @@ export default function AIAnalysisPage() {
           </SpaceBetween>
         </ContentLayout>
       }
-    />
+      />
+    </>
   );
 }

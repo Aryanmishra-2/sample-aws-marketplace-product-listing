@@ -17,6 +17,7 @@ import {
   Textarea,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
+import GlobalHeader from '@/components/GlobalHeader';
 
 export default function ProductInfoPage() {
   const router = useRouter();
@@ -63,10 +64,12 @@ export default function ProductInfoPage() {
   }
 
   return (
-    <AppLayout
-      navigationHide
-      toolsHide
-      breadcrumbs={
+    <>
+      <GlobalHeader />
+      <AppLayout
+        navigationHide
+        toolsHide
+        breadcrumbs={
         <BreadcrumbGroup
           items={[
             { text: 'Home', href: '/' },
@@ -176,6 +179,7 @@ export default function ProductInfoPage() {
           </SpaceBetween>
         </ContentLayout>
       }
-    />
+      />
+    </>
   );
 }
