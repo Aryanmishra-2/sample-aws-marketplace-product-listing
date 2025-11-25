@@ -108,18 +108,28 @@ export default function CreateListingPage() {
   };
 
   const createListing = async () => {
+    const callId = Math.random().toString(36).substring(7);
+    const timestamp = new Date().toISOString();
+    
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`[${timestamp}] [CALL-${callId}] createListing() INVOKED`);
+    console.log(`[${timestamp}] [CALL-${callId}] isCreatingRef.current: ${isCreatingRef.current}`);
+    console.log(`[${timestamp}] [CALL-${callId}] loading: ${loading}`);
+    console.log(`[${timestamp}] [CALL-${callId}] success: ${success}`);
+    console.log(`${'='.repeat(80)}\n`);
+    
     // CRITICAL: Prevent duplicate calls with multiple checks
     if (isCreatingRef.current && loading) {
-      console.log('[DEBUG] BLOCKED: Already creating listing');
+      console.log(`[${timestamp}] [CALL-${callId}] ❌ BLOCKED: Already creating listing`);
       return;
     }
     
     if (loading || success) {
-      console.log('[DEBUG] BLOCKED: Loading or already successful');
+      console.log(`[${timestamp}] [CALL-${callId}] ❌ BLOCKED: Loading or already successful`);
       return;
     }
 
-    console.log('[DEBUG] Starting createListing... Setting isCreatingRef to true');
+    console.log(`[${timestamp}] [CALL-${callId}] ✅ PROCEEDING - Setting isCreatingRef to true`);
     isCreatingRef.current = true;
     setLoading(true);
     setError('');
@@ -131,18 +141,27 @@ export default function CreateListingPage() {
       setCurrentStageIndex(0);
       updateStageStatus(0, 'in-progress', 'Sending to AWS Marketplace...');
 
+      console.log(`[${timestamp}] [CALL-${callId}] 📤 Making axios POST request to /api/create-listing`);
+      
       // Call backend to create listing (this does all 8 stages)
       const response = await axios.post('/api/create-listing', {
         listing_data: listingData,
         credentials: credentials,
       });
 
-      console.log('[DEBUG] Backend response:', response.data);
+      console.log(`[${timestamp}] [CALL-${callId}] 📥 Response received:`, {
+        success: response.data.success,
+        product_id: response.data.product_id,
+        stages_count: response.data.stages?.length
+      });
 
       // Check if creation was successful
       if (!response.data.success) {
+        console.log(`[${timestamp}] [CALL-${callId}] ❌ Backend reported failure`);
         throw new Error(response.data.error || response.data.message || 'Failed to create listing');
       }
+      
+      console.log(`[${timestamp}] [CALL-${callId}] ✅ SUCCESS - Product created: ${response.data.product_id}`);
 
       // Update stages based on backend response
       const backendStages = response.data.stages || [];
@@ -165,7 +184,7 @@ export default function CreateListingPage() {
       // Store product ID
       setProductId(response.data.product_id);
     } catch (err: any) {
-      console.error('Listing creation error:', err);
+      console.error(`[${timestamp}] [CALL-${callId}] ❌ ERROR:`, err);
       const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to create listing';
       setError(errorMessage);
       
@@ -179,7 +198,8 @@ export default function CreateListingPage() {
     } finally {
       setLoading(false);
       // Keep isCreatingRef true to prevent any retry
-      console.log('[DEBUG] createListing finished');
+      console.log(`[${timestamp}] [CALL-${callId}] 🏁 createListing finished`);
+      console.log(`${'='.repeat(80)}\n`);
     }
   };
 
