@@ -98,16 +98,31 @@ async def validate_credentials(credentials: Credentials):
         account_id = identity.get('Account')
         user_arn = identity.get('Arn')
         
-        # Determine region type
+        # Determine region type based on partition and account patterns
         region_type = 'UNKNOWN'
         organization = 'Unknown'
         
-        if 'aws.amazon.com' in user_arn.lower() or 'amazon.com' in user_arn.lower():
-            region_type = 'AWS_INC'
-            organization = 'Amazon Web Services Inc.'
-        elif 'aws.amazon.in' in user_arn.lower() or 'amazon.in' in user_arn.lower():
-            region_type = 'AWS_INDIA'
+        # Check ARN partition
+        if user_arn.startswith('arn:aws:'):
+            # Standard AWS partition (US commercial)
+            region_type = 'AWS_COMMERCIAL'
+            organization = 'Amazon Web Services (Commercial)'
+        elif user_arn.startswith('arn:aws-cn:'):
+            # China partition
+            region_type = 'AWS_CHINA'
+            organization = 'Amazon Web Services China'
+        elif user_arn.startswith('arn:aws-us-gov:'):
+            # GovCloud partition
+            region_type = 'AWS_GOVCLOUD'
+            organization = 'Amazon Web Services GovCloud'
+        
+        # Additional check for internal AWS accounts (if email domain is available)
+        # This is a best-effort detection
+        if 'amazon.com' in user_arn.lower():
+            organization += ' (Internal)'
+        elif 'amazon.in' in user_arn.lower():
             organization = 'Amazon Web Services India Pvt Ltd'
+            region_type = 'AWS_INDIA'
         
         return {
             "success": True,

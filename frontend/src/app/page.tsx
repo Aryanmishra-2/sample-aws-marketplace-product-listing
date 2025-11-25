@@ -148,18 +148,39 @@ export default function CredentialsPage() {
         >
           <SpaceBetween size="l">
             {sellerStatus && (
-              <Alert type="success" header="Credentials Validated">
-                <SpaceBetween size="xs">
-                  <Box>Account ID: <strong>{sellerStatus.account_id}</strong></Box>
-                  <Box>
-                    Organization: <Badge color={sellerStatus.account_id ? 'blue' : 'grey'}>
-                      {useStore.getState().accountInfo?.organization || 'Unknown'}
-                    </Badge>
-                  </Box>
-                  <Box>Seller Status: <Badge color={sellerStatus.seller_status === 'APPROVED' ? 'green' : 'grey'}>{sellerStatus.seller_status}</Badge></Box>
-                  {sellerStatus.owned_products && sellerStatus.owned_products.length > 0 && (
-                    <Box>Existing Products: <strong>{sellerStatus.owned_products.length}</strong></Box>
-                  )}
+              <Alert type="success" header="✓ Credentials Validated Successfully">
+                <SpaceBetween size="s">
+                  <ColumnLayout columns={2} variant="text-grid">
+                    <div>
+                      <Box variant="awsui-key-label">AWS Account ID</Box>
+                      <Box fontWeight="bold" fontSize="heading-m">{sellerStatus.account_id}</Box>
+                    </div>
+                    <div>
+                      <Box variant="awsui-key-label">Organization</Box>
+                      <Box>
+                        <Badge color={
+                          useStore.getState().accountInfo?.region_type === 'AWS_INDIA' ? 'green' :
+                          useStore.getState().accountInfo?.region_type === 'AWS_INC' ? 'blue' : 'grey'
+                        }>
+                          {useStore.getState().accountInfo?.organization || 'Unknown'}
+                        </Badge>
+                      </Box>
+                    </div>
+                  </ColumnLayout>
+                  <ColumnLayout columns={2} variant="text-grid">
+                    <div>
+                      <Box variant="awsui-key-label">Seller Status</Box>
+                      <Badge color={sellerStatus.seller_status === 'APPROVED' ? 'green' : 'grey'}>
+                        {sellerStatus.seller_status}
+                      </Badge>
+                    </div>
+                    {sellerStatus.owned_products && sellerStatus.owned_products.length > 0 && (
+                      <div>
+                        <Box variant="awsui-key-label">Existing Products</Box>
+                        <Box fontWeight="bold">{sellerStatus.owned_products.length}</Box>
+                      </div>
+                    )}
+                  </ColumnLayout>
                 </SpaceBetween>
               </Alert>
             )}
