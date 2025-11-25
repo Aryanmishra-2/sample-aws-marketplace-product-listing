@@ -43,7 +43,13 @@ export default function DimensionManager({
   const allowTypeSelection = pricingModel === 'Contract with Consumption';
   const defaultType = pricingModel === 'Usage' ? 'Metered' : 'Entitled';
 
-  const handleAddDimension = () => {
+  const handleAddDimension = (e?: React.MouseEvent) => {
+    // Prevent form submission
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     setError('');
 
     if (!dimName || !dimKey || !dimDescription) {
@@ -137,7 +143,11 @@ export default function DimensionManager({
                       </Box>
                       <Box variant="small">{dim.description}</Box>
                     </div>
-                    <Button onClick={() => handleRemoveDimension(index)}>
+                    <Button onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleRemoveDimension(index);
+                    }}>
                       Remove
                     </Button>
                   </SpaceBetween>
@@ -220,7 +230,10 @@ export default function DimensionManager({
               </Alert>
             )}
 
-            <Button variant="primary" onClick={handleAddDimension}>
+            <Button 
+              variant="primary" 
+              onClick={(e) => handleAddDimension(e as any)}
+            >
               Add Dimension
             </Button>
           </SpaceBetween>
