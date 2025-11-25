@@ -325,7 +325,24 @@ class ServerlessSaasIntegrationAgent(Agent):
         print("  → Configuring API Gateway for customer registration")
         print("  → Setting up SNS topics for marketplace notifications")
         
-        with open('bedrock_agent/Integration.yaml', 'r') as f:
+        # Find the Integration.yaml file - check multiple possible locations
+        import os
+        possible_paths = [
+            'bedrock_agent/Integration.yaml',
+            'reference/streamlit-app/bedrock_agent/Integration.yaml',
+            os.path.join(os.path.dirname(__file__), '..', 'bedrock_agent', 'Integration.yaml')
+        ]
+        
+        template_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                template_path = path
+                break
+        
+        if not template_path:
+            raise FileNotFoundError(f"Could not find Integration.yaml in any of: {possible_paths}")
+        
+        with open(template_path, 'r') as f:
             template = f.read()
         
         response = cf_client.create_stack(

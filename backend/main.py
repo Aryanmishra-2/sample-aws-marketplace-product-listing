@@ -614,12 +614,16 @@ async def create_listing(data: Dict[str, Any]):
 @app.post("/deploy-saas")
 async def deploy_saas(data: Dict[str, Any]):
     """Deploy SaaS integration using existing agent system"""
+    import traceback
     try:
+        print("[DEBUG] deploy_saas called")
         product_id = data.get("product_id")
         email = data.get("email")
         stack_name = data.get("stack_name")
         region = data.get("region", "us-east-1")
         credentials = data.get("credentials", {})
+        
+        print(f"[DEBUG] Product ID: {product_id}, Email: {email}, Stack: {stack_name}, Region: {region}")
         
         # Create boto3 session
         session = boto3.Session(
@@ -629,9 +633,13 @@ async def deploy_saas(data: Dict[str, Any]):
             region_name=region
         )
         
+        print("[DEBUG] Session created, initializing agents...")
+        
         # Initialize SaaS integration agent
         strands_agent = StrandsMarketplaceAgent()
         saas_agent = ServerlessSaasIntegrationAgent(strands_agent=strands_agent)
+        
+        print("[DEBUG] Agents initialized, starting deployment...")
         
         # Deploy integration
         result = saas_agent.deploy_integration_with_session(
@@ -641,6 +649,8 @@ async def deploy_saas(data: Dict[str, Any]):
             pricing_dimensions=[]
         )
         
+        print(f"[DEBUG] Deployment result: {result}")
+        
         if result.get('stack_id') or result.get('success'):
             return {
                 "success": True,
@@ -648,9 +658,13 @@ async def deploy_saas(data: Dict[str, Any]):
                 "message": "SaaS integration deployed successfully"
             }
         else:
-            raise Exception(result.get('error', 'Deployment failed'))
+            error_msg = result.get('error', 'Deployment failed')
+            print(f"[ERROR] Deployment failed: {error_msg}")
+            raise Exception(error_msg)
             
     except Exception as e:
+        print(f"[ERROR] deploy_saas exception: {str(e)}")
+        print(f"[ERROR] Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
 
 if __name__ == "__main__":
