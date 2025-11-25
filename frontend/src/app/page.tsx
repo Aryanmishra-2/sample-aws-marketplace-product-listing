@@ -41,6 +41,10 @@ export default function CredentialsPage() {
   const [error, setError] = useState('');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
+  const [permissions, setPermissions] = useState<any>(null);
+  const [canProceed, setCanProceed] = useState(true);
+  const [marketplaceProducts, setMarketplaceProducts] = useState<any[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   const handleValidate = async () => {
     if (!accessKey || !secretKey) {
@@ -60,6 +64,10 @@ export default function CredentialsPage() {
       });
 
       if (validateResponse.data.success) {
+        // Store permissions info
+        setPermissions(validateResponse.data.permissions);
+        setCanProceed(validateResponse.data.can_proceed);
+        
         // Store credentials
         setCredentials(
           {
@@ -75,7 +83,7 @@ export default function CredentialsPage() {
         setAccountInfo({
           account_id: validateResponse.data.account_id,
           user_arn: validateResponse.data.user_arn,
-          user_name: validateResponse.data.user_arn.split('/').pop() || 'Unknown',
+          user_name: validateResponse.data.user_name || validateResponse.data.user_arn.split('/').pop() || 'Unknown',
           organization: validateResponse.data.organization,
           region_type: validateResponse.data.region_type,
         });
@@ -88,6 +96,24 @@ export default function CredentialsPage() {
         });
 
         setSellerStatus(statusResponse.data);
+        
+        // List marketplace products with intelligent status
+        setLoadingProducts(true);
+        try {
+          const productsResponse = await axios.post('/api/list-marketplace-products', {
+            aws_access_key_id: accessKey,
+            aws_secret_access_key: secretKey,
+            aws_session_token: sessionToken || undefined,
+          });
+          
+          if (productsResponse.data.success) {
+            setMarketplaceProducts(productsResponse.data.products || []);
+          }
+        } catch (productErr) {
+          console.error('Failed to list marketplace products:', productErr);
+        } finally {
+          setLoadingProducts(false);
+        }
         
         // List Bedrock agents
         setLoadingAgents(true);
@@ -107,8 +133,8 @@ export default function CredentialsPage() {
           setLoadingAgents(false);
         }
         
+        // Don't auto-navigate - let user review products and permissions first
         setCurrentStep('welcome');
-        router.push('/welcome');
       } else {
         setError(validateResponse.data.error || 'Credential validation failed');
       }
@@ -183,6 +209,72 @@ export default function CredentialsPage() {
                   </ColumnLayout>
                 </SpaceBetween>
               </Alert>
+            )}
+
+            {permissions && (
+              <Container header={<Header variant="h2">IAM Permissions Status</Header>}>
+                <SpaceBetween size="m">
+                  <ColumnLayout columns={3} variant="text-grid">
+                    <div>
+                      <Box variant="awsui-key-label">Marketplace Access</Box>
+                      <StatusIndicator type={permissions.has_marketplace_full_access ? 'success' : 'warning'}>
+                        {permissions.has_marketplace_full_access ? 'Full Access' : 'Limited'}
+                      </StatusIndicator>
+                    </div>
+                    <div>
+                      <Box variant="awsui-key-label">Product Management</Box>
+                      <StatusIndicator type={permissions.has_marketplace_manage_products ? 'success' : 'error'}>
+                        {permissions.has_marketplace_manage_products ? 'Enabled' : 'Missing'}
+                      </StatusIndicator>
+                    </div>
+                    <div>
+                      <Box variant="awsui-key-label">Admin Access</Box>
+                      <StatusIndicator type={permissions.has_admin_access ? 'success' : 'info'}>
+                        {permissions.has_admin_access ? 'Yes' : 'No'}
+                      </StatusIndicator>
+                    </div>
+                  </ColumnLayout>
+
+                  {permissions.recommendations && permissions.recommendations.length > 0 && (
+                    <SpaceBetween size="s">
+                      <Box variant="h4">Recommendations</Box>
+                      {permissions.recommendations.map((rec: any, idx: number) => (
+                        <Alert
+                          key={idx}
+                          type={rec.severity === 'high' ? 'warning' : 'info'}
+                          header={rec.title}
+                        >
+                          <SpaceBetween size="xs">
+                            <Box>{rec.message}</Box>
+                            <Box><strong>Action:</strong> {rec.action}</Box>
+                            {rec.policy_arn && (
+                              <Box fontSize="body-s" color="text-body-secondary">
+                                Policy ARN: {rec.policy_arn}
+                              </Box>
+                            )}
+                            {rec.required_actions && (
+                              <Box>
+                                <Box variant="awsui-key-label">Required Permissions:</Box>
+                                <ul style={{ marginLeft: '20px', marginTop: '4px' }}>
+                                  {rec.required_actions.map((action: string, i: number) => (
+                                    <li key={i}><Box fontSize="body-s">{action}</Box></li>
+                                  ))}
+                                </ul>
+                              </Box>
+                            )}
+                          </SpaceBetween>
+                        </Alert>
+                      ))}
+                    </SpaceBetween>
+                  )}
+
+                  {!canProceed && (
+                    <Alert type="error" header="Insufficient Permissions">
+                      You need additional IAM permissions to use this application. Please contact your AWS administrator to grant the required marketplace permissions.
+                    </Alert>
+                  )}
+                </SpaceBetween>
+              </Container>
             )}
 
             {error && (
@@ -262,76 +354,152 @@ export default function CredentialsPage() {
               </form>
             </Container>
 
-            {sellerStatus && sellerStatus.owned_products && sellerStatus.owned_products.length > 0 && (
+            {marketplaceProducts.length > 0 && (
               <Container
                 header={
                   <Header
                     variant="h2"
-                    description="Your existing AWS Marketplace products - select one to continue from where you left off"
-                    counter={`(${sellerStatus.owned_products.length})`}
+                    description="Your AWS Marketplace products with intelligent status detection and guided workflows"
+                    counter={`(${marketplaceProducts.length})`}
                   >
-                    Existing Products
+                    Marketplace Products
                   </Header>
                 }
               >
                 <Table
                   columnDefinitions={[
                     {
-                      id: 'id',
-                      header: 'Product ID',
+                      id: 'name',
+                      header: 'Product Name',
                       cell: (item: any) => (
-                        <Box fontWeight="bold">
-                          {item.product_id || item.Id || '-'}
+                        <Box>
+                          <Box fontWeight="bold">{item.product_name}</Box>
+                          <Box fontSize="body-s" color="text-body-secondary">
+                            {item.product_id.substring(0, 24)}...
+                          </Box>
                         </Box>
                       ),
                     },
                     {
-                      id: 'name',
-                      header: 'Product Name',
-                      cell: (item: any) => item.product_name || item.Name || '-',
-                    },
-                    {
                       id: 'type',
-                      header: 'Product Type',
-                      cell: (item: any) => (
-                        <Badge>{item.product_type || item.ProductType || 'SaaS'}</Badge>
-                      ),
+                      header: 'Type',
+                      cell: (item: any) => <Badge>{item.product_type}</Badge>,
                     },
                     {
-                      id: 'status',
-                      header: 'Status',
+                      id: 'visibility',
+                      header: 'Visibility',
                       cell: (item: any) => {
-                        const status = item.status || item.Status || 'UNKNOWN';
-                        const color = status === 'ACTIVE' ? 'green' : 
-                                     status === 'DRAFT' ? 'blue' : 'grey';
-                        return <Badge color={color}>{status}</Badge>;
+                        const color = 
+                          item.visibility === 'PUBLIC' ? 'green' :
+                          item.visibility === 'LIMITED' ? 'blue' :
+                          item.visibility === 'DRAFT' ? 'grey' : 'red';
+                        return <Badge color={color}>{item.visibility}</Badge>;
                       },
+                    },
+                    {
+                      id: 'saas_status',
+                      header: 'SaaS Integration',
+                      cell: (item: any) => {
+                        if (!item.needs_saas_integration) {
+                          return <Box color="text-body-secondary">N/A</Box>;
+                        }
+                        const status = item.saas_integration_status;
+                        if (status === 'COMPLETED') {
+                          return <StatusIndicator type="success">Completed</StatusIndicator>;
+                        } else if (status === 'REQUIRED') {
+                          return <StatusIndicator type="warning">Required</StatusIndicator>;
+                        } else if (status === 'PENDING') {
+                          return <StatusIndicator type="info">Pending</StatusIndicator>;
+                        }
+                        return <Box color="text-body-secondary">Not Required</Box>;
+                      },
+                    },
+                    {
+                      id: 'recommendations',
+                      header: 'Recommendations',
+                      cell: (item: any) => (
+                        <Box>
+                          {item.recommendations.map((rec: string, idx: number) => (
+                            <Box key={idx} fontSize="body-s" color="text-body-secondary">
+                              • {rec}
+                            </Box>
+                          ))}
+                        </Box>
+                      ),
                     },
                     {
                       id: 'actions',
                       header: 'Actions',
                       cell: (item: any) => (
-                        <Button
-                          variant="primary"
-                          onClick={() => {
-                            const prodId = item.product_id || item.Id;
-                            useStore.getState().setProductId(prodId);
-                            useStore.getState().setCurrentStep('review_suggestions');
-                            router.push('/review-suggestions');
-                          }}
-                        >
-                          Continue →
-                        </Button>
+                        <SpaceBetween size="xs">
+                          {item.allowed_actions.includes('edit') && (
+                            <Button
+                              variant="primary"
+                              onClick={() => {
+                                useStore.getState().setProductId(item.product_id);
+                                useStore.getState().setCurrentStep('create_listing');
+                                router.push('/create-listing');
+                              }}
+                            >
+                              Edit Draft
+                            </Button>
+                          )}
+                          {item.allowed_actions.includes('continue_listing') && (
+                            <Button
+                              variant="primary"
+                              onClick={() => {
+                                useStore.getState().setProductId(item.product_id);
+                                useStore.getState().setCurrentStep('review_suggestions');
+                                router.push('/review-suggestions');
+                              }}
+                            >
+                              Continue Listing
+                            </Button>
+                          )}
+                          {item.allowed_actions.includes('deploy_saas') && (
+                            <Button
+                              variant="primary"
+                              onClick={() => {
+                                useStore.getState().setProductId(item.product_id);
+                                useStore.getState().setCurrentStep('saas_deployment');
+                                router.push('/saas-integration');
+                              }}
+                            >
+                              Deploy SaaS
+                            </Button>
+                          )}
+                          {item.allowed_actions.includes('view') && !item.is_editable && (
+                            <Button
+                              onClick={() => {
+                                useStore.getState().setProductId(item.product_id);
+                                router.push('/listing-success');
+                              }}
+                            >
+                              View Details
+                            </Button>
+                          )}
+                        </SpaceBetween>
                       ),
                     },
                   ]}
-                  items={sellerStatus.owned_products}
+                  items={marketplaceProducts}
+                  loading={loadingProducts}
+                  loadingText="Loading marketplace products..."
                   empty={
                     <Box textAlign="center" color="inherit">
-                      <b>No products</b>
+                      <b>No products found</b>
                       <Box padding={{ bottom: 's' }} variant="p" color="inherit">
-                        No products found in this account.
+                        No marketplace products found in this account.
                       </Box>
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          useStore.getState().setCurrentStep('welcome');
+                          router.push('/welcome');
+                        }}
+                      >
+                        Create New Product
+                      </Button>
                     </Box>
                   }
                 />
@@ -410,34 +578,62 @@ export default function CredentialsPage() {
               </Container>
             )}
 
-            <Container>
-              <SpaceBetween size="m">
-                <Header variant="h3">What happens next?</Header>
-                <ColumnLayout columns={3} variant="text-grid">
-                  <div>
-                    <Box variant="h4">1. Validate Account</Box>
-                    <Box variant="p">
-                      We'll validate your AWS credentials and determine your organization
-                      (AWS Inc vs AWS India)
-                    </Box>
-                  </div>
-                  <div>
-                    <Box variant="h4">2. Check Status</Box>
-                    <Box variant="p">
-                      Check your current seller registration status and guide you through
-                      the process if needed
-                    </Box>
-                  </div>
-                  <div>
-                    <Box variant="h4">3. Create Listing</Box>
-                    <Box variant="p">
-                      Use AI to analyze your product and create a complete marketplace
-                      listing automatically
-                    </Box>
-                  </div>
-                </ColumnLayout>
-              </SpaceBetween>
-            </Container>
+            {sellerStatus && canProceed && (
+              <Container>
+                <SpaceBetween size="m">
+                  <Header variant="h3">Ready to Continue?</Header>
+                  <Box>
+                    {marketplaceProducts.length > 0 ? (
+                      <Box>
+                        You have {marketplaceProducts.length} existing product{marketplaceProducts.length > 1 ? 's' : ''}. 
+                        Select a product above to continue, or create a new one.
+                      </Box>
+                    ) : (
+                      <Box>
+                        No existing products found. Let's create your first AWS Marketplace listing!
+                      </Box>
+                    )}
+                  </Box>
+                  <Button
+                    variant="primary"
+                    onClick={() => router.push('/welcome')}
+                  >
+                    {marketplaceProducts.length > 0 ? 'Create New Product' : 'Get Started'} →
+                  </Button>
+                </SpaceBetween>
+              </Container>
+            )}
+
+            {!sellerStatus && (
+              <Container>
+                <SpaceBetween size="m">
+                  <Header variant="h3">What happens next?</Header>
+                  <ColumnLayout columns={3} variant="text-grid">
+                    <div>
+                      <Box variant="h4">1. Validate Account</Box>
+                      <Box variant="p">
+                        We'll validate your AWS credentials and determine your organization
+                        (AWS Inc vs AWS India)
+                      </Box>
+                    </div>
+                    <div>
+                      <Box variant="h4">2. Check Status</Box>
+                      <Box variant="p">
+                        Check your current seller registration status and guide you through
+                        the process if needed
+                      </Box>
+                    </div>
+                    <div>
+                      <Box variant="h4">3. Create Listing</Box>
+                      <Box variant="p">
+                        Use AI to analyze your product and create a complete marketplace
+                        listing automatically
+                      </Box>
+                    </div>
+                  </ColumnLayout>
+                </SpaceBetween>
+              </Container>
+            )}
           </SpaceBetween>
         </ContentLayout>
       }

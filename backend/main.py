@@ -78,10 +78,10 @@ class ListingData(BaseModel):
 async def health_check():
     return {"status": "healthy", "version": "1.0.0"}
 
-# Validate credentials
+# Validate credentials with IAM permissions check
 @app.post("/validate-credentials")
 async def validate_credentials(credentials: Credentials):
-    """Validate AWS credentials using STS"""
+    """Validate AWS credentials and check IAM permissions"""
     try:
         # Create session with provided credentials
         session = boto3.Session(
@@ -93,44 +93,170 @@ async def validate_credentials(credentials: Credentials):
         
         # Get caller identity
         sts = session.client('sts')
+        iam = session.client('iam')
         identity = sts.get_caller_identity()
         
         account_id = identity.get('Account')
         user_arn = identity.get('Arn')
+        user_id = identity.get('UserId')
         
-        # Determine region type based on partition and account patterns
+        # Determine user type and name
+        user_type = 'Unknown'
+        user_name = None
+        
+        if ':user/' in user_arn:
+            user_type = 'IAM User'
+            user_name = user_arn.split('/')[-1]
+        elif ':assumed-role/' in user_arn:
+            user_type = 'IAM Role (Assumed)'
+            user_name = user_arn.split('/')[-2]
+        elif ':role/' in user_arn:
+            user_type = 'IAM Role'
+            user_name = user_arn.split('/')[-1]
+        elif ':root' in user_arn:
+            user_type = 'Root User'
+            user_name = 'root'
+        
+        # Check IAM permissions
+        permissions_check = {
+            'has_marketplace_full_access': False,
+            'has_marketplace_manage_products': False,
+            'has_admin_access': False,
+            'has_iam_read_access': False,
+            'missing_permissions': [],
+            'warnings': [],
+            'recommendations': []
+        }
+        
+        # Test marketplace permissions
+        marketplace_client = session.client('marketplace-catalog')
+        try:
+            # Test list entities permission
+            marketplace_client.list_entities(
+                Catalog='AWSMarketplace',
+                EntityType='SaaSProduct',
+                MaxResults=1
+            )
+            permissions_check['has_marketplace_manage_products'] = True
+        except Exception as e:
+            error_code = getattr(e, 'response', {}).get('Error', {}).get('Code', '')
+            if error_code in ['AccessDenied', 'UnauthorizedOperation']:
+                permissions_check['missing_permissions'].append('aws-marketplace:ListEntities')
+                permissions_check['warnings'].append('Cannot list marketplace products')
+        
+        # Test marketplace write permissions
+        try:
+            # This will fail but tells us if we have permission to try
+            marketplace_client.describe_entity(
+                Catalog='AWSMarketplace',
+                EntityId='test-entity-id'
+            )
+        except Exception as e:
+            error_code = getattr(e, 'response', {}).get('Error', {}).get('Code', '')
+            if error_code == 'ResourceNotFoundException':
+                # Good - we have permission, entity just doesn't exist
+                permissions_check['has_marketplace_full_access'] = True
+            elif error_code in ['AccessDenied', 'UnauthorizedOperation']:
+                permissions_check['missing_permissions'].append('aws-marketplace:DescribeEntity')
+        
+        # Check if user can read IAM policies (indicates admin-like access)
+        try:
+            if user_type == 'IAM User' and user_name:
+                iam.list_attached_user_policies(UserName=user_name, MaxItems=1)
+                permissions_check['has_iam_read_access'] = True
+            elif user_type == 'IAM Role' and user_name:
+                iam.list_attached_role_policies(RoleName=user_name, MaxItems=1)
+                permissions_check['has_iam_read_access'] = True
+        except Exception:
+            permissions_check['warnings'].append('Cannot read IAM policies - limited visibility into permissions')
+        
+        # Check for admin access indicators
+        if user_type == 'Root User':
+            permissions_check['has_admin_access'] = True
+        elif permissions_check['has_iam_read_access']:
+            try:
+                # Try to list policies to see if we have admin-like access
+                if user_type == 'IAM User' and user_name:
+                    attached_policies = iam.list_attached_user_policies(UserName=user_name)
+                    for policy in attached_policies.get('AttachedPolicies', []):
+                        policy_name = policy.get('PolicyName', '').lower()
+                        if 'administrator' in policy_name or 'admin' in policy_name:
+                            permissions_check['has_admin_access'] = True
+                            break
+                elif user_type == 'IAM Role' and user_name:
+                    attached_policies = iam.list_attached_role_policies(RoleName=user_name)
+                    for policy in attached_policies.get('AttachedPolicies', []):
+                        policy_name = policy.get('PolicyName', '').lower()
+                        if 'administrator' in policy_name or 'admin' in policy_name:
+                            permissions_check['has_admin_access'] = True
+                            break
+            except Exception:
+                pass
+        
+        # Generate recommendations based on missing permissions
+        if not permissions_check['has_marketplace_full_access']:
+            permissions_check['recommendations'].append({
+                'severity': 'high',
+                'title': 'Marketplace Permissions Required',
+                'message': 'You need AWS Marketplace Catalog API permissions to manage products',
+                'action': 'Attach the "AWSMarketplaceSellerFullAccess" managed policy or equivalent',
+                'policy_arn': 'arn:aws:iam::aws:policy/AWSMarketplaceSellerFullAccess',
+                'required_actions': [
+                    'aws-marketplace:ListEntities',
+                    'aws-marketplace:DescribeEntity',
+                    'aws-marketplace:StartChangeSet',
+                    'aws-marketplace:DescribeChangeSet',
+                    'aws-marketplace:CancelChangeSet'
+                ]
+            })
+        
+        if not permissions_check['has_admin_access'] and user_type != 'Root User':
+            permissions_check['recommendations'].append({
+                'severity': 'medium',
+                'title': 'Limited Administrative Access',
+                'message': 'You may need additional permissions for full marketplace management',
+                'action': 'Consider using an IAM user/role with AdministratorAccess or marketplace-specific admin permissions',
+                'note': 'Some operations may require elevated permissions'
+            })
+        
+        # Determine region type based on partition
         region_type = 'UNKNOWN'
         organization = 'Unknown'
         
-        # Check ARN partition
         if user_arn.startswith('arn:aws:'):
-            # Standard AWS partition (US commercial)
             region_type = 'AWS_COMMERCIAL'
             organization = 'Amazon Web Services (Commercial)'
         elif user_arn.startswith('arn:aws-cn:'):
-            # China partition
             region_type = 'AWS_CHINA'
             organization = 'Amazon Web Services China'
         elif user_arn.startswith('arn:aws-us-gov:'):
-            # GovCloud partition
             region_type = 'AWS_GOVCLOUD'
             organization = 'Amazon Web Services GovCloud'
         
-        # Additional check for internal AWS accounts (if email domain is available)
-        # This is a best-effort detection
         if 'amazon.com' in user_arn.lower():
             organization += ' (Internal)'
         elif 'amazon.in' in user_arn.lower():
             organization = 'Amazon Web Services India Pvt Ltd'
             region_type = 'AWS_INDIA'
         
+        # Overall permission status
+        has_required_permissions = (
+            permissions_check['has_marketplace_manage_products'] and
+            (permissions_check['has_marketplace_full_access'] or permissions_check['has_admin_access'])
+        )
+        
         return {
             "success": True,
             "account_id": account_id,
             "region_type": region_type,
             "user_arn": user_arn,
+            "user_type": user_type,
+            "user_name": user_name,
             "organization": organization,
-            "session_id": f"session-{account_id}"
+            "session_id": f"session-{account_id}",
+            "permissions": permissions_check,
+            "has_required_permissions": has_required_permissions,
+            "can_proceed": has_required_permissions or user_type == 'Root User'
         }
         
     except Exception as e:
@@ -139,7 +265,7 @@ async def validate_credentials(credentials: Credentials):
 # Check seller status
 @app.post("/check-seller-status")
 async def check_seller_status(credentials: Credentials):
-    """Check seller registration status"""
+    """Check seller registration status with enhanced details"""
     try:
         # Initialize seller registration tools
         seller_tools = SellerRegistrationTools(
@@ -158,29 +284,25 @@ async def check_seller_status(credentials: Credentials):
             
             # Format products with more details
             products = []
-            if account_details.get('success') and account_details.get('owned_products'):
-                for prod in account_details.get('owned_products', []):
-                    if isinstance(prod, dict):
-                        products.append({
-                            'product_id': prod.get('Id', prod.get('product_id', '')),
-                            'product_name': prod.get('Name', prod.get('product_name', 'Unnamed Product')),
-                            'product_type': prod.get('ProductType', prod.get('product_type', 'SaaS')),
-                            'status': prod.get('Status', prod.get('status', 'UNKNOWN')),
-                        })
-                    else:
-                        # If it's just a string ID
-                        products.append({
-                            'product_id': str(prod),
-                            'product_name': 'Product ' + str(prod)[:8],
-                            'product_type': 'SaaS',
-                            'status': 'UNKNOWN',
-                        })
+            if status_result.get('owned_products'):
+                for prod_id in status_result.get('owned_products', []):
+                    products.append({
+                        'product_id': prod_id,
+                        'product_name': f'Product {prod_id[:8]}...',
+                        'product_type': 'SaaS',
+                        'status': 'ACTIVE',
+                    })
             
             return {
                 "success": True,
                 "seller_status": status_result.get('seller_status', 'UNKNOWN'),
                 "account_id": status_result.get('account_id'),
                 "owned_products": products,
+                "owned_products_count": status_result.get('owned_products_count', 0),
+                "verification_status": status_result.get('verification_status', {}),
+                "required_steps": status_result.get('required_steps', []),
+                "marketplace_accessible": status_result.get('marketplace_accessible', False),
+                "portal_url": status_result.get('portal_url'),
                 "message": status_result.get('message', '')
             }
         else:
@@ -192,6 +314,276 @@ async def check_seller_status(credentials: Credentials):
             
     except Exception as e:
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+# Get registration requirements
+@app.post("/get-registration-requirements")
+async def get_registration_requirements(data: Dict[str, Any]):
+    """Get seller registration requirements based on country/region"""
+    try:
+        credentials = data.get("credentials", {})
+        country = data.get("country", "US")
+        
+        seller_tools = SellerRegistrationTools(
+            region='us-east-1',
+            aws_access_key_id=credentials.get("aws_access_key_id"),
+            aws_secret_access_key=credentials.get("aws_secret_access_key"),
+            aws_session_token=credentials.get("aws_session_token")
+        )
+        
+        # Get general requirements
+        requirements = seller_tools.get_registration_requirements()
+        
+        # Get India-specific requirements if applicable
+        if country == "IN" or country == "India":
+            india_requirements = seller_tools.get_india_specific_requirements()
+            requirements["india_specific"] = india_requirements
+        
+        return {
+            "success": True,
+            "requirements": requirements,
+            "country": country
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+# Validate business information
+@app.post("/validate-business-info")
+async def validate_business_info(data: Dict[str, Any]):
+    """Validate business information for seller registration"""
+    try:
+        credentials = data.get("credentials", {})
+        business_info = data.get("business_info", {})
+        
+        seller_tools = SellerRegistrationTools(
+            region='us-east-1',
+            aws_access_key_id=credentials.get("aws_access_key_id"),
+            aws_secret_access_key=credentials.get("aws_secret_access_key"),
+            aws_session_token=credentials.get("aws_session_token")
+        )
+        
+        # Validate business info
+        validation_result = seller_tools.validate_business_info(business_info)
+        
+        # If India, also validate India-specific requirements
+        if business_info.get("country") in ["IN", "India"]:
+            india_validation = seller_tools.validate_india_business_info(business_info)
+            validation_result["india_validation"] = india_validation
+        
+        return {
+            "success": True,
+            "validation": validation_result
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+# Check registration progress
+@app.post("/check-registration-progress")
+async def check_registration_progress(data: Dict[str, Any]):
+    """Check progress of seller registration"""
+    try:
+        credentials = data.get("credentials", {})
+        registration_data = data.get("registration_data", {})
+        
+        seller_tools = SellerRegistrationTools(
+            region='us-east-1',
+            aws_access_key_id=credentials.get("aws_access_key_id"),
+            aws_secret_access_key=credentials.get("aws_secret_access_key"),
+            aws_session_token=credentials.get("aws_session_token")
+        )
+        
+        # Check progress
+        progress_result = seller_tools.check_registration_progress(registration_data)
+        
+        return {
+            "success": True,
+            "progress": progress_result
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+# Generate registration preview
+@app.post("/generate-registration-preview")
+async def generate_registration_preview(data: Dict[str, Any]):
+    """Generate preview of registration data"""
+    try:
+        credentials = data.get("credentials", {})
+        registration_data = data.get("registration_data", {})
+        
+        seller_tools = SellerRegistrationTools(
+            region='us-east-1',
+            aws_access_key_id=credentials.get("aws_access_key_id"),
+            aws_secret_access_key=credentials.get("aws_secret_access_key"),
+            aws_session_token=credentials.get("aws_session_token")
+        )
+        
+        # Generate preview
+        preview_result = seller_tools.generate_registration_preview(registration_data)
+        
+        return {
+            "success": True,
+            "preview": preview_result
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+# Get help resources
+@app.get("/get-help-resources")
+async def get_help_resources():
+    """Get help resources for seller registration"""
+    try:
+        seller_tools = SellerRegistrationTools(region='us-east-1')
+        help_resources = seller_tools.get_help_resources()
+        
+        return {
+            "success": True,
+            "resources": help_resources
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+# List marketplace products with detailed status
+@app.post("/list-marketplace-products")
+async def list_marketplace_products(credentials: Credentials):
+    """List marketplace products with detailed status and recommendations"""
+    try:
+        # Create session with provided credentials
+        session = boto3.Session(
+            aws_access_key_id=credentials.aws_access_key_id,
+            aws_secret_access_key=credentials.aws_secret_access_key,
+            aws_session_token=credentials.aws_session_token,
+            region_name='us-east-1'
+        )
+        
+        marketplace_client = session.client('marketplace-catalog')
+        account_id = session.client('sts').get_caller_identity()['Account']
+        
+        products = []
+        
+        # List all product types
+        for product_type in ['SaaSProduct', 'AmiProduct', 'ContainerProduct']:
+            try:
+                response = marketplace_client.list_entities(
+                    Catalog='AWSMarketplace',
+                    EntityType=product_type,
+                    MaxResults=50
+                )
+                
+                for entity in response.get('EntitySummaryList', []):
+                    entity_id = entity.get('EntityId')
+                    
+                    # Get detailed entity information
+                    try:
+                        details = marketplace_client.describe_entity(
+                            Catalog='AWSMarketplace',
+                            EntityId=entity_id
+                        )
+                        
+                        entity_details = json.loads(details.get('Details', '{}'))
+                        
+                        # Determine visibility status
+                        visibility = entity_details.get('Visibility', 'UNKNOWN')
+                        if not visibility or visibility == 'UNKNOWN':
+                            # Try to infer from other fields
+                            if entity_details.get('PublicationDate'):
+                                visibility = 'PUBLIC'
+                            elif entity_details.get('LimitedVisibility'):
+                                visibility = 'LIMITED'
+                            else:
+                                visibility = 'DRAFT'
+                        
+                        # Check if SaaS integration is needed and completed
+                        needs_saas_integration = product_type == 'SaaSProduct'
+                        saas_integration_status = 'NOT_REQUIRED'
+                        
+                        if needs_saas_integration:
+                            fulfillment_url = entity_details.get('FulfillmentUrl', '')
+                            if fulfillment_url:
+                                saas_integration_status = 'COMPLETED'
+                            elif visibility == 'LIMITED':
+                                saas_integration_status = 'REQUIRED'
+                            else:
+                                saas_integration_status = 'PENDING'
+                        
+                        # Determine allowed actions based on status
+                        allowed_actions = []
+                        recommendations = []
+                        
+                        if visibility == 'DRAFT':
+                            allowed_actions = ['edit', 'continue_listing', 'delete']
+                            recommendations.append('Continue with listing creation to publish')
+                        elif visibility == 'LIMITED':
+                            allowed_actions = ['view', 'manage_saas']
+                            if saas_integration_status == 'REQUIRED':
+                                recommendations.append('Complete SaaS integration before going public')
+                                allowed_actions.append('deploy_saas')
+                            elif saas_integration_status == 'COMPLETED':
+                                recommendations.append('Ready to publish to public marketplace')
+                                allowed_actions.append('publish_public')
+                        elif visibility == 'PUBLIC':
+                            allowed_actions = ['view', 'manage']
+                            recommendations.append('Product is live on AWS Marketplace')
+                        
+                        products.append({
+                            'product_id': entity_id,
+                            'product_name': entity.get('Name', entity_details.get('ProductTitle', 'Unnamed Product')),
+                            'product_type': product_type,
+                            'visibility': visibility,
+                            'status': entity.get('Status', 'UNKNOWN'),
+                            'last_modified': entity.get('LastModifiedDate', ''),
+                            'needs_saas_integration': needs_saas_integration,
+                            'saas_integration_status': saas_integration_status,
+                            'fulfillment_url': entity_details.get('FulfillmentUrl', ''),
+                            'allowed_actions': allowed_actions,
+                            'recommendations': recommendations,
+                            'is_editable': visibility == 'DRAFT',
+                            'can_deploy_saas': needs_saas_integration and saas_integration_status != 'COMPLETED',
+                            'details': {
+                                'short_description': entity_details.get('ShortDescription', ''),
+                                'logo_url': entity_details.get('LogoUrl', ''),
+                                'support_email': entity_details.get('SupportEmail', ''),
+                                'categories': entity_details.get('Categories', []),
+                            }
+                        })
+                        
+                    except Exception as detail_error:
+                        print(f"Error getting details for {entity_id}: {detail_error}")
+                        # Add basic info even if details fail
+                        products.append({
+                            'product_id': entity_id,
+                            'product_name': entity.get('Name', 'Unknown Product'),
+                            'product_type': product_type,
+                            'visibility': 'UNKNOWN',
+                            'status': 'UNKNOWN',
+                            'allowed_actions': ['view'],
+                            'recommendations': ['Unable to fetch product details'],
+                            'is_editable': False,
+                            'can_deploy_saas': False,
+                        })
+                        
+            except Exception as list_error:
+                print(f"Error listing {product_type}: {list_error}")
+                continue
+        
+        return {
+            "success": True,
+            "products": products,
+            "count": len(products),
+            "account_id": account_id
+        }
+        
+    except Exception as e:
+        print(f"Error listing marketplace products: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "products": [],
+            "count": 0
+        }
 
 # List Bedrock agents
 @app.post("/list-agents")
