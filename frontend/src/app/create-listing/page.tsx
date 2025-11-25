@@ -62,6 +62,7 @@ export default function CreateListingPage() {
   const [publishedToLimited, setPublishedToLimited] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
+  const [hasStarted, setHasStarted] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !listingData || !credentials) {
@@ -69,9 +70,12 @@ export default function CreateListingPage() {
       return;
     }
 
-    // Start listing creation automatically
-    createListing();
-  }, [isAuthenticated, listingData, credentials, router]);
+    // Start listing creation automatically - but only once!
+    if (!hasStarted && !loading && !success) {
+      setHasStarted(true);
+      createListing();
+    }
+  }, [isAuthenticated, listingData, credentials]);
 
   // Timer for elapsed time
   useEffect(() => {
@@ -98,6 +102,13 @@ export default function CreateListingPage() {
   };
 
   const createListing = async () => {
+    // Prevent duplicate calls
+    if (loading || success) {
+      console.log('[DEBUG] Skipping duplicate createListing call');
+      return;
+    }
+
+    console.log('[DEBUG] Starting createListing...');
     setLoading(true);
     setError('');
     setStartTime(Date.now());
