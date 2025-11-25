@@ -75,3 +75,4 @@ progress.json
 # Old implementation (if backing up)
 agent/agentcore/
 agent/marketplace_agent_v2.py.bak
+frontend/node_modules/
