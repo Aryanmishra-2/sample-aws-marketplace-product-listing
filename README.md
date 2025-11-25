@@ -1,211 +1,155 @@
 # AWS Marketplace Seller Portal
 
-A modern Next.js application with AWS Cloudscape Design System for creating and managing AWS Marketplace SaaS listings with AI-powered assistance.
+A modern, AI-powered web application for AWS Marketplace sellers to create and manage product listings with intelligent automation.
 
-## 🚀 Quick Start
+## 🚀 Features
 
-### Prerequisites
+### Core Capabilities
+- **AI-Powered Product Analysis** - Analyze product websites and documentation using Amazon Bedrock
+- **Intelligent Content Generation** - Auto-generate listing titles, descriptions, and highlights
+- **Smart Pricing Recommendations** - Get AI-suggested pricing models and dimensions
+- **Real-Time CloudFormation Monitoring** - Track SaaS infrastructure deployment with live updates
+- **Seller Registration** - Check seller status and manage AWS Marketplace accounts
+- **Complete Listing Workflow** - End-to-end product listing creation with validation
 
-- Node.js 18+ and npm
-- Python 3.8+ (for backend)
-- AWS Account with Marketplace access
-- AWS Credentials (Access Key, Secret Key)
+### Technical Features
+- **Next.js 14** with App Router and Server Components
+- **AWS Cloudscape Design System** for consistent AWS UI/UX
+- **FastAPI Backend** with Python 3.13
+- **Amazon Bedrock Integration** for AI capabilities
+- **AWS SDK Integration** for Marketplace and CloudFormation APIs
+- **Real-time Status Updates** with polling and event tracking
+- **Type-Safe** with TypeScript
 
-### Installation
+## 📋 Prerequisites
 
-1. **Clone the repository**
+- **Node.js** 18+ and npm
+- **Python** 3.13+
+- **AWS Account** with appropriate permissions
+- **AWS Credentials** (Access Key, Secret Key, optional Session Token)
+
+## 🛠️ Installation
+
+### 1. Clone the Repository
 ```bash
 git clone <repository-url>
 cd ai-agent-marketplace
 ```
 
-2. **Install Backend Dependencies**
+### 2. Backend Setup
 ```bash
+# Create and activate virtual environment
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install fastapi uvicorn boto3 pydantic
+
+# Install dependencies
+pip install -r reference/streamlit-app/requirements.txt
 ```
 
-3. **Install Frontend Dependencies**
+### 3. Frontend Setup
 ```bash
 cd frontend
 npm install
 ```
 
-### Running the Application
-
-1. **Start the Backend** (Terminal 1)
+### 4. Environment Configuration
 ```bash
-source venv/bin/activate
-cd backend
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Copy example environment file
+cp .env.example .env
+
+# Edit .env with your configuration (if needed)
 ```
 
-2. **Start the Frontend** (Terminal 2)
+## 🚀 Running the Application
+
+### Start Backend Server
 ```bash
+# From project root
+cd backend
+../venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Backend will be available at: `http://localhost:8000`
+
+### Start Frontend Development Server
+```bash
+# From project root
 cd frontend
 npm run dev
 ```
 
-3. **Access the Application**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Health Check: http://localhost:8000/health
+Frontend will be available at: `http://localhost:3000`
 
-## ✨ Features
+## 📖 Usage Guide
 
-### 🎨 AWS Standard Design
-- Official AWS Cloudscape Design System
-- AWS standard colors (Squid Ink, Smile Orange, Pacific Blue)
-- Authentic AWS Console look and feel
+### 1. Authentication
+- Enter your AWS credentials (Access Key, Secret Key, optional Session Token)
+- System validates credentials and checks seller registration status
 
-### 📊 Global Header
-- AWS Account ID display
-- IAM User Name
-- Organization Type (AWS Inc vs AWS India)
-- Current Product ID
-- Overall Progress Bar (0-100%)
+### 2. Product Information
+- Provide product website URL and documentation
+- AI analyzes your product and extracts key information
 
-### 🔄 Enhanced Progress Tracking
-- **8-Stage Listing Creation** with real-time updates
-- **8-Stage CloudFormation Deployment** with detailed progress
-- Elapsed time tracking
-- Color-coded status indicators
-- Individual stage completion times
+### 3. AI Analysis
+- Review AI-generated product analysis
+- Edit and refine the analysis as needed
 
-### 🏢 Seller Registration
-- Automatic seller status detection
-- Organization type identification
-- Existing products listing
-- Resume from any stage
-- Bedrock agents listing
+### 4. Content Generation
+- AI generates listing content (title, descriptions, highlights)
+- Review and customize generated content
 
-### 🤖 AI-Powered Features
-- Product analysis using Amazon Bedrock
-- Automatic content generation
-- Pricing model suggestions
-- Smart form pre-filling
+### 5. Pricing Configuration
+- Get AI-recommended pricing model
+- Configure pricing dimensions and contract durations
+- Set up refund policy and EULA
 
-## 📁 Project Structure
+### 6. Review & Submit
+- Review all listing details
+- Submit to create AWS Marketplace listing
+- Get Product ID and Offer ID
 
+### 7. SaaS Integration (Optional)
+- Deploy serverless infrastructure for SaaS products
+- Real-time CloudFormation deployment monitoring
+- Track resource creation and handle failures
+
+## 🏗️ Architecture
+
+### Frontend (Next.js)
 ```
-ai-agent-marketplace/
-├── backend/                    # FastAPI backend
-│   └── main.py                # API endpoints
-├── frontend/                   # Next.js frontend
-│   ├── src/
-│   │   ├── app/               # Next.js pages
-│   │   │   ├── page.tsx       # Credentials page
-│   │   │   ├── welcome/       # Welcome page
-│   │   │   ├── product-info/  # Product information
-│   │   │   ├── ai-analysis/   # AI analysis
-│   │   │   ├── review-suggestions/ # Review & edit
-│   │   │   ├── create-listing/     # Listing creation
-│   │   │   ├── listing-success/    # Success page
-│   │   │   ├── saas-integration/   # SaaS deployment
-│   │   │   ├── globals.css    # AWS standard colors
-│   │   │   └── layout.tsx     # Root layout
-│   │   ├── components/        # React components
-│   │   │   ├── GlobalHeader.tsx    # Global header
-│   │   │   └── DimensionManager.tsx # Pricing dimensions
-│   │   ├── lib/
-│   │   │   └── store.ts       # Zustand state management
-│   │   └── types/             # TypeScript types
-│   ├── package.json
-│   └── README.md
-├── reference/                  # Reference implementations
-│   └── streamlit-app/         # Original Streamlit app
-├── venv/                      # Python virtual environment
-├── .env.example               # Environment variables template
-└── README.md                  # This file
+frontend/
+├── src/
+│   ├── app/              # App Router pages
+│   │   ├── page.tsx      # Home/Login
+│   │   ├── welcome/      # Welcome page
+│   │   ├── product-info/ # Product input
+│   │   ├── ai-analysis/  # AI analysis
+│   │   ├── create-listing/ # Content generation
+│   │   ├── review-suggestions/ # Pricing & review
+│   │   ├── listing-success/ # Success page
+│   │   └── saas-integration/ # SaaS deployment
+│   ├── components/       # Reusable components
+│   ├── lib/             # Utilities and store
+│   └── types/           # TypeScript types
 ```
 
-## 🔧 Configuration
-
-### Environment Variables
-
-Create a `.env` file in the root directory:
-
-```bash
-# AWS Configuration (optional - can be entered in UI)
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-AWS_REGION=us-east-1
+### Backend (FastAPI)
+```
+backend/
+└── main.py              # FastAPI application with endpoints
 ```
 
-### AWS Permissions Required
+### Reference Implementation
+```
+reference/streamlit-app/
+├── agent/               # Marketplace agent system
+├── agents/              # Specialized agents
+└── config/              # Configuration files
+```
 
-Your IAM user/role needs these permissions:
-- `sts:GetCallerIdentity` - Validate credentials
-- `aws-marketplace:DescribeEntity` - Check seller status
-- `aws-marketplace:ListEntities` - List products
-- `marketplace-catalog:*` - Manage listings
-- `bedrock:InvokeModel` - AI analysis
-- `bedrock-agent:ListAgents` - List Bedrock agents
-- `cloudformation:*` - Deploy SaaS infrastructure
-- `s3:*` - Upload logos and EULAs
+## 🔌 API Endpoints
 
-## 📖 User Guide
-
-### 1. Enter AWS Credentials
-- Provide your AWS Access Key ID and Secret Access Key
-- Optional: Session Token for temporary credentials
-- System validates credentials and detects organization type
-
-### 2. Check Seller Status
-- Automatic detection of seller registration
-- View existing products
-- See Bedrock agents in your account
-
-### 3. Provide Product Information
-- Enter product website URL
-- Add documentation URL
-- Provide product description
-
-### 4. AI Analysis
-- AI analyzes your product
-- Generates listing content
-- Suggests pricing model
-
-### 5. Review & Edit
-- Review AI-generated content
-- Edit product title, descriptions
-- Configure pricing dimensions
-- Set refund policy and EULA
-- Configure geographic availability
-
-### 6. Create Listing
-- 8-stage automated creation
-- Real-time progress updates
-- Automatic API calls to AWS Marketplace
-
-### 7. Deploy SaaS Integration (Optional)
-- CloudFormation stack deployment
-- 8-stage deployment tracking
-- Creates DynamoDB, Lambda, API Gateway, SNS
-
-## 🎨 AWS Standard Colors
-
-The application uses official AWS colors:
-
-- **Squid Ink** (#232f3e) - Headers and navigation
-- **Smile Orange** (#ff9900) - Primary actions and accents
-- **Pacific Blue** (#0073bb) - Progress and info states
-- **Success Green** (#037f0c) - Success states
-- **Warning Yellow** (#f89406) - Warning states
-- **Error Red** (#d13212) - Error states
-
-## 🔐 Security
-
-- No credentials stored permanently
-- Credentials only in memory during session
-- HTTPS recommended for production
-- CORS configured for localhost development
-- Sensitive data masked in UI
-
-## 📚 API Endpoints
-
-### Backend API (Port 8000)
+### Backend API (`http://localhost:8000`)
 
 - `GET /health` - Health check
 - `POST /validate-credentials` - Validate AWS credentials
@@ -213,83 +157,116 @@ The application uses official AWS colors:
 - `POST /list-agents` - List Bedrock agents
 - `POST /analyze-product` - AI product analysis
 - `POST /generate-content` - Generate listing content
-- `POST /suggest-pricing` - Suggest pricing model
+- `POST /suggest-pricing` - Get pricing recommendations
 - `POST /create-listing` - Create marketplace listing
 - `POST /deploy-saas` - Deploy SaaS infrastructure
+- `POST /get-stack-status` - Get CloudFormation status
 
-## 🧪 Development
+## 🔧 Configuration
 
-### Build for Production
+### AWS Permissions Required
 
-```bash
-cd frontend
-npm run build
-npm start
-```
+The AWS credentials need permissions for:
+- **AWS Marketplace Catalog API** - Create and manage listings
+- **Amazon Bedrock** - AI model access (Claude 3.5 Sonnet)
+- **AWS CloudFormation** - Deploy SaaS infrastructure
+- **AWS STS** - Validate credentials
+- **IAM** - Create roles for SaaS integration
+- **DynamoDB** - Create tables for subscriptions
+- **Lambda** - Deploy metering functions
+- **API Gateway** - Create fulfillment APIs
+- **SNS** - Configure notifications
 
-### Run Tests
-
-```bash
-# Backend tests
-cd backend
-pytest
-
-# Frontend tests
-cd frontend
-npm test
-```
-
-## 📦 Dependencies
-
-### Backend
-- FastAPI - Modern web framework
-- Uvicorn - ASGI server
-- Boto3 - AWS SDK
-- Pydantic - Data validation
-
-### Frontend
-- Next.js 14 - React framework
-- AWS Cloudscape - Design system
-- Zustand - State management
-- Axios - HTTP client
-- TypeScript - Type safety
+### Bedrock Models Used
+- `us.anthropic.claude-3-5-sonnet-20241022-v2:0` (primary)
+- `anthropic.claude-3-5-sonnet-20240620-v1:0` (fallback)
+- `anthropic.claude-3-sonnet-20240229-v1:0` (fallback)
 
 ## 🐛 Troubleshooting
 
-### Backend won't start
-- Check Python version: `python3 --version`
-- Verify dependencies: `pip list`
-- Check port 8000 is available
+### Backend Issues
+```bash
+# Check backend logs
+tail -f /tmp/backend.log
 
-### Frontend won't start
-- Check Node version: `node --version`
-- Clear cache: `rm -rf .next`
-- Reinstall: `rm -rf node_modules && npm install`
+# Restart backend
+pkill -f "uvicorn main:app"
+cd backend && ../venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+```
 
-### API errors
-- Verify AWS credentials are valid
-- Check IAM permissions
-- Review backend logs
-- Check CORS settings
+### Frontend Issues
+```bash
+# Clear Next.js cache
+cd frontend
+rm -rf .next
+npm run dev
+```
 
-## 📞 Support
+### Common Issues
 
-For issues or questions:
-1. Check the documentation in `frontend/README.md`
-2. Review `ENHANCEMENTS_COMPLETE.md` for recent changes
-3. See `NEXTJS_MIGRATION_COMPLETE_GUIDE.md` for migration details
-4. Check reference Streamlit app in `reference/streamlit-app/`
+1. **Port Already in Use**
+   ```bash
+   # Kill process on port 8000
+   lsof -ti:8000 | xargs kill -9
+   
+   # Kill process on port 3000
+   lsof -ti:3000 | xargs kill -9
+   ```
 
-## 📄 License
+2. **Bedrock Access Denied**
+   - Ensure your AWS account has Bedrock enabled
+   - Request model access in AWS Console (Bedrock > Model access)
+
+3. **CloudFormation Deployment Fails**
+   - Check AWS credentials have CloudFormation permissions
+   - Verify region supports all required services
+   - Review CloudFormation events in the UI
+
+## 📚 Documentation
+
+- `PROJECT_STRUCTURE.md` - Detailed project structure
+- `DEPLOYMENT_SUMMARY.md` - Deployment guide
+- `SAAS_STATUS_FIXES.md` - SaaS monitoring implementation
+- `frontend/QUICK_START.md` - Frontend quick start guide
+- `frontend/README.md` - Frontend documentation
+
+## 🔐 Security Notes
+
+- Never commit AWS credentials to version control
+- Use IAM roles with least privilege principle
+- Rotate credentials regularly
+- Use session tokens for temporary access
+- Review CloudFormation templates before deployment
+
+## 🤝 Contributing
+
+1. Create a feature branch
+2. Make your changes
+3. Test thoroughly
+4. Submit a pull request
+
+## 📝 License
 
 [Your License Here]
 
-## 🙏 Acknowledgments
+## 🆘 Support
 
-- AWS Cloudscape Design System
-- Next.js Team
-- AWS Marketplace Team
+For issues and questions:
+- Check the troubleshooting section
+- Review documentation files
+- Check AWS service status
+- Verify credentials and permissions
+
+## 🎯 Roadmap
+
+- [ ] Multi-region support
+- [ ] Batch listing creation
+- [ ] Advanced analytics dashboard
+- [ ] Listing templates
+- [ ] Automated testing suite
+- [ ] Docker containerization
+- [ ] CI/CD pipeline
 
 ---
 
-**Note**: The original Streamlit implementation is available in `reference/streamlit-app/` for reference purposes only. The Next.js application is the recommended and actively maintained version.
+Built with ❤️ using Next.js, FastAPI, and AWS Services

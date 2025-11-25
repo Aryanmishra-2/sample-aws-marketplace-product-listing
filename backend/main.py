@@ -655,6 +655,7 @@ async def deploy_saas(data: Dict[str, Any]):
             return {
                 "success": True,
                 "stack_id": result.get('stack_id'),
+                "stack_name": result.get('stack_name', stack_name),
                 "message": "SaaS integration deployed successfully"
             }
         else:
@@ -666,6 +667,85 @@ async def deploy_saas(data: Dict[str, Any]):
         print(f"[ERROR] deploy_saas exception: {str(e)}")
         print(f"[ERROR] Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+# Get CloudFormation stack status
+@app.post("/get-stack-status")
+async def get_stack_status(data: Dict[str, Any]):
+    """Get CloudFormation stack deployment status"""
+    try:
+        stack_name = data.get("stack_name")
+        region = data.get("region", "us-east-1")
+        credentials = data.get("credentials", {})
+        
+        print(f"[DEBUG] Checking stack status for: {stack_name} in {region}")
+        
+        # Create boto3 session
+        session = boto3.Session(
+            aws_access_key_id=credentials.get("aws_access_key_id"),
+            aws_secret_access_key=credentials.get("aws_secret_access_key"),
+            aws_session_token=credentials.get("aws_session_token"),
+            region_name=region
+        )
+        
+        cf_client = session.client('cloudformation')
+        
+        # Get stack status
+        try:
+            response = cf_client.describe_stacks(StackName=stack_name)
+            stack = response['Stacks'][0]
+            
+            stack_status = stack.get('StackStatus')
+            stack_status_reason = stack.get('StackStatusReason', '')
+            
+            print(f"[DEBUG] Stack status: {stack_status}")
+            if stack_status_reason:
+                print(f"[DEBUG] Stack status reason: {stack_status_reason}")
+            
+            # Get stack events for detailed progress
+            events_response = cf_client.describe_stack_events(StackName=stack_name)
+            events = events_response['StackEvents'][:15]  # Get last 15 events
+            
+            # Parse events to determine current stage
+            latest_events = []
+            for event in events:
+                event_data = {
+                    'resource_type': event.get('ResourceType', ''),
+                    'logical_id': event.get('LogicalResourceId', ''),
+                    'status': event.get('ResourceStatus', ''),
+                    'timestamp': event.get('Timestamp').isoformat() if event.get('Timestamp') else None,
+                    'reason': event.get('ResourceStatusReason', '')
+                }
+                latest_events.append(event_data)
+                
+                # Log failed resources
+                if 'FAILED' in event_data['status']:
+                    print(f"[ERROR] Resource failed: {event_data['logical_id']} - {event_data['reason']}")
+            
+            return {
+                "success": True,
+                "stack_status": stack_status,
+                "stack_status_reason": stack_status_reason,
+                "events": latest_events,
+                "outputs": stack.get('Outputs', [])
+            }
+            
+        except cf_client.exceptions.ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if 'does not exist' in str(e) or error_code == 'ValidationError':
+                print(f"[DEBUG] Stack not found yet: {stack_name}")
+                return {
+                    "success": False,
+                    "stack_status": "NOT_FOUND",
+                    "error": "Stack not found - may still be initializing"
+                }
+            raise
+            
+    except Exception as e:
+        print(f"[ERROR] get_stack_status failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 if __name__ == "__main__":
     import uvicorn
