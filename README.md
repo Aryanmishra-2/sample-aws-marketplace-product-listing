@@ -1,253 +1,295 @@
-# AI Agent Marketplace
+# AWS Marketplace Seller Portal
 
-An AI-powered assistant system that guides AWS customers through the complete AWS Marketplace SaaS integration process with intelligent error handling and troubleshooting.
+A modern Next.js application with AWS Cloudscape Design System for creating and managing AWS Marketplace SaaS listings with AI-powered assistance.
 
 ## 🚀 Quick Start
 
-### Option 1: Streamlit Web UI (Recommended)
+### Prerequisites
 
-1. **Install Dependencies**
+- Node.js 18+ and npm
+- Python 3.8+ (for backend)
+- AWS Account with Marketplace access
+- AWS Credentials (Access Key, Secret Key)
+
+### Installation
+
+1. **Clone the repository**
 ```bash
-pip install -r requirements.txt
+git clone <repository-url>
+cd ai-agent-marketplace
 ```
 
-2. **Run the Streamlit App**
+2. **Install Backend Dependencies**
 ```bash
-streamlit run streamlit_app_with_seller_registration.py
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install fastapi uvicorn boto3 pydantic
 ```
 
-3. **Access the Web Interface**
-- Open your browser to `http://localhost:8501`
-- Enter your AWS credentials (Access Key, Secret Key, Region)
-- The app will automatically detect your seller registration status
-- Follow the guided workflow for marketplace listing creation
-
-### Option 2: CLI Assistant
-
-1. **Install Dependencies**
+3. **Install Frontend Dependencies**
 ```bash
-pip install -r requirements.txt
+cd frontend
+npm install
 ```
 
-2. **Run the AI Assistant**
+### Running the Application
+
+1. **Start the Backend** (Terminal 1)
 ```bash
-python ai_marketplace_orchestrator.py
+source venv/bin/activate
+cd backend
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-3. **Provide AWS Credentials**
-- Enter your AWS Access Key, Secret Key, and optional Session Token
-- The assistant will guide you through the complete workflow
+2. **Start the Frontend** (Terminal 2)
+```bash
+cd frontend
+npm run dev
+```
 
-## 🤖 What the Assistant Can Do
+3. **Access the Application**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Health Check: http://localhost:8000/health
 
-### Streamlit Web UI Features:
-- **Seller Registration Detection**: Automatically detects if your AWS account is registered as a marketplace seller
-- **Three-Scenario Handling**:
-  - Not Registered: Guides you through seller registration process
-  - Registered without Products: Validates account capabilities before proceeding
-  - Registered with Products: Skips validation and proceeds directly to listing creation
-- **AI-Guided Listing Creation**: Uses LLMs to generate marketplace listings from product documentation
-- **Visual Workflow**: Step-by-step guided interface with progress tracking
-- **Credential Management**: Secure AWS credential input with masked fields
+## ✨ Features
 
-### CLI Natural Language Commands:
-- "Deploy my SaaS integration"
-- "Test metering functionality" 
-- "Make my product public"
-- "What's my current status?"
-- "Help me troubleshoot this error"
+### 🎨 AWS Standard Design
+- Official AWS Cloudscape Design System
+- AWS standard colors (Squid Ink, Smile Orange, Pacific Blue)
+- Authentic AWS Console look and feel
 
-### Complete Workflow:
-1. **Validate** seller registration status
-2. **Deploy** CloudFormation template with SaaS integration
-3. **Update** fulfillment URL automatically via AWS Marketplace Catalog API
-4. **Confirm** SNS subscription for notifications
-5. **Test** metering with usage records
-6. **Validate** metering success
-7. **Request** public visibility
+### 📊 Global Header
+- AWS Account ID display
+- IAM User Name
+- Organization Type (AWS Inc vs AWS India)
+- Current Product ID
+- Overall Progress Bar (0-100%)
 
-## 🏗️ Architecture
+### 🔄 Enhanced Progress Tracking
+- **8-Stage Listing Creation** with real-time updates
+- **8-Stage CloudFormation Deployment** with detailed progress
+- Elapsed time tracking
+- Color-coded status indicators
+- Individual stage completion times
 
-### Core Agents:
-- **CreateSaasAgent**: Product configuration
-- **ServerlessSaasIntegrationAgent**: CloudFormation deployment
-- **MeteringAgent**: Usage tracking and validation
-- **PublicVisibilityAgent**: Marketplace visibility management
-- **ValidationHelperAgent**: Input validation with Knowledge Base
+### 🏢 Seller Registration
+- Automatic seller status detection
+- Organization type identification
+- Existing products listing
+- Resume from any stage
+- Bedrock agents listing
 
-### AI Components:
-- **Bedrock LLM**: Natural language understanding and response generation
-- **Knowledge Base**: AWS Marketplace documentation and troubleshooting
-- **Orchestrator**: Workflow coordination and state management
+### 🤖 AI-Powered Features
+- Product analysis using Amazon Bedrock
+- Automatic content generation
+- Pricing model suggestions
+- Smart form pre-filling
 
-## 📋 Prerequisites
+## 📁 Project Structure
 
-### AWS Setup:
-1. **Enable Bedrock Models** (for CLI assistant):
-   - Amazon Nova Pro
-   - Amazon Titan Text Embeddings V2
-
-2. **Create Knowledge Base** (Optional but recommended for CLI):
-   - Deploy `knowledge_base_setup.yaml`
-   - Upload AWS Marketplace documentation
-   - Update `knowledge_base_id` in orchestrator
-
-3. **AWS Credentials**:
-   - IAM user with marketplace, CloudFormation, and Catalog API permissions
-   - Required permissions:
-     - `marketplace-catalog:StartChangeSet`
-     - `marketplace-catalog:DescribeEntity`
-     - `marketplace-catalog:ListChangeSets`
-     - `marketplace-catalog:ListEntities`
-     - `aws-marketplace:DescribeEntity` (for seller registration detection)
-   - Temporary credentials recommended for security
-
-### Streamlit App Requirements:
-- Python 3.8+
-- AWS credentials with marketplace access
-- Internet connection for AWS API calls
-- Browser for accessing the web interface
+```
+ai-agent-marketplace/
+├── backend/                    # FastAPI backend
+│   └── main.py                # API endpoints
+├── frontend/                   # Next.js frontend
+│   ├── src/
+│   │   ├── app/               # Next.js pages
+│   │   │   ├── page.tsx       # Credentials page
+│   │   │   ├── welcome/       # Welcome page
+│   │   │   ├── product-info/  # Product information
+│   │   │   ├── ai-analysis/   # AI analysis
+│   │   │   ├── review-suggestions/ # Review & edit
+│   │   │   ├── create-listing/     # Listing creation
+│   │   │   ├── listing-success/    # Success page
+│   │   │   ├── saas-integration/   # SaaS deployment
+│   │   │   ├── globals.css    # AWS standard colors
+│   │   │   └── layout.tsx     # Root layout
+│   │   ├── components/        # React components
+│   │   │   ├── GlobalHeader.tsx    # Global header
+│   │   │   └── DimensionManager.tsx # Pricing dimensions
+│   │   ├── lib/
+│   │   │   └── store.ts       # Zustand state management
+│   │   └── types/             # TypeScript types
+│   ├── package.json
+│   └── README.md
+├── reference/                  # Reference implementations
+│   └── streamlit-app/         # Original Streamlit app
+├── venv/                      # Python virtual environment
+├── .env.example               # Environment variables template
+└── README.md                  # This file
+```
 
 ## 🔧 Configuration
 
-### Update Product Settings:
-Edit `create_saas.py` with your product details:
-```python
-def get_product_id(self):
-    return "your-product-id"
+### Environment Variables
 
-def get_pricing_model_dimension(self):
-    return "Contract-based-pricing"  # or Usage-based-pricing
+Create a `.env` file in the root directory:
 
-def get_email_dimension(self):
-    return "your-email@example.com"
-```
-
-### Knowledge Base Integration:
-Update `ai_marketplace_orchestrator.py`:
-```python
-self.knowledge_base_id = "your-actual-kb-id"
-```
-
-## 🌐 Streamlit Web UI
-
-### Features:
-- **Automatic Seller Detection**: Detects your AWS Marketplace seller registration status
-- **Smart Validation**: Three-scenario handling based on registration and product ownership
-- **Guided Workflow**: Step-by-step interface for listing creation
-- **Secure Credentials**: Masked input fields for AWS credentials
-- **Visual Progress**: Clear indication of current step and completion status
-
-### Seller Registration Scenarios:
-
-#### Scenario 1: Not Registered
-- **Detection**: Empty changesets AND empty entities
-- **Action**: Displays registration guidance with AWS Marketplace Management Portal link
-- **Next Steps**: Complete seller registration before proceeding
-
-#### Scenario 2: Registered Without Products
-- **Detection**: Has changesets OR entities, but no owned products
-- **Action**: Requires manual validation via checkboxes
-- **Validation**: Confirms tax info, banking info, and disbursement method
-- **Next Steps**: Complete validation to proceed with listing creation
-
-#### Scenario 3: Registered With Products
-- **Detection**: Has owned products (verified via EntityArn)
-- **Action**: Automatically skips validation
-- **Next Steps**: Proceeds directly to listing creation workflow
-
-### Running the App:
 ```bash
-# Activate virtual environment (if using one)
-source venv/bin/activate
-
-# Run the Streamlit app
-streamlit run streamlit_app_with_seller_registration.py
-
-# Access in browser
-# Local: http://localhost:8501
-# Network: http://<your-ip>:8501
+# AWS Configuration (optional - can be entered in UI)
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+AWS_REGION=us-east-1
 ```
 
-### Stopping the App:
-```bash
-# Press Ctrl+C in the terminal where Streamlit is running
-```
+### AWS Permissions Required
 
-## 🚦 CLI Usage Examples
+Your IAM user/role needs these permissions:
+- `sts:GetCallerIdentity` - Validate credentials
+- `aws-marketplace:DescribeEntity` - Check seller status
+- `aws-marketplace:ListEntities` - List products
+- `marketplace-catalog:*` - Manage listings
+- `bedrock:InvokeModel` - AI analysis
+- `bedrock-agent:ListAgents` - List Bedrock agents
+- `cloudformation:*` - Deploy SaaS infrastructure
+- `s3:*` - Upload logos and EULAs
 
-### Interactive Session:
-```
-🤖 AWS Marketplace SaaS Integration Assistant
-Enter AWS Access Key: AKIA...
-Enter Session Token (optional): 
+## 📖 User Guide
 
-💬 What would you like to do? Deploy my SaaS integration
+### 1. Enter AWS Credentials
+- Provide your AWS Access Key ID and Secret Access Key
+- Optional: Session Token for temporary credentials
+- System validates credentials and detects organization type
 
-🤖 I'll help you deploy your SaaS integration. Starting CloudFormation 
-deployment with your product configuration...
+### 2. Check Seller Status
+- Automatic detection of seller registration
+- View existing products
+- See Bedrock agents in your account
 
-✅ Fulfillment URL updated automatically via AWS Marketplace Catalog API
+### 3. Provide Product Information
+- Enter product website URL
+- Add documentation URL
+- Provide product description
 
-📋 Suggested next actions:
-   • Confirm SNS subscription
-   • Test metering functionality
+### 4. AI Analysis
+- AI analyzes your product
+- Generates listing content
+- Suggests pricing model
 
-📍 Current step: deployment
-✅ Completed: None
-```
+### 5. Review & Edit
+- Review AI-generated content
+- Edit product title, descriptions
+- Configure pricing dimensions
+- Set refund policy and EULA
+- Configure geographic availability
 
-## 🛠️ Error Handling
+### 6. Create Listing
+- 8-stage automated creation
+- Real-time progress updates
+- Automatic API calls to AWS Marketplace
 
-The assistant provides intelligent error handling:
-- **Input Validation**: Real-time format checking with examples
-- **AWS API Errors**: Natural language explanation of technical errors
-- **Knowledge Base Lookup**: Contextual troubleshooting guidance
-- **Retry Mechanisms**: Guided correction with specific instructions
+### 7. Deploy SaaS Integration (Optional)
+- CloudFormation stack deployment
+- 8-stage deployment tracking
+- Creates DynamoDB, Lambda, API Gateway, SNS
 
-## 📁 File Structure
+## 🎨 AWS Standard Colors
 
-```
-AI_Agent_Marketplace/
-├── streamlit_app_with_seller_registration.py # Web UI (Recommended)
-├── agents/                           # Core marketplace agents
-│   ├── create_saas.py               # Product configuration
-│   ├── serverless_saas_integration.py # CloudFormation deployment
-│   ├── metering.py                  # Usage tracking
-│   ├── public_visibility.py         # Visibility management
-│   ├── buyer_experience.py          # Buyer simulation
-│   ├── workflow_orchestrator.py     # Complete workflow
-│   ├── validation_helper.py         # Input validation
-│   └── status_checker.py            # Infrastructure verification
-├── agent/                           # Streamlit app agents
-│   ├── orchestrator.py              # Listing workflow orchestrator
-│   ├── tools/
-│   │   ├── listing_tools.py         # Marketplace listing operations
-│   │   └── seller_registration_tools.py # Seller status detection
-│   └── sub_agents/
-│       └── seller_registration_agent.py # Registration workflow
-├── bedrock_agent/                   # AI and infrastructure files
-│   ├── ai_marketplace_orchestrator.py # CLI AI assistant
-│   ├── Integration.yaml             # CloudFormation template
-│   ├── knowledge_base_setup.yaml    # Knowledge Base infrastructure
-│   ├── agent_config.yaml            # Agent configuration
-│   └── mcp_config.json              # MCP configuration
-├── tests/                           # Test suite
-│   ├── test_*.py                    # Individual agent tests
-│   └── run_all_tests.py             # Master test runner
-└── requirements.txt                 # Dependencies
-```
+The application uses official AWS colors:
+
+- **Squid Ink** (#232f3e) - Headers and navigation
+- **Smile Orange** (#ff9900) - Primary actions and accents
+- **Pacific Blue** (#0073bb) - Progress and info states
+- **Success Green** (#037f0c) - Success states
+- **Warning Yellow** (#f89406) - Warning states
+- **Error Red** (#d13212) - Error states
 
 ## 🔐 Security
 
-- Uses temporary AWS credentials
-- No permanent credential storage
-- Least-privilege IAM permissions
-- Secure Knowledge Base access
+- No credentials stored permanently
+- Credentials only in memory during session
+- HTTPS recommended for production
+- CORS configured for localhost development
+- Sensitive data masked in UI
+
+## 📚 API Endpoints
+
+### Backend API (Port 8000)
+
+- `GET /health` - Health check
+- `POST /validate-credentials` - Validate AWS credentials
+- `POST /check-seller-status` - Check seller registration
+- `POST /list-agents` - List Bedrock agents
+- `POST /analyze-product` - AI product analysis
+- `POST /generate-content` - Generate listing content
+- `POST /suggest-pricing` - Suggest pricing model
+- `POST /create-listing` - Create marketplace listing
+- `POST /deploy-saas` - Deploy SaaS infrastructure
+
+## 🧪 Development
+
+### Build for Production
+
+```bash
+cd frontend
+npm run build
+npm start
+```
+
+### Run Tests
+
+```bash
+# Backend tests
+cd backend
+pytest
+
+# Frontend tests
+cd frontend
+npm test
+```
+
+## 📦 Dependencies
+
+### Backend
+- FastAPI - Modern web framework
+- Uvicorn - ASGI server
+- Boto3 - AWS SDK
+- Pydantic - Data validation
+
+### Frontend
+- Next.js 14 - React framework
+- AWS Cloudscape - Design system
+- Zustand - State management
+- Axios - HTTP client
+- TypeScript - Type safety
+
+## 🐛 Troubleshooting
+
+### Backend won't start
+- Check Python version: `python3 --version`
+- Verify dependencies: `pip list`
+- Check port 8000 is available
+
+### Frontend won't start
+- Check Node version: `node --version`
+- Clear cache: `rm -rf .next`
+- Reinstall: `rm -rf node_modules && npm install`
+
+### API errors
+- Verify AWS credentials are valid
+- Check IAM permissions
+- Review backend logs
+- Check CORS settings
 
 ## 📞 Support
 
 For issues or questions:
-1. Check the Knowledge Base for troubleshooting guidance
-2. Review AWS CloudFormation events for deployment issues
-3. Verify IAM permissions for marketplace operations
+1. Check the documentation in `frontend/README.md`
+2. Review `ENHANCEMENTS_COMPLETE.md` for recent changes
+3. See `NEXTJS_MIGRATION_COMPLETE_GUIDE.md` for migration details
+4. Check reference Streamlit app in `reference/streamlit-app/`
+
+## 📄 License
+
+[Your License Here]
+
+## 🙏 Acknowledgments
+
+- AWS Cloudscape Design System
+- Next.js Team
+- AWS Marketplace Team
+
+---
+
+**Note**: The original Streamlit implementation is available in `reference/streamlit-app/` for reference purposes only. The Next.js application is the recommended and actively maintained version.
