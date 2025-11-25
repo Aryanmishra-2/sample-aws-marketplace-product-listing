@@ -815,10 +815,23 @@ async def create_listing(data: Dict[str, Any]):
         orchestrator = strands_agent.orchestrator
         
         # Stage 1: Product Information
-        orchestrator.set_stage_data("product_title", listing_data.get("title"))
-        orchestrator.set_stage_data("logo_s3_url", listing_data.get("logo_s3_url"))
-        orchestrator.set_stage_data("short_description", listing_data.get("short_description"))
-        orchestrator.set_stage_data("long_description", listing_data.get("long_description"))
+        product_title = listing_data.get("title")
+        logo_s3_url = listing_data.get("logo_s3_url")
+        short_description = listing_data.get("short_description")
+        long_description = listing_data.get("long_description")
+        
+        print(f"[DEBUG] Product title: {product_title}")
+        print(f"[DEBUG] Short description: {short_description[:50] if short_description else 'MISSING'}")
+        print(f"[DEBUG] Long description: {long_description[:50] if long_description else 'MISSING'}")
+        
+        # Validate required fields
+        if not long_description or len(long_description.strip()) == 0:
+            raise Exception("Long description is required but missing or empty")
+        
+        orchestrator.set_stage_data("product_title", product_title)
+        orchestrator.set_stage_data("logo_s3_url", logo_s3_url)
+        orchestrator.set_stage_data("short_description", short_description)
+        orchestrator.set_stage_data("long_description", long_description)
         orchestrator.set_stage_data("highlights", listing_data.get("highlights"))
         orchestrator.set_stage_data("support_email", listing_data.get("support_email"))
         orchestrator.set_stage_data("support_description", listing_data.get("support_description"))
