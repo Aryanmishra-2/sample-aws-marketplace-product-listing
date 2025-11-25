@@ -928,18 +928,39 @@ async def create_listing(data: Dict[str, Any]):
             )
             published_to_limited = release_result.get("success", False)
         
+        # Collect all stage results
+        stage_results = [
+            {"stage": "Product Information", "status": result1.get("status"), "message": result1.get("message", "")},
+            {"stage": "Fulfillment", "status": result2.get("status"), "message": result2.get("message", "")},
+            {"stage": "Pricing Dimensions", "status": result3.get("status"), "message": result3.get("message", "")},
+            {"stage": "Price Review", "status": result4.get("status"), "message": result4.get("message", "")},
+            {"stage": "Refund Policy", "status": result5.get("status"), "message": result5.get("message", "")},
+            {"stage": "EULA", "status": result6.get("status"), "message": result6.get("message", "")},
+            {"stage": "Availability", "status": result7.get("status"), "message": result7.get("message", "")},
+            {"stage": "Allowlist", "status": result8.get("status"), "message": result8.get("message", "")},
+        ]
+        
         return {
             "success": True,
             "product_id": product_id,
             "offer_id": offer_id,
             "published_to_limited": published_to_limited,
-            "message": "Listing created successfully"
+            "message": "Listing created successfully",
+            "stages": stage_results
         }
         
     except Exception as e:
-        print(f"[ERROR] create_listing failed: {str(e)}")
+        error_message = str(e)
+        print(f"[ERROR] create_listing failed: {error_message}")
         print(f"[ERROR] Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+        
+        # Return detailed error
+        return {
+            "success": False,
+            "error": error_message,
+            "message": f"Listing creation failed: {error_message}",
+            "stages": []
+        }
 
 # Deploy SaaS
 @app.post("/deploy-saas")

@@ -112,30 +112,37 @@ export default function CreateListingPage() {
     setLoading(true);
     setError('');
     setStartTime(Date.now());
+    setProgress(5);
 
     try {
-      // Execute 8-stage workflow with real-time updates
-      for (let i = 0; i < INITIAL_STAGES.length; i++) {
-        setCurrentStageIndex(i);
-        updateStageStatus(i, 'in-progress');
-        setProgress(INITIAL_STAGES[i].progress);
+      // Show initial progress
+      setCurrentStageIndex(0);
+      updateStageStatus(0, 'in-progress', 'Sending to AWS Marketplace...');
 
-        // Simulate stage execution (in real app, backend would send progress updates)
-        await new Promise((resolve) => setTimeout(resolve, 800));
-        
-        updateStageStatus(i, 'completed', '✓ Complete');
-      }
-
-      // Call backend to create listing
-      setCurrentStageIndex(INITIAL_STAGES.length);
+      // Call backend to create listing (this does all 8 stages)
       const response = await axios.post('/api/create-listing', {
         listing_data: listingData,
         credentials: credentials,
       });
 
+      console.log('[DEBUG] Backend response:', response.data);
+
+      // Check if creation was successful
       if (!response.data.success) {
-        throw new Error(response.data.error || 'Failed to create listing');
+        throw new Error(response.data.error || response.data.message || 'Failed to create listing');
       }
+
+      // Update stages based on backend response
+      const backendStages = response.data.stages || [];
+      backendStages.forEach((backendStage: any, index: number) => {
+        if (index < stages.length) {
+          const status = backendStage.status === 'complete' ? 'completed' : 
+                        backendStage.status === 'error' ? 'error' : 'completed';
+          const message = backendStage.status === 'complete' ? '✓ Complete' : 
+                         backendStage.status === 'error' ? `✗ ${backendStage.message}` : '✓ Complete';
+          updateStageStatus(index, status, message);
+        }
+      });
 
       setProgress(100);
       setSuccess(true);
@@ -147,11 +154,16 @@ export default function CreateListingPage() {
       setProductId(response.data.product_id);
     } catch (err: any) {
       console.error('Listing creation error:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to create listing');
+      const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to create listing';
+      setError(errorMessage);
+      
+      // Mark current stage as failed
       if (currentStageIndex >= 0 && currentStageIndex < stages.length) {
-        updateStageStatus(currentStageIndex, 'error', '✗ Failed');
+        updateStageStatus(currentStageIndex, 'error', `✗ ${errorMessage}`);
       }
+      
       setProgress(0);
+      setSuccess(false);
     } finally {
       setLoading(false);
     }

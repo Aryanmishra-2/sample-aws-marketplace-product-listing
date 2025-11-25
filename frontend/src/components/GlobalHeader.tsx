@@ -145,12 +145,31 @@ export default function GlobalHeader() {
 
         {/* Progress Bar Row */}
         <div style={{ marginTop: '8px' }}>
-          <ProgressBar
-            value={progressValue}
-            variant="standalone"
-            additionalInfo={`${progressValue}%`}
-            description={`Step ${WORKFLOW_STEPS.findIndex(s => s.key === currentStep) + 1} of ${WORKFLOW_STEPS.length}`}
-          />
+          <div style={{ 
+            backgroundColor: '#e9ebed',
+            borderRadius: '4px',
+            height: '8px',
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            <div style={{
+              backgroundColor: progressValue === 100 ? '#037f0c' : '#0073bb',
+              height: '100%',
+              width: `${progressValue}%`,
+              transition: 'width 0.3s ease-in-out',
+              boxShadow: progressValue > 0 ? '0 0 8px rgba(0, 115, 187, 0.5)' : 'none'
+            }} />
+          </div>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            marginTop: '4px',
+            fontSize: '12px',
+            color: '#aab7b8'
+          }}>
+            <span>Step {WORKFLOW_STEPS.findIndex(s => s.key === currentStep) + 1} of {WORKFLOW_STEPS.length}</span>
+            <span style={{ color: progressValue === 100 ? '#037f0c' : '#ff9900', fontWeight: 'bold' }}>{progressValue}%</span>
+          </div>
         </div>
       </SpaceBetween>
     </div>
