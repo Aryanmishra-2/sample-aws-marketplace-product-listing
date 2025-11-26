@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { analysis, product_context } = body;
+    const { analysis, product_context, credentials } = body;
 
     // Call FastAPI backend
     const response = await fetch('http://localhost:8000/generate-content', {
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ analysis, product_context }),
+      body: JSON.stringify({ analysis, product_context, credentials }),
     });
 
     const data = await response.json();

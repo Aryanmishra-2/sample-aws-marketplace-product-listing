@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { product_context } = body;
+    const { product_context, credentials } = body;
 
     if (!product_context) {
       return NextResponse.json(
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ product_context }),
+      body: JSON.stringify({ product_context, credentials }),
     });
 
     const data = await response.json();

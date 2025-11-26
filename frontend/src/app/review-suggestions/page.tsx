@@ -24,32 +24,162 @@ import { useStore } from '@/lib/store';
 import GlobalHeader from '@/components/GlobalHeader';
 import DimensionManager from '@/components/DimensionManager';
 
-const AWS_CATEGORIES = [
-  'Application Development',
-  'Backup & Recovery',
-  'Business Intelligence',
-  'Collaboration & Productivity',
-  'Contact Center',
-  'Content Management',
-  'CRM',
-  'Data Analytics',
-  'Database',
-  'DevOps',
-  'eCommerce',
-  'Financial Services',
-  'Healthcare & Life Sciences',
-  'High Performance Computing',
-  'Infrastructure Software',
-  'IoT',
-  'Machine Learning',
-  'Media & Entertainment',
-  'Migration',
-  'Monitoring',
-  'Network Infrastructure',
-  'Operating Systems',
-  'Security',
-  'Storage',
-].sort();
+const AWS_CATEGORY_GROUPS = [
+  {
+    label: 'AI Agents & Tools',
+    options: [
+      { label: 'AI Security', value: 'AI Security' },
+      { label: 'Content Creation', value: 'Content Creation' },
+      { label: 'Customer Experience Personalization', value: 'Customer Experience Personalization' },
+      { label: 'Customer Support', value: 'Customer Support' },
+      { label: 'Data Analysis', value: 'Data Analysis' },
+      { label: 'Finance & Accounting', value: 'Finance & Accounting' },
+      { label: 'IT Support', value: 'IT Support' },
+      { label: 'Legal & Compliance', value: 'Legal & Compliance' },
+      { label: 'Observability', value: 'Observability' },
+      { label: 'Procurement & Supply Chain', value: 'Procurement & Supply Chain' },
+      { label: 'Quality Assurance', value: 'Quality Assurance' },
+      { label: 'Research', value: 'Research' },
+      { label: 'Sales & Marketing', value: 'Sales & Marketing' },
+      { label: 'Scheduling & Coordination', value: 'Scheduling & Coordination' },
+      { label: 'Software Development', value: 'Software Development' },
+    ],
+  },
+  {
+    label: 'Infrastructure Software',
+    options: [
+      { label: 'Backup & Recovery', value: 'Backup & Recovery' },
+      { label: 'Data Analytics', value: 'Data Analytics' },
+      { label: 'Data Integration', value: 'Data Integration' },
+      { label: 'Data Preparation', value: 'Data Preparation' },
+      { label: 'ELT/ETL', value: 'ELT/ETL' },
+      { label: 'Streaming Solutions', value: 'Streaming Solutions' },
+      { label: 'Databases', value: 'Databases' },
+      { label: 'Data Warehouses', value: 'Data Warehouses' },
+      { label: 'Analytic Platforms', value: 'Analytic Platforms' },
+      { label: 'Data Catalogs', value: 'Data Catalogs' },
+      { label: 'Master Data Management', value: 'Master Data Management' },
+      { label: 'Masking/Tokenization', value: 'Masking/Tokenization' },
+      { label: 'Business Intelligence & Advanced Analytics', value: 'Business Intelligence & Advanced Analytics' },
+      { label: 'High Performance Computing', value: 'High Performance Computing' },
+      { label: 'Migration', value: 'Migration' },
+      { label: 'Network Infrastructure', value: 'Network Infrastructure' },
+      { label: 'Operating Systems', value: 'Operating Systems' },
+      { label: 'Security', value: 'Security' },
+      { label: 'Storage', value: 'Storage' },
+    ],
+  },
+  {
+    label: 'DevOps',
+    options: [
+      { label: 'Agile Lifecycle Management', value: 'Agile Lifecycle Management' },
+      { label: 'Application Development', value: 'Application Development' },
+      { label: 'Application Servers', value: 'Application Servers' },
+      { label: 'Application Stacks', value: 'Application Stacks' },
+      { label: 'Continuous Integration and Continuous Delivery', value: 'Continuous Integration and Continuous Delivery' },
+      { label: 'Infrastructure as Code', value: 'Infrastructure as Code' },
+      { label: 'Issue & Bug Tracking', value: 'Issue & Bug Tracking' },
+      { label: 'Monitoring', value: 'Monitoring' },
+      { label: 'Log Analysis', value: 'Log Analysis' },
+      { label: 'Source Control', value: 'Source Control' },
+      { label: 'Testing', value: 'Testing' },
+    ],
+  },
+  {
+    label: 'Business Applications',
+    options: [
+      { label: 'Blockchain', value: 'Blockchain' },
+      { label: 'Collaboration & Productivity', value: 'Collaboration & Productivity' },
+      { label: 'Contact Center', value: 'Contact Center' },
+      { label: 'Content Management', value: 'Content Management' },
+      { label: 'CRM', value: 'CRM' },
+      { label: 'eCommerce', value: 'eCommerce' },
+      { label: 'eLearning', value: 'eLearning' },
+      { label: 'Human Resources', value: 'Human Resources' },
+      { label: 'IT Business Management', value: 'IT Business Management' },
+      { label: 'Project Management', value: 'Project Management' },
+    ],
+  },
+  {
+    label: 'IoT',
+    options: [
+      { label: 'Analytics', value: 'Analytics' },
+      { label: 'Applications', value: 'Applications' },
+      { label: 'Device Connectivity', value: 'Device Connectivity' },
+      { label: 'Device Management', value: 'Device Management' },
+      { label: 'Device Security', value: 'Device Security' },
+      { label: 'Industrial IoT', value: 'Industrial IoT' },
+      { label: 'Smart Home & City', value: 'Smart Home & City' },
+    ],
+  },
+  {
+    label: 'Industries',
+    options: [
+      { label: 'Education & Research', value: 'Education & Research' },
+      { label: 'Financial Services', value: 'Financial Services' },
+      { label: 'Healthcare & Life Sciences', value: 'Healthcare & Life Sciences' },
+      { label: 'Media & Entertainment', value: 'Media & Entertainment' },
+      { label: 'Industrial', value: 'Industrial' },
+      { label: 'Energy', value: 'Energy' },
+      { label: 'Automotive', value: 'Automotive' },
+    ],
+  },
+  {
+    label: 'Data',
+    options: [
+      { label: 'Financial Services Data', value: 'Financial Services Data' },
+      { label: 'Retail, Location & Marketing Data', value: 'Retail, Location & Marketing Data' },
+      { label: 'Public Sector Data', value: 'Public Sector Data' },
+      { label: 'Healthcare & Life Sciences Data', value: 'Healthcare & Life Sciences Data' },
+      { label: 'Resources Data', value: 'Resources Data' },
+      { label: 'Media & Entertainment Data', value: 'Media & Entertainment Data' },
+      { label: 'Telecommunications Data', value: 'Telecommunications Data' },
+      { label: 'Environmental Data', value: 'Environmental Data' },
+      { label: 'Automotive Data', value: 'Automotive Data' },
+      { label: 'Manufacturing Data', value: 'Manufacturing Data' },
+      { label: 'Gaming Data', value: 'Gaming Data' },
+    ],
+  },
+  {
+    label: 'Professional Services',
+    options: [
+      { label: 'Assessments', value: 'Assessments' },
+      { label: 'Implementation', value: 'Implementation' },
+      { label: 'Managed Services', value: 'Managed Services' },
+      { label: 'Premium Support', value: 'Premium Support' },
+      { label: 'Training', value: 'Training' },
+    ],
+  },
+  {
+    label: 'Machine Learning',
+    options: [
+      { label: 'Human Review Services', value: 'Human Review Services' },
+      { label: 'ML Solutions', value: 'ML Solutions' },
+      { label: 'Data Labeling Services', value: 'Data Labeling Services' },
+      { label: 'Computer Vision', value: 'Computer Vision' },
+      { label: 'Natural Language Processing', value: 'Natural Language Processing' },
+      { label: 'Speech Recognition', value: 'Speech Recognition' },
+      { label: 'Generative AI', value: 'Generative AI' },
+      { label: 'Sentiment Analysis', value: 'Sentiment Analysis' },
+      { label: 'Text to Speech', value: 'Text to Speech' },
+      { label: 'Translation', value: 'Translation' },
+      { label: 'Object Detection', value: 'Object Detection' },
+      { label: 'Anomaly Detection', value: 'Anomaly Detection' },
+      { label: 'Time-series Forecasting', value: 'Time-series Forecasting' },
+    ],
+  },
+  {
+    label: 'Cloud Operations',
+    options: [
+      { label: 'Cloud Governance', value: 'Cloud Governance' },
+      { label: 'Cloud Financial Management', value: 'Cloud Financial Management' },
+      { label: 'Monitoring and Observability', value: 'Monitoring and Observability' },
+      { label: 'Compliance and Auditing', value: 'Compliance and Auditing' },
+      { label: 'Operations Management', value: 'Operations Management' },
+      { label: 'AIOps', value: 'AIOps' },
+    ],
+  },
+];
 
 export default function ReviewSuggestionsPage() {
   const router = useRouter();
@@ -400,7 +530,7 @@ export default function ReviewSuggestionsPage() {
                         <Multiselect
                           selectedOptions={categories}
                           onChange={({ detail }) => setCategories([...detail.selectedOptions])}
-                          options={AWS_CATEGORIES.map((cat) => ({ label: cat, value: cat }))}
+                          options={AWS_CATEGORY_GROUPS}
                           placeholder="Select categories"
                           filteringType="auto"
                         />

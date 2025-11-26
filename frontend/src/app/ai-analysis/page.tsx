@@ -27,6 +27,7 @@ export default function AIAnalysisPage() {
     setAnalysisResult,
     setCurrentStep,
     analysisResult,
+    credentials,
   } = useStore();
 
   const [loading, setLoading] = useState(false);
@@ -63,6 +64,7 @@ export default function AIAnalysisPage() {
 
       const analysisResponse = await axios.post('/api/analyze-product', {
         product_context: productContext,
+        credentials,
       });
 
       if (!analysisResponse.data.success) {
@@ -77,6 +79,7 @@ export default function AIAnalysisPage() {
       const contentResponse = await axios.post('/api/generate-content', {
         analysis: analysisResponse.data.analysis,
         product_context: productContext,
+        credentials,
       });
 
       if (!contentResponse.data.success) {
@@ -90,6 +93,7 @@ export default function AIAnalysisPage() {
 
       const pricingResponse = await axios.post('/api/suggest-pricing', {
         analysis: analysisResponse.data.analysis,
+        credentials,
       });
 
       if (!pricingResponse.data.success) {

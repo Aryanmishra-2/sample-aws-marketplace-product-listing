@@ -544,18 +544,25 @@ async def analyze_product(data: Dict[str, Any]):
     """Analyze product using Amazon Bedrock"""
     try:
         product_context = data.get("product_context", {})
+        credentials = data.get("credentials", {})
         
         # Build analysis prompt
         urls = product_context.get("product_urls", [])
         docs_url = product_context.get("documentation_url", "")
         description = product_context.get("product_description", "")
         
+        product_name = product_context.get("product_name", "")
+        
         prompt = f"""
         Analyze this product information and provide a structured analysis:
         
+        Product Name: {product_name or 'Not provided - extract from website/description'}
         Website: {urls[0] if urls else 'Not provided'}
         Documentation: {docs_url or 'Not provided'}
         Description: {description or 'Not provided'}
+        
+        IMPORTANT: If a product name is provided, use it exactly. Do NOT invent or change the product name.
+        If no product name is provided, try to extract it from the website URL or description.
         
         Provide:
         1. Product Type (SaaS, API, Platform, etc.)
@@ -564,12 +571,22 @@ async def analyze_product(data: Dict[str, Any]):
         4. Value Proposition
         5. Use Cases
         6. Competitive Advantages
+        7. Product Name (use the exact name provided, or extract from URL/description)
         
         Format as JSON.
         """
         
-        # Call Bedrock
-        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
+        # Create session with credentials if provided
+        if credentials:
+            session = boto3.Session(
+                aws_access_key_id=credentials.get("aws_access_key_id"),
+                aws_secret_access_key=credentials.get("aws_secret_access_key"),
+                aws_session_token=credentials.get("aws_session_token"),
+                region_name=credentials.get("region", "us-east-1")
+            )
+            bedrock = session.client('bedrock-runtime')
+        else:
+            bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
         
         request_body = {
             "anthropic_version": "bedrock-2023-05-31",
@@ -629,36 +646,76 @@ async def generate_content(data: Dict[str, Any]):
     """Generate listing content using Amazon Bedrock"""
     try:
         analysis = data.get("analysis", {})
+        product_context = data.get("product_context", {})
+        credentials = data.get("credentials", {})
+        
+        # Extract product name from analysis if available
+        product_name = analysis.get("product_name", analysis.get("Product Name", ""))
+        
+        # Get original product info
+        website_url = ""
+        if product_context.get("product_urls"):
+            website_url = product_context["product_urls"][0] if product_context["product_urls"] else ""
+        original_description = product_context.get("product_description", "")
         
         prompt = f"""
-        Based on this product analysis:
+        Based on this product analysis and original product information:
+        
+        ORIGINAL PRODUCT INFO:
+        - Website: {website_url}
+        - Description provided by user: {original_description}
+        
+        AI ANALYSIS:
         {json.dumps(analysis, indent=2)}
         
-        Generate AWS Marketplace listing content:
+        Generate AWS Marketplace listing content that is SPECIFIC to this product.
         
         1. Product Title (5-72 chars, compelling and clear - MUST be under 72 characters)
+           CRITICAL: Use the actual product name "{product_name}" if provided. Extract from website URL if not.
+           Do NOT use generic names like "Cloud Security Platform" - use the REAL product name.
         2. Short Description (10-500 chars, for search results)
+           Must be specific to THIS product, not generic marketing copy.
         3. Long Description (50-5000 chars, detailed with benefits)
+           Reference the actual features and capabilities of THIS specific product.
         4. Highlights (3-5 bullet points, 5-250 chars each)
+           Specific features of THIS product, not generic benefits.
         5. Search Keywords (5-10 keywords, max 50 chars each)
-        6. Suggested Categories (from AWS Marketplace categories)
+        6. Suggested Categories (1-3 subcategories MAXIMUM) - Use ONLY subcategory names from this list:
+           
+           AI Security, Content Creation, Customer Experience Personalization, Customer Support, Data Analysis, Finance & Accounting, IT Support, Legal & Compliance, Observability, Procurement & Supply Chain, Quality Assurance, Research, Sales & Marketing, Scheduling & Coordination, Software Development, Backup & Recovery, Data Analytics, Data Integration, Data Preparation, ELT/ETL, Streaming Solutions, Databases, Data Warehouses, Analytic Platforms, Data Catalogs, Master Data Management, Masking/Tokenization, Business Intelligence & Advanced Analytics, High Performance Computing, Migration, Network Infrastructure, Operating Systems, Security, Storage, Agile Lifecycle Management, Application Development, Application Servers, Application Stacks, Continuous Integration and Continuous Delivery, Infrastructure as Code, Issue & Bug Tracking, Monitoring, Log Analysis, Source Control, Testing, Blockchain, Collaboration & Productivity, Contact Center, Content Management, CRM, eCommerce, eLearning, Human Resources, IT Business Management, Project Management, Analytics, Applications, Device Connectivity, Device Management, Device Security, Industrial IoT, Smart Home & City, Education & Research, Financial Services, Healthcare & Life Sciences, Media & Entertainment, Industrial, Energy, Automotive, Financial Services Data, Retail Location & Marketing Data, Public Sector Data, Healthcare & Life Sciences Data, Resources Data, Media & Entertainment Data, Telecommunications Data, Environmental Data, Automotive Data, Manufacturing Data, Gaming Data, Assessments, Implementation, Managed Services, Premium Support, Training, Human Review Services, ML Solutions, Data Labeling Services, Computer Vision, Natural Language Processing, Speech Recognition, Generative AI, Sentiment Analysis, Text to Speech, Translation, Object Detection, Anomaly Detection, Time-series Forecasting, Cloud Governance, Cloud Financial Management, Monitoring and Observability, Compliance and Auditing, Operations Management, AIOps
+           
+           Example category values: "Security", "Generative AI", "Application Development", "Monitoring"
+           DO NOT use parent category names like "DevOps", "Machine Learning", "Infrastructure Software" - use only subcategories.
         
-        IMPORTANT: Use only basic ASCII characters. Do NOT use:
-        - Bullet points (•) - use hyphens (-) instead
-        - Smart quotes (" ") - use straight quotes (")
-        - Em/en dashes (— –) - use hyphens (-)
+        IMPORTANT: 
+        - Use only basic ASCII characters. Do NOT use:
+          - Bullet points (•) - use hyphens (-) instead
+          - Smart quotes (" ") - use straight quotes (")
+          - Em/en dashes (— –) - use hyphens (-)
+        - ALL content must be specific to the actual product, NOT generic placeholder text.
+        - If the website URL contains a product/company name, USE IT.
+        - Categories must be ONLY subcategory names (e.g., "Testing", "Security", NOT "DevOps > Testing")
         
         Format as JSON with these exact keys: product_title, short_description, long_description, highlights (array), search_keywords (array), categories (array)
         """
         
-        # Call Bedrock
-        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
+        # Create session with credentials if provided
+        if credentials:
+            session = boto3.Session(
+                aws_access_key_id=credentials.get("aws_access_key_id"),
+                aws_secret_access_key=credentials.get("aws_secret_access_key"),
+                aws_session_token=credentials.get("aws_session_token"),
+                region_name=credentials.get("region", "us-east-1")
+            )
+            bedrock = session.client('bedrock-runtime')
+        else:
+            bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
         
         request_body = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": 4096,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7
+            "temperature": 0.3  # Lower temperature for more focused, less creative output
         }
         
         models = [
@@ -710,6 +767,7 @@ async def suggest_pricing(data: Dict[str, Any]):
     """Suggest pricing model using Amazon Bedrock"""
     try:
         analysis = data.get("analysis", {})
+        credentials = data.get("credentials", {})
         
         prompt = f"""
         Based on this product:
@@ -731,8 +789,17 @@ async def suggest_pricing(data: Dict[str, Any]):
         }}
         """
         
-        # Call Bedrock
-        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
+        # Create session with credentials if provided
+        if credentials:
+            session = boto3.Session(
+                aws_access_key_id=credentials.get("aws_access_key_id"),
+                aws_secret_access_key=credentials.get("aws_secret_access_key"),
+                aws_session_token=credentials.get("aws_session_token"),
+                region_name=credentials.get("region", "us-east-1")
+            )
+            bedrock = session.client('bedrock-runtime')
+        else:
+            bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
         
         request_body = {
             "anthropic_version": "bedrock-2023-05-31",
