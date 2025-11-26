@@ -137,52 +137,109 @@ export default function CreateListingPage() {
     setProgress(5);
 
     try {
-      // Show initial progress
-      setCurrentStageIndex(0);
-      updateStageStatus(0, 'in-progress', 'Sending to AWS Marketplace...');
-
-      console.log(`[${timestamp}] [CALL-${callId}] 📤 Making axios POST request to /api/create-listing`);
+      // Generate session ID for SSE
+      const sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       
-      // Call backend to create listing (this does all 8 stages)
-      const response = await axios.post('/api/create-listing', {
+      console.log(`[${timestamp}] [CALL-${callId}] 📤 Starting SSE stream with session: ${sessionId}`);
+      
+      // Start SSE connection
+      const eventSource = new EventSource(`http://localhost:8000/create-listing-stream/${sessionId}`);
+      
+      // Map stage names from backend to frontend indices
+      const stageNameToIndex: Record<string, number> = {
+        'Initializing': 0,
+        'Product Information': 0,
+        'Fulfillment': 1,
+        'Pricing Dimensions': 2,
+        'Price Review': 3,
+        'Refund Policy': 4,
+        'EULA': 5,
+        'Availability': 6,
+        'Allowlist': 7,
+        'Publishing': 7,
+      };
+      
+      // Handle stage updates
+      eventSource.addEventListener('stage', (e: any) => {
+        const data = JSON.parse(e.data);
+        console.log(`[SSE] Stage event:`, data);
+        
+        const stageIndex = stageNameToIndex[data.stage] ?? 0;
+        setCurrentStageIndex(stageIndex);
+        
+        if (data.status === 'in_progress') {
+          updateStageStatus(stageIndex, 'in-progress', data.message);
+          setProgress(stages[stageIndex].progress);
+        }
+      });
+      
+      // Handle changeset updates
+      eventSource.addEventListener('changeset', (e: any) => {
+        const data = JSON.parse(e.data);
+        console.log(`[SSE] Changeset event:`, data);
+        
+        const stageIndex = stageNameToIndex[data.stage] ?? 0;
+        
+        if (data.status === 'SUCCEEDED') {
+          updateStageStatus(stageIndex, 'completed', `✓ ${data.message}`);
+        } else if (data.status === 'FAILED') {
+          updateStageStatus(stageIndex, 'error', `✗ ${data.message}`);
+        }
+      });
+      
+      // Handle completion
+      eventSource.addEventListener('complete', (e: any) => {
+        const data = JSON.parse(e.data);
+        console.log(`[SSE] Complete event:`, data);
+        
+        setProgress(100);
+        setSuccess(true);
+        setLocalProductId(data.product_id);
+        setOfferId(data.offer_id);
+        setPublishedToLimited(data.published_to_limited || false);
+        setProductId(data.product_id);
+        setLoading(false);
+        
+        eventSource.close();
+      });
+      
+      // Handle errors
+      eventSource.addEventListener('error', (e: any) => {
+        console.error(`[SSE] Error event:`, e);
+        
+        if (e.data) {
+          try {
+            const data = JSON.parse(e.data);
+            setError(data.message || 'Failed to create listing');
+            
+            if (currentStageIndex >= 0 && currentStageIndex < stages.length) {
+              updateStageStatus(currentStageIndex, 'error', `✗ ${data.message}`);
+            }
+          } catch (err) {
+            setError('Connection error occurred');
+          }
+        }
+        
+        setLoading(false);
+        setSuccess(false);
+        eventSource.close();
+      });
+      
+      // Trigger the backend to start processing
+      console.log(`[${timestamp}] [CALL-${callId}] 📤 Triggering backend listing creation`);
+      
+      const response = await axios.post('/api/create-listing-stream', {
+        session_id: sessionId,
         listing_data: listingData,
         credentials: credentials,
       });
-
-      console.log(`[${timestamp}] [CALL-${callId}] 📥 Response received:`, {
-        success: response.data.success,
-        product_id: response.data.product_id,
-        stages_count: response.data.stages?.length
-      });
-
-      // Check if creation was successful
+      
+      console.log(`[${timestamp}] [CALL-${callId}] 📥 Backend acknowledged:`, response.data);
+      
       if (!response.data.success) {
-        console.log(`[${timestamp}] [CALL-${callId}] ❌ Backend reported failure`);
-        throw new Error(response.data.error || response.data.message || 'Failed to create listing');
+        throw new Error(response.data.message || 'Failed to start listing creation');
       }
       
-      console.log(`[${timestamp}] [CALL-${callId}] ✅ SUCCESS - Product created: ${response.data.product_id}`);
-
-      // Update stages based on backend response
-      const backendStages = response.data.stages || [];
-      backendStages.forEach((backendStage: any, index: number) => {
-        if (index < stages.length) {
-          const status = backendStage.status === 'complete' ? 'completed' : 
-                        backendStage.status === 'error' ? 'error' : 'completed';
-          const message = backendStage.status === 'complete' ? '✓ Complete' : 
-                         backendStage.status === 'error' ? `✗ ${backendStage.message}` : '✓ Complete';
-          updateStageStatus(index, status, message);
-        }
-      });
-
-      setProgress(100);
-      setSuccess(true);
-      setLocalProductId(response.data.product_id);
-      setOfferId(response.data.offer_id);
-      setPublishedToLimited(response.data.published_to_limited || false);
-
-      // Store product ID
-      setProductId(response.data.product_id);
     } catch (err: any) {
       console.error(`[${timestamp}] [CALL-${callId}] ❌ ERROR:`, err);
       const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to create listing';
@@ -195,11 +252,7 @@ export default function CreateListingPage() {
       
       setProgress(0);
       setSuccess(false);
-    } finally {
       setLoading(false);
-      // Keep isCreatingRef true to prevent any retry
-      console.log(`[${timestamp}] [CALL-${callId}] 🏁 createListing finished`);
-      console.log(`${'='.repeat(80)}\n`);
     }
   };
 

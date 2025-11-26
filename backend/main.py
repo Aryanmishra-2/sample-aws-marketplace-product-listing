@@ -5,12 +5,16 @@ Integrates with existing agent system for complete functionality
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import json
 import boto3
 import sys
 import os
+import asyncio
+from queue import Queue
+import threading
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -33,6 +37,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global event queues for SSE (keyed by session_id)
+event_queues: Dict[str, Queue] = {}
 
 # Request/Response Models
 class Credentials(BaseModel):
@@ -1165,6 +1172,339 @@ async def get_stack_status(data: Dict[str, Any]):
             "success": False,
             "error": str(e)
         }
+
+# Helper function to emit events
+def emit_event(session_id: str, event_type: str, data: Dict[str, Any]):
+    """Emit an event to the SSE stream for a specific session"""
+    if session_id in event_queues:
+        event_queues[session_id].put({
+            "type": event_type,
+            "data": data
+        })
+
+# SSE endpoint for listing creation progress
+@app.get("/create-listing-stream/{session_id}")
+async def create_listing_stream(session_id: str):
+    """Server-Sent Events endpoint for real-time listing creation progress"""
+    
+    # Create queue for this session
+    event_queues[session_id] = Queue()
+    
+    async def event_generator():
+        try:
+            while True:
+                # Check if there are events in the queue
+                if not event_queues[session_id].empty():
+                    event = event_queues[session_id].get()
+                    
+                    # Format as SSE
+                    yield f"event: {event['type']}\n"
+                    yield f"data: {json.dumps(event['data'])}\n\n"
+                    
+                    # If it's a completion event, close the stream
+                    if event['type'] in ['complete', 'error']:
+                        break
+                else:
+                    # Send keepalive comment every 15 seconds
+                    yield ": keepalive\n\n"
+                
+                await asyncio.sleep(0.5)
+        finally:
+            # Clean up queue when done
+            if session_id in event_queues:
+                del event_queues[session_id]
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+# Modified create listing endpoint with SSE support
+@app.post("/create-listing-with-stream")
+async def create_listing_with_stream(data: Dict[str, Any]):
+    """Create marketplace listing with SSE progress updates"""
+    import traceback
+    
+    session_id = data.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=400, detail={"error": "session_id is required"})
+    
+    # Run the listing creation in a background thread
+    def run_listing_creation():
+        try:
+            listing_data = data.get("listing_data", {})
+            credentials = data.get("credentials", {})
+            
+            emit_event(session_id, "stage", {
+                "stage": "Initializing",
+                "status": "in_progress",
+                "message": "Setting up AWS Marketplace agent..."
+            })
+            
+            # Create boto3 session
+            session = boto3.Session(
+                aws_access_key_id=credentials.get("aws_access_key_id"),
+                aws_secret_access_key=credentials.get("aws_secret_access_key"),
+                aws_session_token=credentials.get("aws_session_token"),
+                region_name='us-east-1'
+            )
+            
+            strands_agent = StrandsMarketplaceAgent()
+            strands_agent.orchestrator.listing_tools.update_credentials(session)
+            orchestrator = strands_agent.orchestrator
+            
+            # Stage 1: Product Information
+            emit_event(session_id, "stage", {
+                "stage": "Product Information",
+                "status": "in_progress",
+                "message": "Creating product and updating details..."
+            })
+            
+            orchestrator.set_stage_data("product_title", listing_data.get("title"))
+            orchestrator.set_stage_data("logo_s3_url", listing_data.get("logo_s3_url"))
+            orchestrator.set_stage_data("short_description", listing_data.get("short_description"))
+            orchestrator.set_stage_data("long_description", listing_data.get("long_description"))
+            orchestrator.set_stage_data("highlights", listing_data.get("highlights"))
+            orchestrator.set_stage_data("support_email", listing_data.get("support_email"))
+            orchestrator.set_stage_data("support_description", listing_data.get("support_description"))
+            orchestrator.set_stage_data("categories", listing_data.get("categories"))
+            orchestrator.set_stage_data("search_keywords", listing_data.get("search_keywords"))
+            
+            result1 = orchestrator.complete_current_stage()
+            
+            if result1.get("status") != "complete":
+                emit_event(session_id, "error", {
+                    "stage": "Product Information",
+                    "message": result1.get("message", "Failed to create product")
+                })
+                return
+            
+            emit_event(session_id, "changeset", {
+                "stage": "Product Information",
+                "changeset_id": result1.get("api_result", {}).get("change_set_id"),
+                "status": "SUCCEEDED",
+                "message": "Product information updated successfully"
+            })
+            
+            # Stage 2: Fulfillment
+            emit_event(session_id, "stage", {
+                "stage": "Fulfillment",
+                "status": "in_progress",
+                "message": "Configuring fulfillment options..."
+            })
+            
+            orchestrator.set_stage_data("fulfillment_url", listing_data.get("fulfillment_url"))
+            orchestrator.set_stage_data("quick_launch_enabled", False)
+            result2 = orchestrator.complete_current_stage()
+            
+            emit_event(session_id, "changeset", {
+                "stage": "Fulfillment",
+                "changeset_id": result2.get("api_result", {}).get("change_set_id"),
+                "status": "SUCCEEDED",
+                "message": "Fulfillment options configured"
+            })
+            
+            # Stage 3: Pricing Dimensions
+            emit_event(session_id, "stage", {
+                "stage": "Pricing Dimensions",
+                "status": "in_progress",
+                "message": "Setting up pricing dimensions..."
+            })
+            
+            dimensions = listing_data.get("pricing_dimensions", [])
+            api_dimensions = []
+            for dim in dimensions:
+                types = ["Metered", "ExternallyMetered"] if dim.get("type") == "Metered" else [dim.get("type")]
+                api_dimensions.append({
+                    "Key": dim.get("key"),
+                    "Name": dim.get("name"),
+                    "Description": dim.get("description"),
+                    "Types": types,
+                    "Unit": "Units"
+                })
+            
+            orchestrator.set_stage_data("pricing_model", listing_data.get("pricing_model"))
+            orchestrator.set_stage_data("dimensions", api_dimensions)
+            result3 = orchestrator.complete_current_stage()
+            
+            emit_event(session_id, "changeset", {
+                "stage": "Pricing Dimensions",
+                "status": "SUCCEEDED",
+                "message": result3.get("message", "Pricing dimensions configured")
+            })
+            
+            # Stage 4: Price Review
+            emit_event(session_id, "stage", {
+                "stage": "Price Review",
+                "status": "in_progress",
+                "message": "Configuring pricing terms..."
+            })
+            
+            if listing_data.get("pricing_model") == "Usage":
+                orchestrator.set_stage_data("contract_durations", ["12 Months"])
+                orchestrator.set_stage_data("multiple_dimension_selection", "Allowed")
+                orchestrator.set_stage_data("quantity_configuration", "Allowed")
+            else:
+                orchestrator.set_stage_data("contract_durations", listing_data.get("contract_durations", ["12 Months"]))
+                if listing_data.get("purchasing_option") == "multiple":
+                    orchestrator.set_stage_data("multiple_dimension_selection", "Allowed")
+                    orchestrator.set_stage_data("quantity_configuration", "Allowed")
+                else:
+                    orchestrator.set_stage_data("multiple_dimension_selection", "Disallowed")
+                    orchestrator.set_stage_data("quantity_configuration", "Disallowed")
+            
+            result4 = orchestrator.complete_current_stage()
+            
+            emit_event(session_id, "changeset", {
+                "stage": "Price Review",
+                "changeset_id": result4.get("api_result", {}).get("change_set_id"),
+                "status": "SUCCEEDED",
+                "message": "Pricing terms configured"
+            })
+            
+            # Stage 5: Refund Policy
+            emit_event(session_id, "stage", {
+                "stage": "Refund Policy",
+                "status": "in_progress",
+                "message": "Setting refund policy..."
+            })
+            
+            orchestrator.set_stage_data("refund_policy", listing_data.get("refund_policy"))
+            result5 = orchestrator.complete_current_stage()
+            
+            emit_event(session_id, "changeset", {
+                "stage": "Refund Policy",
+                "changeset_id": result5.get("api_result", {}).get("change_set_id"),
+                "status": "SUCCEEDED",
+                "message": "Refund policy set"
+            })
+            
+            # Stage 6: EULA
+            emit_event(session_id, "stage", {
+                "stage": "EULA",
+                "status": "in_progress",
+                "message": "Configuring legal terms..."
+            })
+            
+            orchestrator.set_stage_data("eula_type", listing_data.get("eula_type"))
+            if listing_data.get("custom_eula_url"):
+                orchestrator.set_stage_data("custom_eula_s3_url", listing_data.get("custom_eula_url"))
+            result6 = orchestrator.complete_current_stage()
+            
+            emit_event(session_id, "changeset", {
+                "stage": "EULA",
+                "changeset_id": result6.get("api_result", {}).get("change_set_id"),
+                "status": "SUCCEEDED",
+                "message": "Legal terms configured"
+            })
+            
+            # Stage 7: Availability
+            emit_event(session_id, "stage", {
+                "stage": "Availability",
+                "status": "in_progress",
+                "message": "Setting geographic availability..."
+            })
+            
+            if listing_data.get("availability_type") == "all":
+                orchestrator.set_stage_data("availability_type", "all_countries")
+            elif listing_data.get("availability_type") == "exclude":
+                orchestrator.set_stage_data("availability_type", "all_with_exclusions")
+                orchestrator.set_stage_data("excluded_countries", listing_data.get("excluded_countries", []))
+            else:
+                orchestrator.set_stage_data("availability_type", "allowlist_only")
+                orchestrator.set_stage_data("allowed_countries", listing_data.get("allowed_countries", []))
+            
+            result7 = orchestrator.complete_current_stage()
+            
+            emit_event(session_id, "changeset", {
+                "stage": "Availability",
+                "changeset_id": result7.get("api_result", {}).get("change_set_id"),
+                "status": "SUCCEEDED",
+                "message": "Geographic availability set"
+            })
+            
+            # Stage 8: Allowlist
+            emit_event(session_id, "stage", {
+                "stage": "Allowlist",
+                "status": "in_progress",
+                "message": "Configuring buyer allowlist..."
+            })
+            
+            buyer_accounts = listing_data.get("buyer_accounts", [])
+            if buyer_accounts:
+                orchestrator.set_stage_data("allowlist_account_ids", buyer_accounts)
+            result8 = orchestrator.complete_current_stage()
+            
+            emit_event(session_id, "changeset", {
+                "stage": "Allowlist",
+                "status": "SUCCEEDED",
+                "message": result8.get("message", "Allowlist configured")
+            })
+            
+            # Get product and offer IDs
+            api_result = result1.get("api_result", {})
+            product_id = api_result.get("product_id")
+            offer_id = api_result.get("offer_id")
+            
+            # Auto-publish to Limited if requested
+            published_to_limited = False
+            if listing_data.get("auto_publish_to_limited") and product_id and offer_id:
+                emit_event(session_id, "stage", {
+                    "stage": "Publishing",
+                    "status": "in_progress",
+                    "message": "Publishing to Limited audience..."
+                })
+                
+                tools = orchestrator.listing_tools
+                release_result = tools.release_product_and_offer_to_limited(
+                    product_id=product_id,
+                    offer_id=offer_id,
+                    offer_name=listing_data.get("offer_name", listing_data.get("title")),
+                    offer_description=listing_data.get("offer_description", listing_data.get("short_description")),
+                    pricing_model=listing_data.get("pricing_model"),
+                    buyer_accounts=listing_data.get("buyer_accounts_for_limited") or None
+                )
+                published_to_limited = release_result.get("success", False)
+                
+                emit_event(session_id, "changeset", {
+                    "stage": "Publishing",
+                    "status": "SUCCEEDED" if published_to_limited else "FAILED",
+                    "message": "Published to Limited" if published_to_limited else "Publishing failed"
+                })
+            
+            # Send completion event
+            emit_event(session_id, "complete", {
+                "product_id": product_id,
+                "offer_id": offer_id,
+                "published_to_limited": published_to_limited,
+                "message": "Listing created successfully"
+            })
+            
+        except Exception as e:
+            error_message = str(e)
+            print(f"[ERROR] create_listing_with_stream failed: {error_message}")
+            print(f"[ERROR] Traceback: {traceback.format_exc()}")
+            
+            emit_event(session_id, "error", {
+                "message": error_message,
+                "details": traceback.format_exc()
+            })
+    
+    # Start background thread
+    thread = threading.Thread(target=run_listing_creation)
+    thread.daemon = True
+    thread.start()
+    
+    return {
+        "success": True,
+        "session_id": session_id,
+        "message": "Listing creation started. Connect to SSE stream for progress updates."
+    }
 
 if __name__ == "__main__":
     import uvicorn
