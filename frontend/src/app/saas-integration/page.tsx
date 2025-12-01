@@ -91,7 +91,12 @@ export default function SaaSIntegrationPage() {
   // Poll CloudFormation status
   useEffect(() => {
     if (loading && deployedStackName) {
+      let pollCount = 0;
+      const maxPolls = 200; // ~10 minutes at 3s intervals
+      
       const pollInterval = setInterval(async () => {
+        pollCount++;
+        
         try {
           const response = await axios.post('/api/get-stack-status', {
             stack_name: deployedStackName,
@@ -134,14 +139,33 @@ export default function SaaSIntegrationPage() {
               setError(`CloudFormation deployment failed: ${reason}`);
               setLoading(false);
               clearInterval(pollInterval);
+            } else if (status === 'CREATE_IN_PROGRESS') {
+              // Show some progress while creating
+              const baseProgress = Math.min(pollCount * 2, 30); // Slow initial progress
+              setDeploymentProgress(prev => Math.max(prev, baseProgress));
             }
           } else {
             // Handle API error
             console.error('Stack status check failed:', response.data.error);
             if (response.data.stack_status === 'NOT_FOUND') {
-              // Stack might not be created yet, continue polling
-              setCfStatus('CREATING...');
+              // Stack might not be created yet, show initializing progress
+              setCfStatus('Initializing stack...');
+              // Show slow progress while waiting for stack to appear
+              const initProgress = Math.min(pollCount, 10);
+              setDeploymentProgress(initProgress);
+              
+              // Mark first stage as in-progress
+              setDeploymentStages(prev => prev.map((stage, idx) => 
+                idx === 0 ? { ...stage, status: 'in-progress' as const, message: 'Initializing...' } : stage
+              ));
             }
+          }
+          
+          // Timeout protection
+          if (pollCount >= maxPolls) {
+            setError('Deployment timed out. Please check AWS CloudFormation console for status.');
+            setLoading(false);
+            clearInterval(pollInterval);
           }
         } catch (err: any) {
           console.error('Failed to poll stack status:', err);
@@ -156,20 +180,30 @@ export default function SaaSIntegrationPage() {
   const updateStagesFromEvents = (events: any[], stackStatus: string) => {
     const newStages = [...deploymentStages];
     
+    // If stack is complete, mark all stages as complete
+    if (stackStatus === 'CREATE_COMPLETE') {
+      newStages.forEach((stage, idx) => {
+        newStages[idx].status = 'completed';
+        newStages[idx].message = '✓ Complete';
+      });
+      setDeploymentProgress(100);
+      setDeploymentStages(newStages);
+      return;
+    }
+    
     // Track which resources have been seen
     const seenResources = new Set<string>();
     
     events.forEach(event => {
       const resourceType = event.resource_type;
       const status = event.status;
-      const logicalId = event.logical_id;
       
       seenResources.add(resourceType);
       
-      // Find matching stage
+      // Find matching stage by resource type
       const stageIndex = newStages.findIndex(s => s.resourceType === resourceType);
       if (stageIndex >= 0) {
-        if (status.includes('COMPLETE')) {
+        if (status.includes('COMPLETE') && !status.includes('ROLLBACK')) {
           newStages[stageIndex].status = 'completed';
           newStages[stageIndex].message = '✓ Complete';
         } else if (status.includes('IN_PROGRESS')) {
@@ -197,10 +231,15 @@ export default function SaaSIntegrationPage() {
       });
     }
 
-    // Calculate progress
+    // Calculate progress based on events and stack status
     const completed = newStages.filter(s => s.status === 'completed').length;
     const inProgress = newStages.filter(s => s.status === 'in-progress').length;
-    const progress = ((completed + (inProgress * 0.5)) / newStages.length) * 100;
+    let progress = ((completed + (inProgress * 0.5)) / newStages.length) * 100;
+    
+    // If we're in CREATE_IN_PROGRESS but no events match our stages, show some progress
+    if (stackStatus === 'CREATE_IN_PROGRESS' && progress === 0) {
+      progress = Math.min(events.length * 5, 50); // Show progress based on event count
+    }
     
     setDeploymentProgress(Math.min(progress, 95)); // Cap at 95% until fully complete
     setDeploymentStages(newStages);
@@ -216,7 +255,10 @@ export default function SaaSIntegrationPage() {
     setError('');
     setStartTime(Date.now());
     setDeploymentStages(INITIAL_STAGES.map(s => ({ ...s, status: 'pending' as const })));
-    setDeployedStackName(stackName);
+    
+    // The backend uses this stack name format: saas-integration-{product_id}
+    const actualStackName = `saas-integration-${productId}`;
+    setDeployedStackName(actualStackName);
 
     try {
       const response = await axios.post('/api/deploy-saas', {
@@ -237,6 +279,11 @@ export default function SaaSIntegrationPage() {
 
       setDeployedStackId(response.data.stack_id);
       setStackId(response.data.stack_id);
+      
+      // Update stack name from response if provided (backend knows the actual name)
+      if (response.data.stack_name) {
+        setDeployedStackName(response.data.stack_name);
+      }
       
       // Polling will continue via useEffect
     } catch (err: any) {

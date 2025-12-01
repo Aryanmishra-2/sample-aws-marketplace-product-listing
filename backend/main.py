@@ -1036,11 +1036,12 @@ async def create_listing(data: Dict[str, Any]):
             "stages": []
         }
 
-# Deploy SaaS
+# Deploy SaaS - Non-blocking version that starts stack and returns immediately
 @app.post("/deploy-saas")
 async def deploy_saas(data: Dict[str, Any]):
-    """Deploy SaaS integration using existing agent system"""
+    """Deploy SaaS integration - starts CloudFormation stack and returns immediately"""
     import traceback
+    import os
     try:
         print("[DEBUG] deploy_saas called")
         product_id = data.get("product_id")
@@ -1059,36 +1060,82 @@ async def deploy_saas(data: Dict[str, Any]):
             region_name=region
         )
         
-        print("[DEBUG] Session created, initializing agents...")
+        # Validate credentials
+        print("[DEBUG] Validating AWS credentials...")
+        try:
+            sts_client = session.client('sts')
+            identity = sts_client.get_caller_identity()
+            print(f"[DEBUG] Credentials valid for account: {identity['Account']}")
+        except Exception as e:
+            print(f"[ERROR] Invalid credentials: {str(e)}")
+            raise HTTPException(status_code=400, detail={"success": False, "error": f"Invalid AWS credentials: {str(e)}"})
         
-        # Initialize SaaS integration agent
-        strands_agent = StrandsMarketplaceAgent()
-        saas_agent = ServerlessSaasIntegrationAgent(strands_agent=strands_agent)
+        # Find the Integration.yaml template
+        possible_paths = [
+            'reference/streamlit-app/bedrock_agent/Integration.yaml',
+            '../reference/streamlit-app/bedrock_agent/Integration.yaml',
+            os.path.join(os.path.dirname(__file__), '..', 'reference', 'streamlit-app', 'bedrock_agent', 'Integration.yaml')
+        ]
         
-        print("[DEBUG] Agents initialized, starting deployment...")
+        template_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                template_path = path
+                print(f"[DEBUG] Found template at: {path}")
+                break
         
-        # Deploy integration
-        result = saas_agent.deploy_integration_with_session(
-            session=session,
-            product_id=product_id,
-            email=email,
-            pricing_dimensions=[]
-        )
+        if not template_path:
+            raise Exception(f"Could not find Integration.yaml template in: {possible_paths}")
         
-        print(f"[DEBUG] Deployment result: {result}")
+        with open(template_path, 'r') as f:
+            template_body = f.read()
         
-        if result.get('stack_id') or result.get('success'):
+        # The actual stack name used
+        actual_stack_name = f"saas-integration-{product_id}"
+        
+        # Create CloudFormation client and start stack (non-blocking)
+        cf_client = session.client('cloudformation')
+        
+        print(f"[DEBUG] Creating CloudFormation stack: {actual_stack_name}")
+        
+        try:
+            response = cf_client.create_stack(
+                StackName=actual_stack_name,
+                TemplateBody=template_body,
+                Parameters=[
+                    {'ParameterKey': 'ProductId', 'ParameterValue': product_id},
+                    {'ParameterKey': 'PricingModel', 'ParameterValue': 'Usage-based-pricing'},
+                    {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': email}
+                ],
+                Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND']
+            )
+            
+            stack_id = response['StackId']
+            print(f"[DEBUG] Stack creation initiated: {stack_id}")
+            
+            # Return immediately - frontend will poll for status
             return {
                 "success": True,
-                "stack_id": result.get('stack_id'),
-                "stack_name": result.get('stack_name', stack_name),
-                "message": "SaaS integration deployed successfully"
+                "stack_id": stack_id,
+                "stack_name": actual_stack_name,
+                "message": "CloudFormation stack creation initiated. Polling for status..."
             }
-        else:
-            error_msg = result.get('error', 'Deployment failed')
-            print(f"[ERROR] Deployment failed: {error_msg}")
-            raise Exception(error_msg)
             
+        except cf_client.exceptions.AlreadyExistsException:
+            print(f"[DEBUG] Stack already exists: {actual_stack_name}")
+            # Get existing stack info
+            stack_info = cf_client.describe_stacks(StackName=actual_stack_name)
+            stack = stack_info['Stacks'][0]
+            return {
+                "success": True,
+                "stack_id": stack['StackId'],
+                "stack_name": actual_stack_name,
+                "message": "Stack already exists",
+                "status": stack['StackStatus']
+            }
+            
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ERROR] deploy_saas exception: {str(e)}")
         print(f"[ERROR] Traceback: {traceback.format_exc()}")
