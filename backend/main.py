@@ -1591,3 +1591,265 @@ async def create_listing_with_stream(data: Dict[str, Any]):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+# Chatbot endpoint using AWS documentation
+@app.post("/chat")
+async def chat(data: Dict[str, Any]):
+    """Chat endpoint that uses AWS documentation to answer questions"""
+    try:
+        question = data.get("question", "")
+        
+        if not question:
+            return {
+                "success": False,
+                "error": "Question is required"
+            }
+        
+        print(f"[DEBUG] Chat question: {question}")
+        
+        # Use Amazon Bedrock to generate response with AWS documentation context
+        # First, we'll use a simple keyword-based approach
+        # In production, this would use the AWS MCP server to search documentation
+        
+        # For now, return a helpful response
+        response = generate_chat_response(question)
+        
+        return {
+            "success": True,
+            "response": response,
+            "sources": []
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Chat error: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def generate_chat_response(question: str) -> str:
+    """Generate a response to the user's question"""
+    question_lower = question.lower()
+    
+    # AWS Marketplace specific responses
+    if "register" in question_lower or "seller" in question_lower:
+        return """To register as an AWS Marketplace seller:
+
+1. **Validate Credentials**: Enter your AWS credentials on the home page
+2. **Check Status**: The system will check if you're already registered
+3. **Create Business Profile**: If not registered, click "Create Business Profile"
+4. **Complete Tax Information**: Submit W-9 (US) or W-8 (International) form
+5. **Set Up Payment**: Configure bank account for disbursements
+6. **Submit for Review**: AWS reviews your application (2-3 business days)
+
+Once approved, you can create product listings in AWS Marketplace.
+
+**Need help?** Visit the [AWS Marketplace Seller Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/seller-registration-process.html)"""
+    
+    elif "saas" in question_lower and "integration" in question_lower:
+        return """SaaS Integration connects your SaaS product to AWS Marketplace:
+
+**What it does:**
+• Deploys serverless infrastructure (DynamoDB, Lambda, API Gateway)
+• Handles subscription management automatically
+• Processes metering and billing
+• Provides fulfillment endpoint for AWS Marketplace
+
+**How to deploy:**
+1. Navigate to your product in the Seller Registration page
+2. Click "Configure SaaS" for products requiring integration
+3. Enter your email for notifications
+4. Deploy the CloudFormation stack (3-5 minutes)
+5. Copy the fulfillment URL from stack outputs
+6. Update your product with the fulfillment URL
+
+**Architecture:**
+- **DynamoDB**: Stores subscription and metering data
+- **Lambda**: Processes usage metering
+- **API Gateway**: Fulfillment endpoint
+- **SNS**: Marketplace notifications
+
+**Learn more:** [SaaS Integration Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-integrate-saas.html)"""
+    
+    elif "listing" in question_lower or "product" in question_lower:
+        return """Creating a product listing in AWS Marketplace:
+
+**Step-by-step process:**
+1. **Product Information**: Enter product name, description, and URLs
+2. **AI Analysis**: Our AI analyzes your product and generates content
+3. **Review Suggestions**: Review and edit AI-generated content
+4. **Create Listing**: Submit to create the marketplace listing
+5. **SaaS Integration** (if applicable): Deploy integration infrastructure
+6. **Testing**: Test the buyer experience
+7. **Publish**: Request public visibility
+
+**Product Types:**
+• **SaaS**: Software as a Service
+• **AMI**: Amazon Machine Images
+• **Container**: Docker containers
+• **Data**: Data products
+
+**Pricing Models:**
+• Usage-based (pay-as-you-go)
+• Contract-based (fixed term)
+• Hybrid (contract + consumption)
+• Free trial
+
+**Documentation:** [Product Preparation Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/product-preparation.html)"""
+    
+    elif "pricing" in question_lower or "price" in question_lower:
+        return """AWS Marketplace Pricing Models:
+
+**1. Usage-Based Pricing**
+• Pay-as-you-go model
+• Charge per hour, API call, GB, etc.
+• Best for: Variable usage patterns
+• Example: $0.10 per API call
+
+**2. Contract-Based Pricing**
+• Fixed price for a term (monthly, annual)
+• Upfront or scheduled payments
+• Best for: Predictable costs
+• Example: $1,000/month
+
+**3. Contract with Consumption**
+• Hybrid model
+• Base contract + usage charges
+• Best for: Committed base + overages
+• Example: $500/month + $0.05 per GB over 100GB
+
+**4. Free Trial**
+• Let customers try before buying
+• Configurable trial period
+• Converts to paid automatically
+• Best for: Reducing friction
+
+**Pricing Dimensions:**
+• Define what you charge for
+• Multiple dimensions supported
+• Examples: Users, API calls, Storage, Bandwidth
+
+**Learn more:** [Pricing Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/pricing.html)"""
+    
+    elif "limited" in question_lower or "public" in question_lower or "visibility" in question_lower:
+        return """AWS Marketplace Product Visibility:
+
+**DRAFT**
+• Product is being created
+• Not visible to customers
+• Can edit freely
+• Action: Complete listing creation
+
+**LIMITED**
+• Product is published to specific accounts
+• Test with selected customers
+• Requires SaaS integration (for SaaS products)
+• Action: Complete testing, then request public visibility
+
+**PUBLIC**
+• Product is live on AWS Marketplace
+• Visible to all customers
+• Cannot make major changes without new version
+• Action: Monitor sales and customer feedback
+
+**Publishing Process:**
+1. Create product (DRAFT)
+2. Publish to LIMITED for testing
+3. Complete SaaS integration (if applicable)
+4. Test buyer experience
+5. Request public visibility
+6. AWS reviews (1-2 business days)
+7. Product goes PUBLIC
+
+**Learn more:** [Publishing Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/product-submission.html)"""
+    
+    elif "metering" in question_lower or "billing" in question_lower:
+        return """AWS Marketplace Metering and Billing:
+
+**How it works:**
+1. Customer subscribes to your product
+2. Your product sends usage records to AWS
+3. AWS aggregates usage and bills customer
+4. AWS disburses payment to you (minus fees)
+
+**Metering API:**
+• Send usage records in real-time
+• Supports multiple dimensions
+• Idempotent (safe to retry)
+• Example: `meter_usage(customer_id, dimension, quantity)`
+
+**Billing Cycle:**
+• Monthly billing for customers
+• Disbursement to sellers: Net 30 days
+• Detailed usage reports available
+• AWS handles collections
+
+**SaaS Metering:**
+• Lambda function sends usage records
+• DynamoDB stores metering data
+• Automatic aggregation
+• Supports hourly, daily, or monthly metering
+
+**Fees:**
+• AWS Marketplace fee: 3-15% depending on product type
+• Payment processing included
+• No upfront costs
+
+**Documentation:** [Metering Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-integration-metering-and-entitlement-apis.html)"""
+    
+    elif "private offer" in question_lower or "custom" in question_lower:
+        return """AWS Marketplace Private Offers:
+
+**What are Private Offers?**
+• Custom pricing and terms for specific customers
+• Negotiate directly with buyers
+• Flexible payment schedules
+• Custom contract terms
+
+**Use Cases:**
+• Enterprise deals
+• Volume discounts
+• Custom payment terms
+• Multi-year contracts
+• Proof of concept pricing
+
+**How to create:**
+1. Negotiate terms with customer
+2. Create Private Offer in Management Portal
+3. Specify customer AWS account ID
+4. Set custom pricing and terms
+5. Customer accepts offer
+6. Contract is activated
+
+**Benefits:**
+• Faster deal closure
+• Flexible terms
+• Leverage customer's AWS commitment
+• Simplified procurement
+
+**Learn more:** [Private Offers Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/private-offers-overview.html)"""
+    
+    else:
+        return f"""I can help you with AWS Marketplace seller topics:
+
+**Common Questions:**
+• Seller registration process
+• SaaS integration setup
+• Creating product listings
+• Pricing models
+• Product visibility (DRAFT, LIMITED, PUBLIC)
+• Metering and billing
+• Private offers
+
+**Your question:** "{question}"
+
+For detailed information, please visit the [AWS Marketplace Seller Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/what-is-marketplace.html) or ask a more specific question.
+
+**Example questions:**
+• "How do I register as a seller?"
+• "What is SaaS integration?"
+• "How do I create a product listing?"
+• "What pricing models are available?"
+• "How does metering work?"
+"""
