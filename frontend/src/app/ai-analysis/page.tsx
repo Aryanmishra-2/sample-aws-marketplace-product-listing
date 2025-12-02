@@ -161,7 +161,6 @@ export default function AIAnalysisPage() {
         <BreadcrumbGroup
           items={[
             { text: 'Home', href: '/' },
-            { text: 'Welcome', href: '/welcome' },
             { text: 'Product Information', href: '/product-info' },
             { text: 'AI Analysis', href: '/ai-analysis' },
           ]}

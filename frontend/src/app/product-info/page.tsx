@@ -55,8 +55,8 @@ export default function ProductInfoPage() {
   };
 
   const handleBack = () => {
-    setCurrentStep('welcome');
-    router.push('/welcome');
+    setCurrentStep('credentials');
+    router.push('/');
   };
 
   if (!isAuthenticated) {
@@ -73,7 +73,6 @@ export default function ProductInfoPage() {
         <BreadcrumbGroup
           items={[
             { text: 'Home', href: '/' },
-            { text: 'Welcome', href: '/welcome' },
             { text: 'Product Information', href: '/product-info' },
           ]}
           onFollow={(e) => {

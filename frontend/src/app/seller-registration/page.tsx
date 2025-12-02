@@ -14,25 +14,55 @@ import {
   ContentLayout,
   BreadcrumbGroup,
   Checkbox,
-  Link,
   StatusIndicator,
+  Table,
+  Badge,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
 import GlobalHeader from '@/components/GlobalHeader';
+import axios from 'axios';
 
 export default function SellerRegistrationPage() {
   const router = useRouter();
-  const { isAuthenticated, sellerStatus } = useStore();
+  const { isAuthenticated, sellerStatus, credentials } = useStore();
   
   const [taxInfoConfirmed, setTaxInfoConfirmed] = useState(false);
   const [paymentInfoConfirmed, setPaymentInfoConfirmed] = useState(false);
   const [accountStatusConfirmed, setAccountStatusConfirmed] = useState(false);
+  const [marketplaceProducts, setMarketplaceProducts] = useState<any[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/');
     }
   }, [isAuthenticated, router]);
+
+  // Load marketplace products when seller is approved and has products
+  useEffect(() => {
+    const loadProducts = async () => {
+      if (sellerStatus?.seller_status === 'APPROVED' && sellerStatus?.owned_products?.length > 0 && credentials) {
+        setLoadingProducts(true);
+        try {
+          const productsResponse = await axios.post('/api/list-marketplace-products', {
+            aws_access_key_id: credentials.aws_access_key_id,
+            aws_secret_access_key: credentials.aws_secret_access_key,
+            aws_session_token: credentials.aws_session_token,
+          });
+          
+          if (productsResponse.data.success) {
+            setMarketplaceProducts(productsResponse.data.products || []);
+          }
+        } catch (error) {
+          console.error('Failed to list marketplace products:', error);
+        } finally {
+          setLoadingProducts(false);
+        }
+      }
+    };
+
+    loadProducts();
+  }, [sellerStatus, credentials]);
 
   if (!isAuthenticated || !sellerStatus) {
     return null;
@@ -74,45 +104,149 @@ export default function SellerRegistrationPage() {
               }
             >
               <SpaceBetween size="l">
-                <Alert type="success" header="✅ Seller Profile Complete!">
-                  Your account has {productsCount} existing product{productsCount > 1 ? 's' : ''}. 
-                  This confirms your seller profile is fully configured.
-                </Alert>
-
                 <Container>
-                  <SpaceBetween size="m">
-                    <Box variant="h3">Your seller account is ready to:</Box>
-                    <ul style={{ marginLeft: '20px' }}>
-                      <li>Create new product listings</li>
-                      <li>Manage existing products</li>
-                      <li>View sales and reports</li>
-                    </ul>
-                  </SpaceBetween>
+                  <ColumnLayout columns={2} variant="text-grid">
+                    <div>
+                      <SpaceBetween size="xs">
+                        <Box variant="h3">✅ Seller Profile Complete</Box>
+                        <Box color="text-body-secondary">
+                          {productsCount} existing product{productsCount > 1 ? 's' : ''} found
+                        </Box>
+                      </SpaceBetween>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          useStore.getState().setCurrentStep('gather_context');
+                          router.push('/product-info');
+                        }}
+                      >
+                        Create New Product
+                      </Button>
+                    </div>
+                  </ColumnLayout>
                 </Container>
 
-                <Container>
-                  <SpaceBetween size="m">
-                    <Header variant="h2">Ready to Create a New Product?</Header>
-                    <Button
-                      variant="primary"
-                      onClick={() => router.push('/welcome')}
-                    >
-                      📦 Create New Product Listing
-                    </Button>
-                  </SpaceBetween>
-                </Container>
+                {marketplaceProducts.length > 0 && (
+                  <Container
+                    header={
+                      <Header
+                        variant="h2"
+                        description="Your AWS Marketplace products with intelligent status detection"
+                        counter={`(${marketplaceProducts.length})`}
+                      >
+                        Your Marketplace Products
+                      </Header>
+                    }
+                  >
+                    <Table
+                      variant="container"
+                      columnDefinitions={[
+                        {
+                          id: 'name',
+                          header: 'Product',
+                          cell: (item: any) => (
+                            <Box>
+                              <Box fontWeight="bold">{item.product_name}</Box>
+                              <Box fontSize="body-s" color="text-body-secondary">
+                                ID: {item.product_id.substring(0, 12)}...
+                              </Box>
+                            </Box>
+                          ),
+                        },
+                        {
+                          id: 'status',
+                          header: 'Status',
+                          cell: (item: any) => (
+                            <SpaceBetween size="xxs">
+                              <Badge color={
+                                item.visibility === 'PUBLIC' ? 'green' :
+                                item.visibility === 'LIMITED' ? 'blue' :
+                                item.visibility === 'DRAFT' ? 'grey' : 'red'
+                              }>
+                                {item.visibility}
+                              </Badge>
+                              {item.needs_saas_integration && item.saas_integration_status === 'COMPLETED' && (
+                                <StatusIndicator type="success">SaaS Ready</StatusIndicator>
+                              )}
+                              {item.needs_saas_integration && item.saas_integration_status === 'REQUIRED' && (
+                                <StatusIndicator type="warning">SaaS Needed</StatusIndicator>
+                              )}
+                              {item.needs_saas_integration && item.saas_integration_status === 'PENDING' && (
+                                <StatusIndicator type="info">SaaS Pending</StatusIndicator>
+                              )}
+                            </SpaceBetween>
+                          ),
+                        },
+                        {
+                          id: 'actions',
+                          header: 'Actions',
+                          cell: (item: any) => (
+                            <SpaceBetween size="xs" direction="horizontal">
+                              {item.allowed_actions.includes('resume') && (
+                                <Button
+                                  onClick={() => {
+                                    useStore.getState().setProductId(item.product_id);
+                                    useStore.getState().setCurrentStep('gather_context');
+                                    router.push(`/product-info?productId=${item.product_id}&resume=true`);
+                                  }}
+                                >
+                                  Resume
+                                </Button>
+                              )}
+                              {item.allowed_actions.includes('configure_saas') && (
+                                <Button
+                                  variant="primary"
+                                  onClick={() => {
+                                    useStore.getState().setProductId(item.product_id);
+                                    useStore.getState().setCurrentStep('saas_deployment');
+                                    router.push(`/saas-integration?productId=${item.product_id}`);
+                                  }}
+                                >
+                                  Configure SaaS
+                                </Button>
+                              )}
+                              {item.allowed_actions.includes('view_console') && (
+                                <Button
+                                  iconName="external"
+                                  onClick={() => {
+                                    window.open(`https://aws.amazon.com/marketplace/management/products/${item.product_id}`, '_blank');
+                                  }}
+                                >
+                                  Console
+                                </Button>
+                              )}
+                            </SpaceBetween>
+                          ),
+                        },
+                      ]}
+                      items={marketplaceProducts}
+                      loading={loadingProducts}
+                      loadingText="Loading marketplace products..."
+                      empty={
+                        <Box textAlign="center" color="inherit">
+                          <b>No products found</b>
+                          <Box padding={{ bottom: 's' }} variant="p" color="inherit">
+                            No marketplace products found.
+                          </Box>
+                        </Box>
+                      }
+                    />
+                  </Container>
+                )}
 
-                <Container>
-                  <SpaceBetween size="s">
-                    <Box variant="h3">Manage Existing Products</Box>
-                    <Link
-                      external
-                      href="https://aws.amazon.com/marketplace/management/products"
-                    >
-                      AWS Marketplace Management Portal
-                    </Link>
-                  </SpaceBetween>
-                </Container>
+                <Box textAlign="center" padding={{ vertical: 'm' }}>
+                  <Button
+                    iconAlign="right"
+                    iconName="external"
+                    onClick={() => {
+                      window.open('https://aws.amazon.com/marketplace/management/products', '_blank');
+                    }}
+                  >
+                    Open AWS Marketplace Management Portal
+                  </Button>
+                </Box>
               </SpaceBetween>
             </ContentLayout>
           }
@@ -169,12 +303,15 @@ export default function SellerRegistrationPage() {
                       <ol style={{ marginLeft: '20px' }}>
                         <li>
                           <Box fontWeight="bold">Open AWS Marketplace Seller Settings:</Box>
-                          <Link
-                            external
-                            href="https://aws.amazon.com/marketplace/management/seller-settings/account"
+                          <Button
+                            iconAlign="right"
+                            iconName="external"
+                            onClick={() => {
+                              window.open('https://aws.amazon.com/marketplace/management/seller-settings/account', '_blank');
+                            }}
                           >
                             AWS Marketplace Seller Settings
-                          </Link>
+                          </Button>
                         </li>
                         <li>
                           <Box fontWeight="bold">Verify Tax Information:</Box>
@@ -260,7 +397,10 @@ export default function SellerRegistrationPage() {
                           <Box>You can now proceed to create product listings.</Box>
                           <Button
                             variant="primary"
-                            onClick={() => router.push('/welcome')}
+                            onClick={() => {
+                              useStore.getState().setCurrentStep('gather_context');
+                              router.push('/product-info');
+                            }}
                           >
                             📦 Create Product Listing
                           </Button>
@@ -354,8 +494,9 @@ export default function SellerRegistrationPage() {
                       variant="primary"
                       iconAlign="right"
                       iconName="external"
-                      href="https://aws.amazon.com/marketplace/management/seller-settings/register"
-                      target="_blank"
+                      onClick={() => {
+                        window.open('https://aws.amazon.com/marketplace/management/seller-settings/register', '_blank');
+                      }}
                     >
                       🏢 Create Business Profile
                     </Button>
@@ -422,8 +563,9 @@ export default function SellerRegistrationPage() {
                   <Button
                     iconAlign="right"
                     iconName="external"
-                    href="https://aws.amazon.com/marketplace/management/seller-settings/account"
-                    target="_blank"
+                    onClick={() => {
+                      window.open('https://aws.amazon.com/marketplace/management/seller-settings/account', '_blank');
+                    }}
                   >
                     Open AWS Marketplace Portal
                   </Button>

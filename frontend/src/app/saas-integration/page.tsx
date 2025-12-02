@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AppLayout,
   Container,
@@ -44,7 +44,12 @@ const INITIAL_STAGES: DeploymentStage[] = [
 
 export default function SaaSIntegrationPage() {
   const router = useRouter();
-  const { isAuthenticated, productId, credentials, setStackId, setCurrentStep } = useStore();
+  const searchParams = useSearchParams();
+  const { isAuthenticated, productId: storeProductId, credentials, setStackId, setCurrentStep, setProductId } = useStore();
+  
+  // Get productId from URL or store
+  const urlProductId = searchParams.get('productId');
+  const productId = urlProductId || storeProductId;
 
   const [email, setEmail] = useState('');
   const [stackName, setStackName] = useState('');
@@ -70,6 +75,11 @@ export default function SaaSIntegrationPage() {
       return;
     }
 
+    // If productId came from URL, store it
+    if (urlProductId && urlProductId !== storeProductId) {
+      setProductId(urlProductId);
+    }
+
     setStackName(`marketplace-saas-${productId.substring(0, 8)}`);
 
     if (credentials) {
@@ -77,7 +87,7 @@ export default function SaaSIntegrationPage() {
       setSecretKey(credentials.aws_secret_access_key || '');
       setSessionToken(credentials.aws_session_token || '');
     }
-  }, [isAuthenticated, productId, credentials, router]);
+  }, [isAuthenticated, productId, credentials, router, urlProductId, storeProductId, setProductId]);
 
   useEffect(() => {
     if (loading && startTime) {
@@ -285,7 +295,17 @@ export default function SaaSIntegrationPage() {
         setDeployedStackName(response.data.stack_name);
       }
       
-      // Polling will continue via useEffect
+      // If stack already exists and is complete, show success immediately
+      if (response.data.status === 'CREATE_COMPLETE') {
+        setDeploymentProgress(100);
+        setSuccess(true);
+        setLoading(false);
+        setCfStatus('CREATE_COMPLETE');
+        // Mark all stages as completed
+        setDeploymentStages(INITIAL_STAGES.map(s => ({ ...s, status: 'completed' as const, message: '✓ Complete' })));
+      }
+      
+      // Otherwise, polling will continue via useEffect
     } catch (err: any) {
       console.error('Deployment error:', err);
       setError(err.response?.data?.error || err.message || 'Failed to deploy SaaS integration');
@@ -317,7 +337,6 @@ export default function SaaSIntegrationPage() {
           <BreadcrumbGroup
             items={[
               { text: 'Home', href: '/' },
-              { text: 'Welcome', href: '/welcome' },
               { text: 'Success', href: '/listing-success' },
               { text: 'SaaS Integration', href: '/saas-integration' },
             ]}
@@ -352,13 +371,58 @@ export default function SaaSIntegrationPage() {
                   {error && <Alert type="error" dismissible onDismiss={() => setError('')}>{error}</Alert>}
 
                   {success && (
-                    <Alert type="success" header="Deployment Successful!">
-                      <SpaceBetween size="s">
+                    <Alert type="success" header="✅ Deployment Successful!">
+                      <SpaceBetween size="m">
                         <Box>SaaS integration infrastructure deployed successfully!</Box>
                         <Box><strong>Stack ID:</strong> {deployedStackId}</Box>
                         <Box><strong>Stack Name:</strong> {deployedStackName}</Box>
-                        <Box>📧 Check your email to confirm SNS subscription.</Box>
                         <Box color="text-body-secondary">Time: {formatTime(elapsedTime)}</Box>
+                        
+                        <Box variant="h4">Next Steps:</Box>
+                        <ol style={{ marginLeft: '20px' }}>
+                          <li>
+                            <Box fontWeight="bold">Get the Fulfillment URL from CloudFormation Outputs</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              Open the CloudFormation stack in AWS Console and copy the "AWSMarketplaceFulfillmentURL" from the Outputs tab
+                            </Box>
+                            <Button
+                              iconAlign="right"
+                              iconName="external"
+                              onClick={() => {
+                                window.open(`https://console.aws.amazon.com/cloudformation/home?region=${region.value}#/stacks/outputs?stackId=${encodeURIComponent(deployedStackId)}`, '_blank');
+                              }}
+                            >
+                              View Stack Outputs
+                            </Button>
+                          </li>
+                          <li>
+                            <Box fontWeight="bold">Update Product with Fulfillment URL</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              Go to AWS Marketplace Management Portal and update your product's fulfillment URL
+                            </Box>
+                            <Button
+                              iconAlign="right"
+                              iconName="external"
+                              onClick={() => {
+                                window.open(`https://aws.amazon.com/marketplace/management/products/${productId}`, '_blank');
+                              }}
+                            >
+                              Open Product in Console
+                            </Button>
+                          </li>
+                          <li>
+                            <Box fontWeight="bold">Confirm SNS Subscription</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              📧 Check your email ({email}) and confirm the SNS subscription to receive marketplace notifications
+                            </Box>
+                          </li>
+                          <li>
+                            <Box fontWeight="bold">Test the Integration</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              Test the buyer experience by subscribing to your product from a test account
+                            </Box>
+                          </li>
+                        </ol>
                       </SpaceBetween>
                     </Alert>
                   )}

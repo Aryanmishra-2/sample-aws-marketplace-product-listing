@@ -51,13 +51,28 @@ export default function GlobalHeader() {
         backgroundColor: '#232f3e',
         color: 'white',
         padding: '12px 20px',
-        borderBottom: '2px solid #ff9900',
+        borderBottom: '4px solid #ff9900',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
       }}
     >
       <SpaceBetween size="s">
         {/* Account Info Row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <SpaceBetween size="l" direction="horizontal">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ 
+                fontSize: '20px', 
+                fontWeight: 'bold',
+                color: '#ff9900',
+                borderRight: '2px solid #ff9900',
+                paddingRight: '12px'
+              }}>
+                AWS Marketplace
+              </div>
+              <div style={{ fontSize: '14px', color: '#aab7b8' }}>
+                Seller Portal
+              </div>
+            </div>
             <div>
               <div style={{ fontSize: '12px', color: '#aab7b8', marginBottom: '4px' }}>
                 AWS Account
@@ -112,14 +127,23 @@ export default function GlobalHeader() {
               <button
                 onClick={handleHome}
                 style={{
-                  backgroundColor: '#232f3e',
+                  backgroundColor: 'transparent',
                   color: 'white',
                   border: '1px solid #ff9900',
                   borderRadius: '4px',
                   padding: '8px 16px',
                   cursor: 'pointer',
                   fontSize: '14px',
-                  fontWeight: '500',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#ff9900';
+                  e.currentTarget.style.color = '#232f3e';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'white';
                 }}
               >
                 🏠 Home
@@ -127,14 +151,23 @@ export default function GlobalHeader() {
               <button
                 onClick={handleClearData}
                 style={{
-                  backgroundColor: '#d13212',
-                  color: 'white',
-                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: '#d13212',
+                  border: '1px solid #d13212',
                   borderRadius: '4px',
                   padding: '8px 16px',
                   cursor: 'pointer',
                   fontSize: '14px',
-                  fontWeight: '500',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#d13212';
+                  e.currentTarget.style.color = 'white';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#d13212';
                 }}
               >
                 🗑️ Clear Data
@@ -146,29 +179,44 @@ export default function GlobalHeader() {
         {/* Progress Bar Row */}
         <div style={{ marginTop: '8px' }}>
           <div style={{ 
-            backgroundColor: '#e9ebed',
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
             borderRadius: '4px',
-            height: '8px',
+            height: '10px',
             overflow: 'hidden',
-            position: 'relative'
+            position: 'relative',
+            border: '1px solid rgba(255, 153, 0, 0.3)'
           }}>
             <div style={{
-              backgroundColor: progressValue === 100 ? '#037f0c' : '#0073bb',
+              background: progressValue === 100 
+                ? 'linear-gradient(90deg, #037f0c, #05a30f)' 
+                : 'linear-gradient(90deg, #ff9900, #ec7211)',
               height: '100%',
               width: `${progressValue}%`,
               transition: 'width 0.3s ease-in-out',
-              boxShadow: progressValue > 0 ? '0 0 8px rgba(0, 115, 187, 0.5)' : 'none'
-            }} />
+              boxShadow: progressValue > 0 ? '0 0 10px rgba(255, 153, 0, 0.6)' : 'none',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent)',
+                animation: progressValue < 100 ? 'shimmer 2s infinite' : 'none'
+              }} />
+            </div>
           </div>
           <div style={{ 
             display: 'flex', 
             justifyContent: 'space-between', 
-            marginTop: '4px',
+            marginTop: '6px',
             fontSize: '12px',
             color: '#aab7b8'
           }}>
             <span>Step {WORKFLOW_STEPS.findIndex(s => s.key === currentStep) + 1} of {WORKFLOW_STEPS.length}</span>
-            <span style={{ color: progressValue === 100 ? '#037f0c' : '#ff9900', fontWeight: 'bold' }}>{progressValue}%</span>
+            <span style={{ color: progressValue === 100 ? '#05a30f' : '#ff9900', fontWeight: 'bold' }}>{progressValue}%</span>
           </div>
         </div>
       </SpaceBetween>

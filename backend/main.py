@@ -443,27 +443,62 @@ async def list_marketplace_products(credentials: Credentials):
                     needs_saas_integration = product_type == 'SaaSProduct'
                     saas_integration_status = 'PENDING'
                     
+                    # Check if CloudFormation stack exists for this product (indicates SaaS integration)
+                    stack_exists = False
+                    if needs_saas_integration:
+                        try:
+                            cf_client = session.client('cloudformation')
+                            stack_name = f"saas-integration-{entity_id}"
+                            stack_response = cf_client.describe_stacks(StackName=stack_name)
+                            if stack_response['Stacks']:
+                                stack_status = stack_response['Stacks'][0]['StackStatus']
+                                if stack_status == 'CREATE_COMPLETE':
+                                    stack_exists = True
+                                    saas_integration_status = 'COMPLETED'
+                                elif stack_status in ['CREATE_IN_PROGRESS', 'UPDATE_IN_PROGRESS']:
+                                    saas_integration_status = 'IN_PROGRESS'
+                                elif stack_status in ['CREATE_FAILED', 'ROLLBACK_COMPLETE']:
+                                    saas_integration_status = 'FAILED'
+                        except:
+                            # Stack doesn't exist or error checking
+                            pass
+                    
                     # Determine allowed actions based on status
                     allowed_actions = []
                     recommendations = []
                     
                     if visibility == 'DRAFT':
-                        allowed_actions = ['edit', 'continue_listing', 'delete']
-                        recommendations.append('Continue with listing creation to publish')
+                        allowed_actions = ['resume', 'delete']
+                        recommendations.append('Resume listing creation to publish')
+                        # Check if SaaS integration is needed for DRAFT products
+                        if needs_saas_integration and not stack_exists:
+                            saas_integration_status = 'PENDING'
                     elif visibility == 'LIMITED' or visibility == 'Restricted':
-                        allowed_actions = ['view', 'manage_saas']
+                        allowed_actions = ['view_console']
                         if needs_saas_integration:
-                            recommendations.append('Complete SaaS integration before going public')
-                            allowed_actions.append('deploy_saas')
-                            saas_integration_status = 'REQUIRED'
+                            if stack_exists:
+                                recommendations.append('SaaS integration complete - ready for public visibility')
+                                saas_integration_status = 'COMPLETED'
+                            else:
+                                recommendations.append('Complete SaaS integration before going public')
+                                allowed_actions.append('configure_saas')
+                                saas_integration_status = 'REQUIRED'
+                        else:
+                            recommendations.append('Product is in limited availability')
                     elif visibility == 'PUBLIC' or visibility == 'Public':
-                        allowed_actions = ['view', 'manage']
+                        allowed_actions = ['view_console']
                         recommendations.append('Product is live on AWS Marketplace')
-                        saas_integration_status = 'COMPLETED'
+                        if needs_saas_integration:
+                            saas_integration_status = 'COMPLETED'
                     else:
                         # Unknown visibility
-                        allowed_actions = ['view']
+                        allowed_actions = ['view_console']
                         recommendations.append('Check product status in AWS Console')
+                        # For unknown status, check if it needs SaaS integration
+                        if needs_saas_integration:
+                            if not stack_exists:
+                                allowed_actions.append('configure_saas')
+                                saas_integration_status = 'PENDING'
                     
                     products.append({
                         'product_id': entity_id,
@@ -1555,4 +1590,4 @@ async def create_listing_with_stream(data: Dict[str, Any]):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

@@ -57,7 +57,6 @@ export default function ListingSuccessPage() {
         <BreadcrumbGroup
           items={[
             { text: 'Home', href: '/' },
-            { text: 'Welcome', href: '/welcome' },
             { text: 'Success', href: '/listing-success' },
           ]}
           onFollow={(e) => {

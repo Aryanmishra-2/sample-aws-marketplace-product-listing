@@ -400,7 +400,6 @@ export default function ReviewSuggestionsPage() {
         <BreadcrumbGroup
           items={[
             { text: 'Home', href: '/' },
-            { text: 'Welcome', href: '/welcome' },
             { text: 'Product Information', href: '/product-info' },
             { text: 'AI Analysis', href: '/ai-analysis' },
             { text: 'Review Suggestions', href: '/review-suggestions' },
