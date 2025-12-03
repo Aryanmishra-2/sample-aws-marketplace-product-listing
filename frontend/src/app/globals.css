@@ -34,10 +34,24 @@
 }
 
 body {
-  background: linear-gradient(180deg, #ffffff 0%, #f9f9f9 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #f2f3f3 100%);
   color: var(--aws-text-primary);
   font-family: "Amazon Ember", "Helvetica Neue", Roboto, Arial, sans-serif;
   min-height: 100vh;
+}
+
+html {
+  background: linear-gradient(180deg, #ffffff 0%, #f2f3f3 100%);
+  min-height: 100vh;
+}
+
+/* Ensure AppLayout doesn't override background */
+#__next {
+  background: transparent;
+}
+
+.awsui-app-layout {
+  background: transparent !important;
 }
 
 /* AWS-style progress indicators */
@@ -203,4 +217,24 @@ body {
   border-color: var(--aws-smile-orange);
   background-color: #fff8f0;
   border-width: 2px;
+}
+
+
+/* Force gradient background to be visible on all pages */
+.awsui-app-layout__content {
+  background: transparent !important;
+}
+
+.awsui-app-layout__content-wrapper {
+  background: transparent !important;
+}
+
+/* Make content areas transparent to show gradient */
+[class*="awsui-app-layout"] {
+  background: transparent !important;
+}
+
+/* Ensure main content area shows gradient */
+main {
+  background: transparent !important;
 }

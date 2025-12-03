@@ -97,7 +97,9 @@ export default function WorkflowNav() {
         borderRight: '1px solid #d5dbdb',
         padding: '20px 16px',
         minHeight: 'calc(100vh - 120px)',
+        maxHeight: 'calc(100vh - 120px)',
         width: '280px',
+        overflowY: 'auto',
       }}
     >
       <SpaceBetween size="xs">

@@ -16,11 +16,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body style={{ margin: 0, padding: 0 }}>
+    <html lang="en" style={{ minHeight: '100vh' }}>
+      <body style={{ margin: 0, padding: 0, minHeight: '100vh' }}>
         <GlobalHeader />
         <ProgressBar />
-        {children}
+        <div style={{ minHeight: 'calc(100vh - 120px)' }}>
+          {children}
+        </div>
         <Chatbot />
       </body>
     </html>

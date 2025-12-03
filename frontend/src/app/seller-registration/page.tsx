@@ -17,6 +17,8 @@ import {
   StatusIndicator,
   Table,
   Badge,
+  Modal,
+  Link,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
 import WorkflowNav from '@/components/WorkflowNav';
@@ -26,11 +28,14 @@ export default function SellerRegistrationPage() {
   const router = useRouter();
   const { isAuthenticated, sellerStatus, credentials } = useStore();
   
+  const [publicProfileConfirmed, setPublicProfileConfirmed] = useState(false);
   const [taxInfoConfirmed, setTaxInfoConfirmed] = useState(false);
   const [paymentInfoConfirmed, setPaymentInfoConfirmed] = useState(false);
   const [accountStatusConfirmed, setAccountStatusConfirmed] = useState(false);
   const [marketplaceProducts, setMarketplaceProducts] = useState<any[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [revalidating, setRevalidating] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -70,7 +75,7 @@ export default function SellerRegistrationPage() {
 
   const status = sellerStatus.seller_status;
   const productsCount = sellerStatus.owned_products?.length || 0;
-  const allConfirmed = taxInfoConfirmed && paymentInfoConfirmed && accountStatusConfirmed;
+  const allConfirmed = publicProfileConfirmed && taxInfoConfirmed && paymentInfoConfirmed && accountStatusConfirmed;
 
   // SCENARIO 1: Seller with existing products
   if (status === 'APPROVED' && productsCount > 0) {
@@ -341,7 +346,19 @@ export default function SellerRegistrationPage() {
 
                 <Container header={<Header variant="h2">Validation Checklist</Header>}>
                   <SpaceBetween size="m">
-                    <ColumnLayout columns={3}>
+                    <ColumnLayout columns={2}>
+                      <div>
+                        <Box variant="h4">🏢 Public Profile</Box>
+                        <Checkbox
+                          checked={publicProfileConfirmed}
+                          onChange={({ detail }) => setPublicProfileConfirmed(detail.checked)}
+                        >
+                          Public profile created and published
+                        </Checkbox>
+                        <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs' }}>
+                          Check this ONLY after creating and publishing your public profile in AWS Marketplace
+                        </Box>
+                      </div>
                       <div>
                         <Box variant="h4">📋 Tax Information</Box>
                         <Checkbox
@@ -385,20 +402,149 @@ export default function SellerRegistrationPage() {
                         <SpaceBetween size="s">
                           <Box>Your seller profile is ready. You have confirmed that:</Box>
                           <ul style={{ marginLeft: '20px' }}>
+                            <li>Public profile is created and published</li>
                             <li>Tax information is complete</li>
                             <li>Payment information is complete</li>
                             <li>Account status allows publishing paid and free products</li>
                           </ul>
                           <Box>You can now proceed to create product listings.</Box>
+                          {revalidating && (
+                            <Alert type="info" header="🔄 Re-validating Seller Status">
+                              Checking your current seller status with AWS Marketplace...
+                            </Alert>
+                          )}
+                          <Alert type="warning" header="⚠️ Important: Manual Verification Required">
+                            <SpaceBetween size="s">
+                              <Box>
+                                AWS does not provide APIs to verify tax and banking information completion.
+                                You MUST manually verify in the AWS Marketplace Management Portal that:
+                              </Box>
+                              <ul style={{ marginLeft: '20px' }}>
+                                <li><strong>Public Profile</strong> is created and published</li>
+                                <li><strong>Tax Information</strong> (W-9/W-8) is submitted and approved</li>
+                                <li><strong>Banking Information</strong> is complete with valid account details</li>
+                                <li><strong>Account Status</strong> shows "Publish paid and free products"</li>
+                              </ul>
+                              <Box color="text-status-error" fontWeight="bold">
+                                ⚠️ If these are not complete, your product listing will fail during submission!
+                              </Box>
+                            </SpaceBetween>
+                          </Alert>
                           <Button
                             variant="primary"
-                            onClick={() => {
-                              useStore.getState().setCurrentStep('gather_context');
-                              router.push('/product-info');
-                            }}
+                            loading={revalidating}
+                            disabled={revalidating}
+                            onClick={() => setShowConfirmModal(true)}
                           >
-                            📦 Create Product Listing
+                            {revalidating ? '🔄 Validating Status...' : '📦 Create Product Listing'}
                           </Button>
+                          
+                          <Modal
+                            visible={showConfirmModal}
+                            onDismiss={() => setShowConfirmModal(false)}
+                            header="⚠️ Important Confirmation Required"
+                            footer={
+                              <Box float="right">
+                                <SpaceBetween direction="horizontal" size="xs">
+                                  <Button variant="link" onClick={() => setShowConfirmModal(false)}>
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    variant="primary"
+                                    loading={revalidating}
+                                    onClick={async () => {
+                                      setShowConfirmModal(false);
+                                      
+                                      // Re-validate seller status before proceeding
+                                      setRevalidating(true);
+                                      try {
+                                        const statusResponse = await axios.post('/api/check-seller-status', {
+                                          aws_access_key_id: credentials?.aws_access_key_id,
+                                          aws_secret_access_key: credentials?.aws_secret_access_key,
+                                          aws_session_token: credentials?.aws_session_token,
+                                        });
+                                        
+                                        // Update the seller status
+                                        useStore.getState().setSellerStatus(statusResponse.data);
+                                        
+                                        // Check if still approved
+                                        if (statusResponse.data.seller_status === 'APPROVED') {
+                                          // Check if they have marketplace access
+                                          if (statusResponse.data.marketplace_accessible === false) {
+                                            setRevalidating(false);
+                                            alert(
+                                              '❌ Marketplace Access Not Detected\n\n' +
+                                              'Your account shows APPROVED status but marketplace access could not be verified.\n\n' +
+                                              'This usually means:\n' +
+                                              '• Public profile is not created\n' +
+                                              '• Tax/Banking information is incomplete\n' +
+                                              '• Account setup is not finished\n\n' +
+                                              'Please complete ALL steps in the AWS Marketplace Management Portal before proceeding.'
+                                            );
+                                            return;
+                                          }
+                                          
+                                          // Mark seller_registration as complete
+                                          useStore.getState().markStepComplete('seller_registration');
+                                          useStore.getState().setCurrentStep('gather_context');
+                                          router.push('/product-info');
+                                        } else {
+                                          setRevalidating(false);
+                                          alert(`Status changed to ${statusResponse.data.seller_status}. Please refresh the page.`);
+                                          window.location.reload();
+                                        }
+                                      } catch (error) {
+                                        setRevalidating(false);
+                                        console.error('Failed to re-validate status:', error);
+                                        alert('Failed to validate seller status. Please try again.');
+                                      }
+                                    }}
+                                  >
+                                    Yes, I have verified everything
+                                  </Button>
+                                </SpaceBetween>
+                              </Box>
+                            }
+                          >
+                            <SpaceBetween size="m">
+                              <Alert type="warning">
+                                Have you ACTUALLY verified in the AWS Marketplace Management Portal that ALL of the following are complete?
+                              </Alert>
+                              
+                              <Container>
+                                <SpaceBetween size="s">
+                                  <Box>
+                                    <Button
+                                      variant="primary"
+                                      iconAlign="right"
+                                      iconName="external"
+                                      onClick={() => {
+                                        window.open('https://aws.amazon.com/marketplace/management/seller-settings/account', '_blank');
+                                      }}
+                                    >
+                                      Open AWS Marketplace Management Portal
+                                    </Button>
+                                  </Box>
+                                  <Box fontSize="body-s" color="text-body-secondary">
+                                    Verify these items in the portal before confirming:
+                                  </Box>
+                                </SpaceBetween>
+                              </Container>
+                              
+                              <Box>
+                                <ul style={{ marginLeft: '20px' }}>
+                                  <li><strong>✓ Public Profile</strong> is created and published</li>
+                                  <li><strong>✓ Tax Information</strong> (W-9/W-8) is submitted and approved</li>
+                                  <li><strong>✓ Banking Information</strong> is complete with valid account details</li>
+                                  <li><strong>✓ Account Status</strong> shows "Publish paid and free products"</li>
+                                </ul>
+                              </Box>
+                              <Alert type="error">
+                                <strong>Warning:</strong> If ANY of these items are incomplete, your product listing will FAIL during submission.
+                                Click "Yes, I have verified everything" ONLY if you have confirmed ALL items in the AWS portal.
+                              </Alert>
+                            </SpaceBetween>
+                          </Modal>
                         </SpaceBetween>
                       </Alert>
                     ) : (
@@ -406,11 +552,12 @@ export default function SellerRegistrationPage() {
                         <SpaceBetween size="s">
                           <Box>Please complete validation for:</Box>
                           <ul style={{ marginLeft: '20px' }}>
+                            {!publicProfileConfirmed && <li>Public Profile (Created and Published)</li>}
                             {!taxInfoConfirmed && <li>Tax Information</li>}
                             {!paymentInfoConfirmed && <li>Payment Information</li>}
                             {!accountStatusConfirmed && <li>Account Status (Publish paid/free products)</li>}
                           </ul>
-                          <Box>You must confirm all three items before creating products.</Box>
+                          <Box>You must confirm all four items before creating products.</Box>
                         </SpaceBetween>
                       </Alert>
                     )}
