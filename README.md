@@ -4,7 +4,7 @@
   </div>
 
   <h1>
-    AWS Marketplace Seller Portal
+    Listing Products in AWS Marketplace
   </h1>
 
   <h2>
@@ -28,11 +28,11 @@
 
 ---
 
-Welcome to the AWS Marketplace Seller Portal!
+Welcome to Listing Products in AWS Marketplace!
 
-A modern, AI-powered web application that helps AWS Marketplace sellers create and manage product listings with intelligent automation. Built with **Next.js 14**, **FastAPI**, and **Amazon Bedrock**, this portal streamlines the entire listing workflow from credential validation to SaaS integration.
+A modern, AI-powered web application that helps AWS Marketplace sellers create and manage product listings with intelligent automation. Built with **Next.js 14**, **FastAPI**, and **Amazon Bedrock**, this application streamlines the entire listing workflow from credential validation to SaaS integration.
 
-Whether you're creating your first product listing or managing multiple SaaS offerings, this portal provides AI-powered analysis, content generation, and automated infrastructure deployment—all integrated with AWS Marketplace Catalog API and Amazon Bedrock AgentCore.
+Whether you're creating your first product listing or managing multiple SaaS offerings, this application provides AI-powered analysis, content generation, and automated infrastructure deployment—all integrated with AWS Marketplace Catalog API and Amazon Bedrock AgentCore.
 
 ## 🎥 Demo
 
@@ -222,7 +222,7 @@ Each stage includes validation, error handling, and the ability to go back and m
 
 ### Use Case Architecture
 
-![AWS Marketplace Seller Portal Architecture](docs/images/marketplace-seller-portal-architecture.png)
+![Listing Products in AWS Marketplace Architecture](docs/images/marketplace-listing-architecture.png)
 
 | Information | Details |
 |-------------|---------|
@@ -237,7 +237,7 @@ Each stage includes validation, error handling, and the ability to go back and m
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    AWS Marketplace Seller Portal                            │
+│                    Listing Products in AWS Marketplace                      │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  Frontend Layer - Next.js 14 + CloudScape UI                               │
 │  ├── 7-Stage Workflow (Credentials → SaaS Integration)                     │

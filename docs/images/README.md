@@ -90,4 +90,6 @@ To create the `marketplace-seller-portal-architecture.png` diagram:
 
 ⚠️ **Placeholder**: The architecture diagram image needs to be created.
 
+The image should be named: `marketplace-listing-architecture.png`
+
 Until the image is created, the text-based architecture diagram in the README.md provides the same information.
