@@ -18,18 +18,17 @@ import threading
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Add reference folder to path for legacy agents
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'reference', 'streamlit-app'))
 
-# Import existing agents and tools
-from agent.strands_marketplace_agent import StrandsMarketplaceAgent
-from agent.marketplace_help_agent import MarketplaceHelpAgent
-from agent.tools.seller_registration_tools import SellerRegistrationTools
-from agents.serverless_saas_integration import ServerlessSaasIntegrationAgent
-from agents.workflow_orchestrator import WorkflowOrchestrator
+# Note: Legacy agent imports removed - agent logic is now integrated directly in endpoints
+# Tools are available in the tools/ directory
+# from agent.strands_marketplace_agent import StrandsMarketplaceAgent
+# from agent.marketplace_help_agent import MarketplaceHelpAgent
+# from agent.tools.seller_registration_tools import SellerRegistrationTools
+# from agents.serverless_saas_integration import ServerlessSaasIntegrationAgent
+# from agents.workflow_orchestrator import WorkflowOrchestrator
 
-# Initialize help agent
-help_agent = MarketplaceHelpAgent()
+# Help agent functionality is integrated in the /chat endpoint below
+help_agent = None  # Placeholder - will use Bedrock directly
 
 app = FastAPI(title="AWS Marketplace Seller Portal API")
 
@@ -950,10 +949,13 @@ async def create_listing(data: Dict[str, Any]):
             region_name='us-east-1'
         )
         
-        strands_agent = StrandsMarketplaceAgent()
-        strands_agent.orchestrator.listing_tools.update_credentials(session)
+        # Note: Direct Marketplace API integration (agent removed)
+        # strands_agent = StrandsMarketplaceAgent()
+        # strands_agent.orchestrator.listing_tools.update_credentials(session)
+        # orchestrator = strands_agent.orchestrator
         
-        orchestrator = strands_agent.orchestrator
+        # Use direct AWS SDK calls instead
+        marketplace_client = session.client('marketplace-catalog')
         
         # Stage 1: Product Information
         product_title = listing_data.get("title")
@@ -1368,9 +1370,13 @@ async def create_listing_with_stream(data: Dict[str, Any]):
                 region_name='us-east-1'
             )
             
-            strands_agent = StrandsMarketplaceAgent()
-            strands_agent.orchestrator.listing_tools.update_credentials(session)
-            orchestrator = strands_agent.orchestrator
+            # Note: Direct Marketplace API integration (agent removed)
+            # strands_agent = StrandsMarketplaceAgent()
+            # strands_agent.orchestrator.listing_tools.update_credentials(session)
+            # orchestrator = strands_agent.orchestrator
+            
+            # Use direct AWS SDK calls instead
+            marketplace_client = session.client('marketplace-catalog')
             
             # Stage 1: Product Information
             emit_event(session_id, "stage", {
@@ -1641,8 +1647,14 @@ async def chat(data: Dict[str, Any]):
         
         print(f"[DEBUG] Chat question: {question}")
         
-        # Use Strands help agent for intelligent responses
-        response = await help_agent.chat(question, conversation_history)
+        # Use simple response generation (agent removed)
+        # response = await help_agent.chat(question, conversation_history)
+        
+        # Fallback to simple response
+        response = {
+            "success": True,
+            "response": generate_chat_response(question)
+        }
         
         return response
         
@@ -1658,7 +1670,14 @@ async def chat(data: Dict[str, Any]):
 async def get_chat_topics():
     """Get quick help topics for the chatbot"""
     try:
-        topics = help_agent.get_quick_help_topics()
+        # Return default topics (agent removed)
+        topics = [
+            "How do I create a SaaS product listing?",
+            "What pricing models are available?",
+            "How do I deploy SaaS infrastructure?",
+            "What are the seller registration requirements?",
+            "How do I troubleshoot listing issues?"
+        ]
         return {
             "success": True,
             "topics": topics
