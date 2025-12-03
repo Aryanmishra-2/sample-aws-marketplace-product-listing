@@ -306,7 +306,7 @@ async def check_seller_status(credentials: Credentials):
             
             return {
                 "success": True,
-                "seller_status": "REGISTERED" if products else "NOT_REGISTERED",
+                "seller_status": "APPROVED" if products else "NOT_REGISTERED",
                 "account_id": account_id,
                 "owned_products": products,
                 "owned_products_count": len(products),
