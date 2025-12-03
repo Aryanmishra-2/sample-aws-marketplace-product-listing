@@ -1,435 +1,445 @@
-# AWS Marketplace Seller Portal - Agent Architecture
+# Agent Architecture
+
+This document describes the AI agent architecture for **Listing Products in AWS Marketplace**, including the current implementation and the future migration to Amazon Bedrock AgentCore.
 
 ## Overview
 
-The portal uses a modular, Strands-based agent architecture with clear separation of concerns.
+The application uses an AI-powered system to automate the product listing workflow. The architecture consists of:
 
-## Architecture Diagram
+1. **Frontend Layer** - Next.js 14 with CloudScape UI
+2. **Backend Layer** - FastAPI with AI agent integration
+3. **Tools Layer** - Modular AWS service integrations
+4. **AWS Services Layer** - Bedrock, Marketplace, CloudFormation, etc.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Frontend (Next.js)                    │
-│  - React Components                                          │
-│  - API Client Layer                                          │
-│  - State Management (Zustand)                                │
-└────────────────────┬────────────────────────────────────────┘
-                     │ HTTP/REST APIs
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Backend (FastAPI)                         │
-│  - API Endpoints                                             │
-│  - Request/Response Handling                                 │
-│  - Session Management                                        │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-        ┌────────────┴────────────┐
-        ▼                         ▼
-┌──────────────────┐    ┌──────────────────────┐
-│  Help Agent      │    │  Marketplace Agent   │
-│  (Strands)       │    │  (Strands)           │
-│                  │    │                      │
-│  - Chat/Q&A      │    │  - Orchestrator      │
-│  - Documentation │    │  - Sub-Agents        │
-│  - Troubleshoot  │    │  - Workflow Mgmt     │
-└──────────────────┘    └──────────┬───────────┘
-                                   │
-                    ┌──────────────┴──────────────┐
-                    ▼                             ▼
-        ┌───────────────────┐         ┌──────────────────┐
-        │  Sub-Agents       │         │  Tools Layer     │
-        │  (Modular)        │         │                  │
-        │                   │         │  - Seller Reg    │
-        │  - Product Info   │         │  - Listing       │
-        │  - Pricing        │         │  - SaaS Deploy   │
-        │  - EULA           │         │  - AWS APIs      │
-        │  - Fulfillment    │         │                  │
-        └───────────────────┘         └──────────────────┘
-```
-
-## Components
+## Current Architecture
 
 ### 1. Frontend Layer
 
-**Technology:** Next.js 14, React, TypeScript, CloudScape Design System
+**Location:** `frontend/src/`
 
-**Responsibilities:**
-- User interface and interactions
-- State management
-- API communication
-- Real-time updates
+The frontend provides a modern, AWS-themed user interface with a 7-stage workflow.
+
+**Key Pages:**
+- `app/page.tsx` - Credentials validation
+- `app/seller-registration/page.tsx` - Seller status verification
+- `app/product-info/page.tsx` - Product information input
+- `app/ai-analysis/page.tsx` - AI analysis results display
+- `app/review-suggestions/page.tsx` - Content review and editing
+- `app/create-listing/page.tsx` - Listing creation and submission
+- `app/saas-integration/page.tsx` - SaaS infrastructure deployment
 
 **Key Components:**
-- `GlobalHeader` - Navigation and account info
-- `WorkflowNav` - Workflow stage tracking
-- `Chatbot` - Help agent interface
-- `ProgressBar` - Visual progress indicator
+- `components/GlobalHeader.tsx` - AWS-themed navigation header
+- `components/WorkflowNav.tsx` - Sidebar workflow navigation
+- `components/ProgressBar.tsx` - Visual progress tracking
+- `components/Chatbot.tsx` - Floating AI help assistant
 
-### 2. Backend API Layer
-
-**Technology:** FastAPI, Python
-
-**File:** `backend/main.py`
-
-**Responsibilities:**
-- HTTP endpoint management
-- Request validation
-- Response formatting
+**State Management:**
+- Zustand store (`lib/store.ts`) for global state
 - Session management
-- Agent orchestration
+- Workflow progress tracking
+- User data persistence
 
-**Key Endpoints:**
-- `/validate-credentials` - AWS credential validation
-- `/check-seller-status` - Seller registration status
-- `/chat` - Help agent interaction
-- `/analyze-product` - Product analysis
-- `/create-listing` - Listing creation
-- `/deploy-saas-integration` - SaaS deployment
+### 2. Backend Layer
 
-### 3. Help Agent (Strands-Based)
+**Location:** `backend/main.py`
 
-**File:** `reference/streamlit-app/agent/marketplace_help_agent.py`
+The FastAPI backend orchestrates AI agents and AWS service integrations.
 
-**Purpose:** Provide contextual help and guidance for AWS Marketplace sellers
+**Core API Endpoints:**
 
-**Architecture:**
-```python
-MarketplaceHelpAgent
-├── Strands Agent Core
-├── Knowledge Base
-│   ├── Seller Registration
-│   ├── SaaS Integration
-│   ├── Pricing Models
-│   └── Product Listing
-└── Tools
-    ├── search_documentation()
-    ├── get_seller_registration_guide()
-    ├── get_saas_integration_guide()
-    ├── get_pricing_models_guide()
-    └── get_troubleshooting_help()
-```
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Health check |
+| `/validate-credentials` | POST | AWS credential validation via STS |
+| `/check-seller-status` | POST | Marketplace seller registration check |
+| `/analyze-product` | POST | AI-powered product analysis |
+| `/generate-content` | POST | AI content generation for listings |
+| `/suggest-pricing` | POST | AI pricing model recommendations |
+| `/create-listing` | POST | Create marketplace listing |
+| `/deploy-saas` | POST | Deploy SaaS CloudFormation stack |
+| `/get-stack-status` | POST | Monitor CloudFormation deployment |
+| `/chat` | POST | AI help assistant interaction |
 
-**Features:**
-- Intelligent documentation search
-- Step-by-step guidance
-- Troubleshooting assistance
-- Quick help topics
-- Conversation history support
+**Agent Integration:**
+The backend integrates AI capabilities through:
+- Amazon Bedrock Claude 3.5 Sonnet for analysis and generation
+- Workflow orchestration logic
+- State management across stages
+- Error handling and retry logic
 
-**API Integration:**
-```python
-# Backend initialization
-help_agent = MarketplaceHelpAgent()
+### 3. AI Agent System
 
-# Chat endpoint
-@app.post("/chat")
-async def chat(data: Dict[str, Any]):
-    response = await help_agent.chat(question, conversation_history)
-    return response
+The application uses AI agents to automate complex tasks:
 
-# Topics endpoint
-@app.get("/chat/topics")
-async def get_chat_topics():
-    topics = help_agent.get_quick_help_topics()
-    return {"success": True, "topics": topics}
-```
+#### Help Agent
+**Purpose:** Provide contextual help and guidance
 
-### 4. Marketplace Agent (Strands-Based)
+**Implementation:** `/chat` endpoint in `backend/main.py`
 
-**File:** `reference/streamlit-app/agent/strands_marketplace_agent.py`
+**Capabilities:**
+- AWS Marketplace documentation search
+- Troubleshooting common issues
+- Workflow stage guidance
+- Best practices recommendations
 
-**Purpose:** Orchestrate the complete product listing workflow
+**Use Cases:**
+- "How do I create a SaaS product listing?"
+- "What pricing model should I use?"
+- "Why is my seller registration failing?"
 
-**Architecture:**
-```python
-StrandsMarketplaceAgent
-├── Strands Agent Core
-├── ListingOrchestrator
-│   ├── Workflow State Management
-│   ├── Stage Transitions
-│   └── Data Aggregation
-├── Sub-Agents (8 stages)
-│   ├── ProductInformationAgent
-│   ├── FulfillmentAgent
-│   ├── PricingConfigAgent
-│   ├── PriceReviewAgent
-│   ├── RefundPolicyAgent
-│   ├── EULAConfigAgent
-│   ├── OfferAvailabilityAgent
-│   └── AllowlistAgent
-└── Tools
-    ├── store_field_data()
-    ├── get_collected_data()
-    ├── complete_stage()
-    ├── create_listing()
-    ├── add_delivery()
-    ├── add_pricing()
-    └── deploy_integration()
-```
+#### Marketplace Agent
+**Purpose:** Orchestrate the product listing workflow
+
+**Implementation:** Multiple endpoints in `backend/main.py`
 
 **Workflow Stages:**
-1. Product Information
-2. Fulfillment Configuration
-3. Pricing Configuration
-4. Price Review
-5. Refund Policy
-6. EULA Configuration
-7. Offer Availability
-8. Allowlist Configuration
+1. **Credentials Stage** - Validates AWS access keys and permissions
+2. **Seller Stage** - Verifies marketplace seller registration
+3. **Product Stage** - Gathers product information from user
+4. **Analysis Stage** - AI analyzes product features and benefits
+5. **Content Stage** - AI generates optimized listing content
+6. **Pricing Stage** - AI recommends pricing models and dimensions
+7. **Listing Stage** - Creates product and offer in marketplace
+8. **SaaS Stage** - Deploys serverless infrastructure (optional)
 
-### 5. Orchestrator
+**AI Capabilities:**
+- Product feature extraction
+- Competitive analysis
+- Content optimization for SEO
+- Pricing strategy recommendations
+- Technical requirement identification
 
-**File:** `reference/streamlit-app/agent/orchestrator.py`
+### 4. Tools Layer
 
-**Purpose:** Manage workflow state and coordinate sub-agents
+**Location:** `tools/` directory
 
-**Responsibilities:**
-- Track current workflow stage
-- Route to appropriate sub-agent
-- Validate stage completion
-- Aggregate data across stages
-- Execute AWS Marketplace API calls
-- Manage entity IDs (product_id, offer_id)
+Modular tools for AWS service interactions.
 
-**Key Methods:**
+#### Marketplace Tools (`marketplace_tools.py`)
+
 ```python
-class ListingOrchestrator:
-    def get_current_agent() -> SubAgent
-    def set_stage_data(field: str, value: Any)
-    def check_stage_completion() -> bool
-    def complete_current_stage() -> Dict
-    def advance_to_next_stage() -> WorkflowStage
-    def get_workflow_progress() -> Dict
+validate_credentials(access_key, secret_key, session_token, region)
+# Validates AWS credentials using STS GetCallerIdentity
+
+check_seller_status(session)
+# Checks AWS Marketplace seller registration status
+
+create_product_listing(session, product_data)
+# Creates product listing via Marketplace Catalog API
+
+get_listing_status(session, product_id)
+# Retrieves listing status and details
 ```
 
-### 6. Sub-Agents
+#### Bedrock Tools (`bedrock_tools.py`)
 
-**Location:** `reference/streamlit-app/agent/sub_agents/`
-
-**Purpose:** Handle specific workflow stages
-
-**Structure:**
 ```python
-class BaseSubAgent:
-    stage_name: str
-    required_fields: List[str]
-    stage_data: Dict[str, Any]
-    
-    def is_stage_complete() -> bool
-    def get_required_fields() -> List[str]
-    def get_stage_prompt() -> str
-    def execute_stage_apis() -> Dict
+analyze_product(session, product_name, website, description, docs)
+# AI-powered product analysis using Claude 3.5 Sonnet
+
+generate_listing_content(session, product_analysis)
+# Generates title, descriptions, and highlights
+
+suggest_pricing_model(session, product_type, analysis)
+# Recommends pricing model and dimensions
+
+optimize_content(session, content)
+# Optimizes content for SEO and marketplace guidelines
 ```
 
-**Examples:**
-- `ProductInformationAgent` - Collects product details
-- `PricingConfigAgent` - Configures pricing dimensions
-- `FulfillmentAgent` - Sets up fulfillment URL
+#### SaaS Tools (`saas_tools.py`)
 
-### 7. Tools Layer
-
-**Location:** `reference/streamlit-app/agent/tools/`
-
-**Purpose:** Interact with AWS services and APIs
-
-**Components:**
-
-#### SellerRegistrationTools
 ```python
-class SellerRegistrationTools:
-    def check_seller_status() -> Dict
-    def get_account_info() -> Dict
-    def create_business_profile() -> Dict
-    def submit_tax_information() -> Dict
+deploy_saas_stack(session, stack_config)
+# Deploys CloudFormation stack for SaaS infrastructure
+
+monitor_stack_status(session, stack_name)
+# Monitors CloudFormation deployment progress
+
+create_fulfillment_api(session, config)
+# Creates API Gateway fulfillment endpoints
+
+setup_metering(session, config)
+# Configures usage metering Lambda function
 ```
 
-#### ListingTools
+#### Help Tools (`help_tools.py`)
+
 ```python
-class ListingTools:
-    def create_product() -> Dict
-    def add_delivery_options() -> Dict
-    def add_pricing_dimensions() -> Dict
-    def publish_listing() -> Dict
+search_documentation(query)
+# Searches AWS Marketplace documentation
+
+troubleshoot_issue(issue_description)
+# Provides troubleshooting guidance
+
+get_workflow_guidance(stage)
+# Returns stage-specific instructions
 ```
 
-#### ServerlessSaasIntegrationAgent
-```python
-class ServerlessSaasIntegrationAgent:
-    def deploy_infrastructure() -> Dict
-    def get_deployment_status() -> Dict
-    def get_fulfillment_url() -> str
-```
+### 5. AWS Services Integration
+
+The application integrates with multiple AWS services:
+
+**Amazon Bedrock:**
+- Model: Claude 3.5 Sonnet (`us.anthropic.claude-3-5-sonnet-20241022-v2:0`)
+- Use: Product analysis, content generation, pricing recommendations
+- API: `bedrock-runtime:InvokeModel`
+
+**AWS Marketplace Catalog:**
+- Use: Seller verification, product creation, offer management
+- APIs: `DescribeEntity`, `ListEntities`, `StartChangeSet`, `DescribeChangeSet`
+
+**AWS CloudFormation:**
+- Use: SaaS infrastructure deployment
+- Resources: Lambda, DynamoDB, API Gateway, SNS
+- Template: `deployment/cloudformation/Integration.yaml`
+
+**AWS IAM/STS:**
+- Use: Credential validation, permission checking
+- APIs: `GetCallerIdentity`, `GetUser`, `GetRole`
+
+**Amazon DynamoDB:**
+- Use: Subscription management, state storage
+- Tables: Created by CloudFormation for SaaS products
+
+**AWS Lambda:**
+- Use: Fulfillment functions, metering functions
+- Triggers: API Gateway, scheduled events
+
+**Amazon API Gateway:**
+- Use: Fulfillment endpoints for SaaS products
+- Endpoints: `/register`, `/unregister`
+
+**Amazon CloudWatch:**
+- Use: Logging, monitoring, metrics
+- Logs: Application logs, Lambda logs, API Gateway logs
 
 ## Data Flow
 
-### 1. User Interaction Flow
-```
-User Input → Frontend Component → API Call → Backend Endpoint
-    → Agent Processing → Tool Execution → AWS API
-    → Response → Backend → Frontend → UI Update
-```
+### Product Listing Creation Flow
 
-### 2. Chat Flow (Help Agent)
 ```
-User Question → Chatbot Component → /chat API
-    → Help Agent → Tool Selection → Knowledge Base Search
-    → Response Generation → Backend → Frontend → Display
-```
-
-### 3. Listing Creation Flow (Marketplace Agent)
-```
-User Input → Product Info Page → /analyze-product API
-    → Marketplace Agent → Orchestrator → Current Sub-Agent
-    → Field Collection → Stage Completion Check
-    → API Execution → AWS Marketplace → Response
-    → Next Stage → Repeat
-```
-
-## API Contracts
-
-### Help Agent APIs
-
-#### POST /chat
-```json
-Request:
-{
-  "question": "How do I register as a seller?",
-  "conversation_history": [
-    {"role": "user", "content": "previous question"},
-    {"role": "assistant", "content": "previous answer"}
-  ]
-}
-
-Response:
-{
-  "success": true,
-  "response": "To register as an AWS Marketplace seller...",
-  "sources": [],
-  "conversation_id": "session-123"
-}
+1. User enters credentials
+   ↓
+2. Backend validates via STS
+   ↓
+3. Frontend checks seller status
+   ↓
+4. Backend queries Marketplace Catalog API
+   ↓
+5. User provides product information
+   ↓
+6. Backend sends to Bedrock for analysis
+   ↓
+7. Claude 3.5 analyzes and returns insights
+   ↓
+8. Backend generates content via Bedrock
+   ↓
+9. User reviews and edits content
+   ↓
+10. Backend creates listing via Marketplace API
+    ↓
+11. (Optional) Deploy SaaS stack via CloudFormation
 ```
 
-#### GET /chat/topics
-```json
-Response:
-{
-  "success": true,
-  "topics": [
-    {
-      "title": "Seller Registration",
-      "description": "How to register as an AWS Marketplace seller",
-      "query": "How do I register as a seller?"
-    }
-  ]
-}
+### Help Agent Flow
+
+```
+1. User asks question in chatbot
+   ↓
+2. Frontend sends to /chat endpoint
+   ↓
+3. Backend processes with context
+   ↓
+4. Bedrock generates response
+   ↓
+5. Backend returns formatted answer
+   ↓
+6. Frontend displays in chat interface
 ```
 
-### Marketplace Agent APIs
+## Future: Bedrock AgentCore Migration
 
-#### POST /analyze-product
-```json
-Request:
-{
-  "product_context": {
-    "product_name": "My SaaS Product",
-    "product_urls": ["https://example.com"],
-    "product_description": "Description"
-  },
-  "credentials": {
-    "aws_access_key_id": "...",
-    "aws_secret_access_key": "..."
-  }
-}
+### Planned Architecture
 
-Response:
-{
-  "success": true,
-  "analysis": {
-    "product_type": "SaaS",
-    "key_features": [...],
-    "pricing_model": "usage-based"
-  }
-}
-```
+The application is designed for migration to Amazon Bedrock AgentCore:
 
-## Modularity Principles
+**AgentCore Runtime:**
+- Serverless execution environment
+- Managed scaling and availability
+- Built-in monitoring and logging
 
-### 1. Separation of Concerns
-- **Frontend**: UI/UX only, no business logic
-- **Backend**: API orchestration, no UI concerns
-- **Agents**: Business logic, workflow management
-- **Tools**: AWS API interactions only
+**AgentCore Memory:**
+- Multi-strategy memory (USER_PREFERENCE + SEMANTIC)
+- Persistent seller preferences
+- Product template storage
+- Conversation history
 
-### 2. Agent Independence
-- Each agent is self-contained
-- Agents communicate through well-defined interfaces
-- Help Agent operates independently from Marketplace Agent
-- Sub-agents are modular and replaceable
+**AgentCore Gateway:**
+- MCP-compatible tool integration
+- Automatic API conversion
+- Lambda function wrapping
 
-### 3. API-First Design
-- All agent functionality exposed via REST APIs
-- Frontend never directly calls agents
-- Backend acts as API gateway
-- Enables future mobile/CLI clients
+**AgentCore Identity:**
+- IAM-based access management
+- Seller identity tracking
+- Permission management
 
-### 4. Strands Framework Benefits
-- Consistent agent structure
+**AgentCore Tools:**
+- Browser Tool for web scraping
+- Code Interpreter for data processing
 - Built-in tool management
-- LLM integration
-- Conversation handling
-- Error recovery
 
-## Extension Points
+**AgentCore Observability:**
+- CloudWatch integration
+- X-Ray tracing
+- Performance metrics
+- Error tracking
 
-### Adding New Agents
-1. Create agent class extending Strands Agent
-2. Define tools using `@tool` decorator
-3. Implement system prompt
-4. Add API endpoints in backend
-5. Update frontend to consume APIs
+### Migration Benefits
 
-### Adding New Sub-Agents
-1. Create sub-agent class extending BaseSubAgent
-2. Define required fields
-3. Implement stage-specific logic
-4. Register with orchestrator
-5. Add to workflow stages
+1. **Reduced Operational Overhead**
+   - No server management
+   - Automatic scaling
+   - Built-in monitoring
 
-### Adding New Tools
-1. Create tool function with `@tool` decorator
-2. Define clear input/output contracts
-3. Implement AWS API interactions
-4. Add error handling
-5. Register with appropriate agent
+2. **Enhanced Capabilities**
+   - Browser tool for product website analysis
+   - Advanced memory management
+   - Better observability
 
-## Best Practices
+3. **Improved Reliability**
+   - Managed infrastructure
+   - Automatic failover
+   - Built-in retry logic
 
-1. **Keep Agents Focused**: Each agent has a single, clear purpose
-2. **Use Tools for External Calls**: Never call AWS APIs directly from agents
-3. **Maintain State in Orchestrator**: Don't duplicate state across agents
-4. **API Versioning**: Version APIs for backward compatibility
-5. **Error Handling**: Graceful degradation, clear error messages
-6. **Logging**: Comprehensive logging for debugging
-7. **Testing**: Unit tests for tools, integration tests for agents
-8. **Documentation**: Keep this document updated with changes
+4. **Cost Optimization**
+   - Pay-per-use pricing
+   - No idle costs
+   - Efficient resource utilization
 
-## Bedrock AgentCore Migration
+### Migration Path
 
-**Important**: This application is designed to eventually run on **Amazon Bedrock AgentCore Runtime**. All code follows AgentCore-compatible patterns:
+See [BEDROCK_AGENTCORE_MIGRATION.md](./BEDROCK_AGENTCORE_MIGRATION.md) for detailed migration guide.
 
-- ✅ Stateless tool functions
-- ✅ Explicit state management (DynamoDB-ready)
-- ✅ Type-hinted schemas
-- ✅ Idempotent operations
-- ✅ Structured logging
-- ✅ Error handling with retries
+## Security Considerations
 
-See [BEDROCK_AGENTCORE_MIGRATION.md](./BEDROCK_AGENTCORE_MIGRATION.md) for detailed migration plan.
+### Credential Management
+- Never store AWS credentials in code
+- Use environment variables or UI input
+- Validate credentials before use
+- Implement session timeouts
 
-## Future Enhancements
+### API Security
+- CORS configuration for production
+- Rate limiting on endpoints
+- Input validation with Pydantic
+- Error handling without exposing internals
 
-1. **Multi-Agent Collaboration**: Agents working together on complex tasks
-2. **Streaming Responses**: Real-time agent output streaming
-3. **Agent Memory**: Persistent conversation history
-4. **Custom Tools**: User-defined tools for specific workflows
-5. **Agent Marketplace**: Shareable agent configurations
-6. **Full AgentCore Migration**: Production deployment on Bedrock AgentCore Runtime
+### Data Privacy
+- Don't log sensitive data
+- Encrypt data in transit (HTTPS)
+- Use AWS KMS for encryption at rest
+- Implement proper access controls
+
+### IAM Permissions
+Follow least privilege principle:
+- Bedrock: `InvokeModel` only
+- Marketplace: Read and write to own products
+- CloudFormation: Stack management only
+- No admin or root permissions
+
+## Performance Optimization
+
+### Response Times
+- API endpoints: < 2s (excluding AI calls)
+- AI analysis: 5-15s (Bedrock processing)
+- Content generation: 10-20s (Bedrock processing)
+- CloudFormation deployment: 5-10 minutes
+
+### Caching Strategy
+- Cache Bedrock responses for similar queries
+- Cache seller status for session duration
+- Cache documentation search results
+- Invalidate cache on data changes
+
+### Scalability
+- Horizontal scaling with ECS/Lambda
+- Bedrock auto-scales automatically
+- DynamoDB on-demand scaling
+- CloudFront for frontend distribution
+
+## Monitoring and Observability
+
+### Metrics to Track
+- API response times
+- Bedrock invocation count and latency
+- Error rates by endpoint
+- Workflow completion rates
+- User session duration
+
+### Logging
+- Application logs to CloudWatch
+- Structured logging with JSON
+- Log levels: DEBUG, INFO, WARNING, ERROR
+- Correlation IDs for request tracking
+
+### Alerting
+- High error rates
+- Slow API responses
+- Bedrock throttling
+- CloudFormation failures
+- Cost anomalies
+
+## Testing Strategy
+
+### Unit Tests
+- Tool functions
+- API endpoint logic
+- State management
+- Error handling
+
+### Integration Tests
+- End-to-end workflow
+- AWS service integration
+- Bedrock API calls
+- CloudFormation deployment
+
+### Manual Testing
+- UI/UX testing
+- Cross-browser compatibility
+- Mobile responsiveness
+- Accessibility (WCAG 2.1)
+
+## Deployment
+
+### Development
+```bash
+# Backend
+cd backend && uvicorn main:app --reload
+
+# Frontend
+cd frontend && npm run dev
+```
+
+### Production
+```bash
+# Automated deployment
+python deploy.py --component all
+
+# Manual deployment
+# See deployment/README.md
+```
+
+## References
+
+- [Bedrock AgentCore Components](./BEDROCK_AGENTCORE_COMPONENTS.md)
+- [Bedrock AgentCore Migration](./BEDROCK_AGENTCORE_MIGRATION.md)
+- [SaaS Integration Workflow](./SAAS_INTEGRATION_COMPLETE_WORKFLOW.md)
+- [Chatbot Implementation](./CHATBOT_IMPLEMENTATION.md)
+- [AWS Theme Implementation](./AWS_THEME_IMPLEMENTATION.md)
+
+---
+
+**Last Updated:** December 2, 2024

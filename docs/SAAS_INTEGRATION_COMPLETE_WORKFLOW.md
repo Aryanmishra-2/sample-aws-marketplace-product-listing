@@ -168,7 +168,7 @@ To make the integration fully automated, we would need to:
 ## Technical Details
 
 ### CloudFormation Template
-Location: `reference/streamlit-app/bedrock_agent/Integration.yaml`
+Location: `deployment/cloudformation/Integration.yaml`
 
 Key Parameters:
 - `ProductId`: The AWS Marketplace product ID

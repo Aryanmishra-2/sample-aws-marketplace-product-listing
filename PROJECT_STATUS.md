@@ -19,7 +19,6 @@ listing-products-aws-marketplace/
 ├── frontend/              # Next.js 14 + CloudScape UI
 ├── backend/               # FastAPI Python backend
 ├── tools/                 # Modular tool implementations
-├── reference/             # Agent implementations
 ├── deployment/            # Deployment scripts and configs
 ├── docs/                  # Comprehensive documentation
 ├── .github/workflows/     # CI/CD and security checks

@@ -18,7 +18,7 @@ python-jose[cryptography]==3.3.0
 # Environment
 python-dotenv==1.0.0
 
-# Existing agent dependencies (from reference/streamlit-app)
+# Agent dependencies for AI capabilities
 # These are needed for the agent system integration
 anthropic==0.7.8
 langchain==0.1.0

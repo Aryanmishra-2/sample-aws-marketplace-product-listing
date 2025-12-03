@@ -45,11 +45,14 @@ frontend/src/
 └── types/           # TypeScript type definitions
 
 backend/
-└── main.py          # FastAPI application
+└── main.py          # FastAPI application with agent integration
 
-reference/streamlit-app/
-├── agent/           # Core agent system
-└── agents/          # Specialized agents
+tools/
+├── __init__.py           # Tool exports
+├── marketplace_tools.py  # AWS Marketplace operations
+├── bedrock_tools.py      # AI analysis and generation
+├── saas_tools.py         # SaaS infrastructure
+└── help_tools.py         # Documentation and help
 ```
 
 ### Commit Messages

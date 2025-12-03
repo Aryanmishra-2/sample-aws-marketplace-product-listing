@@ -27,7 +27,7 @@ Enable agents to browse and extract information from web pages, particularly:
 
 #### Help Agent - Documentation Browsing
 ```python
-# reference/streamlit-app/agent/marketplace_help_agent.py
+# backend/main.py - /chat endpoint
 
 from strands import Agent, tool
 import boto3
@@ -86,7 +86,7 @@ class MarketplaceHelpAgent:
 
 #### Marketplace Agent - Product Website Analysis
 ```python
-# reference/streamlit-app/agent/strands_marketplace_agent.py
+# backend/main.py - /analyze-product endpoint
 
 class StrandsMarketplaceAgent:
     def _create_analyze_product_website_tool(self):
@@ -254,7 +254,7 @@ class AgentMemory:
 
 #### Memory-Aware Agent
 ```python
-# reference/streamlit-app/agent/marketplace_help_agent.py
+# backend/main.py - Future AgentCore Memory integration
 
 class MarketplaceHelpAgent:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -431,7 +431,7 @@ class IdentityService:
 
 #### Identity-Aware Agent
 ```python
-# reference/streamlit-app/agent/strands_marketplace_agent.py
+# backend/main.py - Future AgentCore Identity integration
 
 class StrandsMarketplaceAgent:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -599,7 +599,7 @@ class KnowledgeBaseService:
 
 #### Knowledge Base-Aware Help Agent
 ```python
-# reference/streamlit-app/agent/marketplace_help_agent.py
+# backend/main.py - Future Knowledge Base integration
 
 class MarketplaceHelpAgent:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -832,7 +832,7 @@ class ObservabilityService:
 
 #### Observable Agent Wrapper
 ```python
-# reference/streamlit-app/agent/observable_agent.py
+# backend/main.py - Future Observability integration
 
 from functools import wraps
 import time

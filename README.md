@@ -59,16 +59,16 @@ High-performance REST API server handling AWS service integrations and agent orc
 - **AWS Integration**: Boto3 SDK for Bedrock, Marketplace Catalog, CloudFormation, IAM, STS, DynamoDB, Lambda
 - **Agent Orchestration**: Manages Strands-based AI agents for intelligent automation
 
-### 🤖 [`reference/streamlit-app/agent/`](./reference/streamlit-app/agent/)
+### 🤖 Agent System
 **AI Agent System - Strands Framework**
 
 Intelligent agents powered by Amazon Bedrock Claude 3.5 Sonnet for automated listing creation and help.
 
-- **Help Agent**: Documentation search, troubleshooting, and guided assistance
+- **Help Agent**: Documentation search, troubleshooting, and guided assistance (implemented in backend)
 - **Marketplace Agent**: Orchestrates 8 sub-agents for end-to-end listing workflow
 - **Orchestrator**: Manages workflow state and agent coordination
 - **Sub-Agents**: Specialized agents for each workflow stage
-- **Tools Layer**: AWS service wrappers for Marketplace, CloudFormation, IAM, etc.
+- **Tools Layer**: AWS service wrappers in `tools/` directory
 
 ### 📦 [`deployment/bedrock-agentcore/`](./deployment/bedrock-agentcore/)
 **Amazon Bedrock AgentCore Deployment**
@@ -768,18 +768,13 @@ ai-agent-marketplace/
 │   └── package.json
 │
 ├── backend/                    # FastAPI Backend
-│   └── main.py                # API Endpoints
+│   └── main.py                # API Endpoints & Agent Integration
 │
-├── reference/streamlit-app/   # Agent Implementation
-│   ├── agent/                 # Strands Agents
-│   │   ├── strands_marketplace_agent.py
-│   │   ├── marketplace_help_agent.py
-│   │   ├── orchestrator.py
-│   │   ├── sub_agents/        # 8 Workflow Sub-Agents
-│   │   └── tools/             # AWS Service Tools
-│   └── agents/                # Specialized Agents
-│       ├── serverless_saas_integration.py
-│       └── workflow_orchestrator.py
+├── tools/                     # Modular Tool Implementations
+│   ├── marketplace_tools.py   # AWS Marketplace Catalog API
+│   ├── bedrock_tools.py       # AI Analysis & Generation
+│   ├── saas_tools.py          # CloudFormation & SaaS
+│   └── help_tools.py          # Documentation & Help
 │
 ├── deployment/                # Deployment Scripts
 │   └── bedrock-agentcore/    # AgentCore Deployment

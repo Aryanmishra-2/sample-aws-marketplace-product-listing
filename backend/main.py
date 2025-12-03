@@ -1139,9 +1139,9 @@ async def deploy_saas(data: Dict[str, Any]):
         
         # Find the Integration.yaml template
         possible_paths = [
-            'reference/streamlit-app/bedrock_agent/Integration.yaml',
-            '../reference/streamlit-app/bedrock_agent/Integration.yaml',
-            os.path.join(os.path.dirname(__file__), '..', 'reference', 'streamlit-app', 'bedrock_agent', 'Integration.yaml')
+            'deployment/cloudformation/Integration.yaml',
+            '../deployment/cloudformation/Integration.yaml',
+            os.path.join(os.path.dirname(__file__), '..', 'deployment', 'cloudformation', 'Integration.yaml')
         ]
         
         template_path = None
