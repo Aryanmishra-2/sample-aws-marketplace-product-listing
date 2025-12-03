@@ -1669,7 +1669,7 @@ if __name__ == "__main__":
 # Chatbot endpoint using AWS documentation
 @app.post("/chat")
 async def chat(data: Dict[str, Any]):
-    """Chat endpoint using Strands-based help agent"""
+    """Chat endpoint with conversation history support"""
     try:
         question = data.get("question", "")
         conversation_history = data.get("conversation_history", [])
@@ -1681,14 +1681,14 @@ async def chat(data: Dict[str, Any]):
             }
         
         print(f"[DEBUG] Chat question: {question}")
+        print(f"[DEBUG] History length: {len(conversation_history)}")
         
-        # Use simple response generation (agent removed)
-        # response = await help_agent.chat(question, conversation_history)
+        # Generate response with conversation history
+        response_text = generate_chat_response_with_history(question, conversation_history)
         
-        # Fallback to simple response
         response = {
             "success": True,
-            "response": generate_chat_response(question)
+            "response": response_text
         }
         
         return response
@@ -1698,20 +1698,23 @@ async def chat(data: Dict[str, Any]):
         return {
             "success": False,
             "error": str(e),
-            "response": generate_chat_response(question)  # Fallback to simple response
+            "response": generate_chat_response_with_history(question, [])
         }
 
 @app.get("/chat/topics")
 async def get_chat_topics():
     """Get quick help topics for the chatbot"""
     try:
-        # Return default topics (agent removed)
+        # Return default topics including India-specific ones
         topics = [
             "How do I create a SaaS product listing?",
             "What pricing models are available?",
             "How do I deploy SaaS infrastructure?",
             "What are the seller registration requirements?",
-            "How do I troubleshoot listing issues?"
+            "How does AWS Marketplace India work?",
+            "What are India GST and tax requirements?",
+            "What payment methods are available in India?",
+            "How do I sell to India-based customers?"
         ]
         return {
             "success": True,
@@ -1723,12 +1726,275 @@ async def get_chat_topics():
             "error": str(e)
         }
 
-def generate_chat_response(question: str) -> str:
-    """Generate a response to the user's question"""
+def load_knowledge_base() -> str:
+    """Load all knowledge base files into a single context"""
+    knowledge_base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'knowledge-base')
+    knowledge_content = []
+    
+    try:
+        for filename in os.listdir(knowledge_base_dir):
+            if filename.endswith('.md'):
+                filepath = os.path.join(knowledge_base_dir, filename)
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    knowledge_content.append(f"# {filename}\n\n{content}\n\n")
+        
+        return "\n".join(knowledge_content)
+    except Exception as e:
+        print(f"[ERROR] Failed to load knowledge base: {e}")
+        return ""
+
+def generate_chat_response_with_history(question: str, conversation_history: List[Dict[str, str]]) -> str:
+    """Generate a response with conversation history context"""
     question_lower = question.lower()
     
+    # Load knowledge base
+    knowledge_base = load_knowledge_base()
+    
+    # Use Bedrock to generate response with knowledge base context and history
+    try:
+        bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
+        
+        # Build conversation context
+        conversation_context = ""
+        if conversation_history:
+            conversation_context = "\n\nPREVIOUS CONVERSATION:\n"
+            for msg in conversation_history[-6:]:  # Last 6 messages (3 exchanges)
+                role = msg.get('role', 'user')
+                content = msg.get('content', '')
+                conversation_context += f"{role.upper()}: {content}\n"
+        
+        # Build messages array for Claude
+        messages = []
+        
+        # Add conversation history
+        for msg in conversation_history[-6:]:
+            role = msg.get('role', 'user')
+            content = msg.get('content', '')
+            messages.append({
+                "role": "user" if role == "user" else "assistant",
+                "content": content
+            })
+        
+        # Add current question with knowledge base context
+        current_prompt = f"""You are an AWS Marketplace expert assistant helping sellers. Use the following knowledge base to answer the question accurately and comprehensively.
+
+KNOWLEDGE BASE:
+{knowledge_base[:45000]}
+
+USER QUESTION: {question}
+
+Provide a detailed, helpful answer based on the knowledge base. Format your response in markdown with clear sections, bullet points, and examples where appropriate. Consider the conversation history to provide contextual answers. If the question refers to previous topics, acknowledge that context."""
+
+        messages.append({
+            "role": "user",
+            "content": current_prompt
+        })
+        
+        request_body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 4096,
+            "messages": messages,
+            "temperature": 0.7
+        }
+        
+        # Try multiple models
+        models = [
+            "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "anthropic.claude-3-5-sonnet-20240620-v1:0",
+            "anthropic.claude-3-sonnet-20240229-v1:0"
+        ]
+        
+        for model_id in models:
+            try:
+                response = bedrock.invoke_model(
+                    modelId=model_id,
+                    body=json.dumps(request_body)
+                )
+                response_body = json.loads(response['body'].read())
+                return response_body['content'][0]['text']
+            except Exception as model_error:
+                print(f"[DEBUG] Model {model_id} failed: {model_error}")
+                continue
+        
+        # If all models fail, use fallback
+        return generate_fallback_response(question_lower)
+        
+    except Exception as e:
+        print(f"[ERROR] Bedrock error: {e}")
+        return generate_fallback_response(question_lower)
+
+def generate_chat_response(question: str) -> str:
+    """Generate a response without history (backward compatibility)"""
+    return generate_chat_response_with_history(question, [])
+
+def generate_fallback_response(question_lower: str) -> str:
+    """Generate fallback response when Bedrock is unavailable"""
+    
+    # India-specific responses
+    if "india" in question_lower:
+        if "invoice" in question_lower or "billing" in question_lower:
+            return """**AWS Marketplace India - Invoicing:**
+
+**For India-Based Seller Purchases (AWS India):**
+• Commercial Invoice/Statement listing all purchases
+• Separate Tax Invoices from each seller with QR code and IRN
+• Can be used to claim Input Tax Credit (ITC)
+• Invoices in Indian Rupees (INR)
+
+**For Non-India Seller Purchases (AWS, Inc.):**
+• Commercial invoice from AWS, Inc.
+• Tax invoice only if you haven't provided tax information
+
+**Separate Invoices:**
+• AWS Cloud and AWS Marketplace purchases get separate invoices
+• Available on billing console
+• Delivered to configured email addresses
+
+**Invoice Discrepancies:**
+• Commercial and tax invoices may differ by a few rupees
+• Small rounding errors may occur for INR-priced offers
+• You can pay using either invoice
+
+**Learn more:** [AWS India FAQs](https://aws.amazon.com/legal/awsin/)"""
+        
+        elif "tax" in question_lower or "gst" in question_lower:
+            return """**AWS Marketplace India - Taxation:**
+
+**GST Rate:** 18% on all purchases
+
+**For India-Based Sellers:**
+• AWS India facilitates tax invoice issuance
+• Seller is Seller on Record (SOR)
+• GST remitted to seller, who deposits to authorities
+
+**Tax Type Determination:**
+• Same State: CGST + SGST
+• Different States: IGST
+• SEZ Involved: IGST (regardless of states)
+
+**Tax Information:**
+• Use Tax Settings page: https://console.aws.amazon.com/billing/home#/tax
+• Enter GSTIN to claim Input Tax Credit (ITC)
+• Same info used for AWS Cloud purchases
+• Can purchase without tax info, but cannot claim ITC
+
+**No Tax Withholding:**
+• Do NOT withhold taxes on payments to AWS India
+• AWS India withholds when paying sellers (Section 194-O)
+
+**Learn more:** [Buyer Tax Help](https://aws.amazon.com/tax-help/india/india-marketplace-buyers/)"""
+        
+        elif "payment" in question_lower or "pay" in question_lower:
+            return """**AWS Marketplace India - Payment Methods:**
+
+**Currency:** Indian Rupee (INR) only
+
+**Accepted Payment Methods:**
+✅ Credit/Debit Cards: AMEX, MasterCard, RuPay, Visa
+   • Must be tokenized per RBI regulations
+   • Restrictions on contract pricing products
+   • No restrictions on PAYG, free, trial, BYOL products
+✅ Wire Transfer: To India-based bank account
+   • Different account from AWS Cloud payments
+   • Refer to invoice for remittance details
+
+❌ NOT Available at Launch:
+• UPI
+• NetBanking
+
+**Payment Rules:**
+• AWS Cloud and Marketplace payments go to different accounts
+• AWS Inc. and AWS India payments go to different accounts
+• Wrong account = payment rejected and delays
+
+**For Contract Pricing:**
+• Switch to Pay by Invoice (PBI) if using credit card
+
+**Learn more:** [AWS India FAQs](https://aws.amazon.com/legal/awsin/)"""
+        
+        elif "seller" in question_lower or "sell" in question_lower or "registration" in question_lower:
+            return """**Selling in AWS Marketplace India - Registration Process:**
+
+**Step 1: Create Standalone AWS Account**
+⚠️ MUST be standalone (not in AWS Organizations)
+• Using linked account causes taxation errors
+
+**Step 2: Complete Seller Registration**
+• Register on AWS Marketplace Management Portal
+• Provide unique legal business name (for tax invoices)
+• Create public profile
+
+**Step 3: Tax Information (Required)**
+• GSTIN (GST Identification Number)
+• PAN (auto-populated from GSTIN)
+• Seller signature (submit via contact form)
+• Legal business name and address
+• Acknowledgements (WHT, e-invoicing, authorization)
+
+**Step 4: Bank Account**
+• Account number, IFSC, name, address
+• Must be Indian bank account
+
+**Step 5: Disbursement Method**
+• Add INR disbursement method
+• Choose frequency: Monthly or Daily
+• Disbursements via NEFT/RTGS
+• Can only receive INR (not USD)
+
+**Step 6: Create Offers**
+• Product listings in USD
+• Private offers in USD or INR
+• Product title must have `[IN]` suffix
+• Can only sell to India buyers
+
+**Key Benefits:**
+✅ Receive disbursements in INR
+✅ Buyers invoiced in INR with GST
+✅ Tax-compliant invoices as Seller of Record
+
+**Restrictions:**
+❌ Cannot sell to buyers outside India
+❌ Cannot use linked AWS Organizations account
+❌ Cannot receive USD disbursements
+
+**Learn more:** [Getting Started Guide](https://docs.aws.amazon.com/marketplace/latest/userguide/getting-started-seller-india.html)"""
+        
+        else:
+            return """**AWS Marketplace India Overview:**
+
+**Key Benefits:**
+✅ Local invoicing in Indian Rupees (INR)
+✅ Local payment options (cards, wire transfer)
+✅ 18% GST with ITC claims available
+✅ Transactions facilitated by AWS India
+
+**For Buyers:**
+• Purchase from India-based sellers
+• Separate invoices for cloud and marketplace
+• Enter GSTIN for ITC claims
+• No UPI/NetBanking at launch
+
+**For Sellers:**
+• Sell to India-based customers
+• Issue tax invoices with QR code
+• Collect and remit 18% GST
+• State Indian entity in product description
+
+**Quick Links:**
+• [India FAQs](https://aws.amazon.com/legal/awsin/)
+• [Tax Settings](https://console.aws.amazon.com/billing/home#/tax)
+• [India Solutions](https://aws.amazon.com/marketplace/solutions/india)
+• [Customer Service](https://console.aws.amazon.com/support/home/)
+
+**Questions?** Ask about:
+• India invoicing
+• India taxation/GST
+• India payment methods
+• Selling in India"""
+    
     # AWS Marketplace specific responses
-    if "register" in question_lower or "seller" in question_lower:
+    elif "register" in question_lower or "seller" in question_lower:
         return """To register as an AWS Marketplace seller:
 
 1. **Validate Credentials**: Enter your AWS credentials on the home page

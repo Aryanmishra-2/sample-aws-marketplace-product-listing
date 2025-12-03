@@ -37,7 +37,9 @@ export default function Chatbot() {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -46,6 +48,50 @@ export default function Chatbot() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Initialize speech recognition
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = 'en-US';
+
+        recognitionRef.current.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          setInputValue(transcript);
+          setIsListening(false);
+        };
+
+        recognitionRef.current.onerror = (event: any) => {
+          console.error('Speech recognition error:', event.error);
+          setIsListening(false);
+        };
+
+        recognitionRef.current.onend = () => {
+          setIsListening(false);
+        };
+      }
+    }
+  }, []);
+
+  const startListening = () => {
+    if (recognitionRef.current) {
+      setIsListening(true);
+      recognitionRef.current.start();
+    } else {
+      alert('Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.');
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
+  };
 
   const handleSend = async (text?: string) => {
     const messageText = text || inputValue.trim();
@@ -63,7 +109,13 @@ export default function Chatbot() {
     setIsTyping(true);
 
     try {
-      // Call backend chat endpoint
+      // Build conversation history for context
+      const conversationHistory = messages.map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text
+      }));
+
+      // Call backend chat endpoint with history
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -71,6 +123,7 @@ export default function Chatbot() {
         },
         body: JSON.stringify({
           question: messageText,
+          conversation_history: conversationHistory,
         }),
       });
 
@@ -352,17 +405,41 @@ export default function Chatbot() {
           borderTop: '1px solid #d5dbdb',
         }}
       >
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <Input
-            value={inputValue}
-            onChange={({ detail }) => setInputValue(detail.value)}
-            placeholder="Type your message..."
-            onKeyDown={(e) => {
-              if (e.detail.key === 'Enter') {
-                handleSend();
-              }
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <Input
+              value={inputValue}
+              onChange={({ detail }) => setInputValue(detail.value)}
+              placeholder={isListening ? "Listening..." : "Type or speak your message..."}
+              onKeyDown={(e) => {
+                if (e.detail.key === 'Enter') {
+                  handleSend();
+                }
+              }}
+            />
+          </div>
+          <button
+            onClick={isListening ? stopListening : startListening}
+            disabled={isTyping}
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '8px',
+              backgroundColor: isListening ? '#d13212' : '#ff9900',
+              color: 'white',
+              border: 'none',
+              cursor: isTyping ? 'not-allowed' : 'pointer',
+              fontSize: '18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease',
+              opacity: isTyping ? 0.5 : 1,
             }}
-          />
+            title={isListening ? "Stop listening" : "Start voice input"}
+          >
+            {isListening ? '⏹️' : '🎤'}
+          </button>
           <Button
             variant="primary"
             onClick={() => handleSend()}
@@ -371,7 +448,24 @@ export default function Chatbot() {
             Send
           </Button>
         </div>
+        {isListening && (
+          <div style={{ 
+            marginTop: '8px', 
+            fontSize: '12px', 
+            color: '#d13212',
+            textAlign: 'center',
+            animation: 'pulse 1.5s ease-in-out infinite'
+          }}>
+            🎙️ Listening... Speak now
+          </div>
+        )}
       </div>
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
     </div>
   );
 }
