@@ -90,28 +90,41 @@ Detailed guides covering architecture, implementation, and migration strategies.
 
 ## ✨ Features
 
-### 🎯 Core Capabilities
+### 🧠 Advanced AI Automation
+- **Multi-Agent Orchestration**: 8 specialized sub-agents handle each workflow stage
+- **Intelligent Product Analysis**: Claude 3.5 Sonnet analyzes product websites and documentation
+- **Auto-Content Generation**: AI creates optimized titles, descriptions, and highlights
+- **Smart Pricing**: AI-recommended pricing models based on product type and market analysis
+- **Persistent Memory**: Stores seller preferences and product templates (Future: AgentCore Memory)
 
-| Feature | Description |
-|---------|-------------|
-| **AI-Powered Product Analysis** | Analyze product websites and documentation using Amazon Bedrock Claude 3.5 Sonnet |
-| **Intelligent Content Generation** | Auto-generate listing titles, descriptions, and highlights with AI |
-| **Smart Pricing Recommendations** | Get AI-suggested pricing models, dimensions, and contract durations |
-| **Real-Time CloudFormation Monitoring** | Track SaaS infrastructure deployment with live status updates |
-| **Seller Registration Management** | Automated seller status validation and marketplace access verification |
-| **Complete Listing Workflow** | End-to-end product listing creation with 7-stage guided process |
-| **SaaS Integration** | One-click CloudFormation deployment for serverless SaaS infrastructure |
-| **AI Help Assistant** | Floating chatbot with AWS Marketplace documentation knowledge base |
+### 📊 Complete Marketplace Workflow
+- **7-Stage Guided Process**: From credentials to deployed SaaS infrastructure ✅ **TESTED & READY**
+- **Real-time Validation**: Instant feedback on credentials, seller status, and permissions
+- **Progress Tracking**: Visual workflow navigation with stage completion indicators
+- **Error Handling**: Comprehensive error messages with resolution guidance
+- **Professional UI**: AWS CloudScape Design System for consistent AWS experience
 
-### 🛠️ Technical Stack
+### 🚀 SaaS Infrastructure Automation
+- **One-Click Deployment**: CloudFormation stack with Lambda, DynamoDB, API Gateway
+- **Live Monitoring**: Real-time stack creation progress with resource tracking
+- **Fulfillment API**: Automated subscription registration and unregistration endpoints
+- **Usage Metering**: Built-in metering Lambda for AWS Marketplace billing
+- **Production-Ready**: Follows AWS best practices for SaaS products
 
-| Layer | Technologies |
-|-------|-------------|
-| **Frontend** | Next.js 14, React 18, TypeScript, AWS CloudScape Design System, Zustand |
-| **Backend** | FastAPI, Python 3.13, Uvicorn, Pydantic, Boto3 |
-| **AI/ML** | Amazon Bedrock (Claude 3.5 Sonnet), Strands Agents Framework |
-| **AWS Services** | Marketplace Catalog, CloudFormation, Lambda, DynamoDB, S3, OpenSearch, IAM, STS, CloudWatch |
-| **Future** | Bedrock AgentCore (Runtime, Gateway, Memory, Identity, Tools, Observability) |
+### 🌐 AI Help Assistant
+- **Floating Chatbot**: Always-available help with AWS Marketplace questions
+- **Documentation Search**: Instant access to AWS Marketplace seller documentation
+- **Troubleshooting**: Common issue resolution and workflow guidance
+- **Context-Aware**: Understands current workflow stage and provides relevant help
+
+### 🔮 Future: Bedrock AgentCore Migration
+The portal is designed for seamless migration to Amazon Bedrock AgentCore:
+- **AgentCore Runtime**: Serverless execution for Strands agents
+- **AgentCore Memory**: Multi-strategy memory (USER_PREFERENCE + SEMANTIC)
+- **AgentCore Browser Tool**: Automated product website scraping
+- **AgentCore Gateway**: MCP-compatible tool integration
+- **AgentCore Identity**: IAM-based access management
+- **AgentCore Observability**: CloudWatch + X-Ray tracing
 
 ## 🚀 Quick Start
 
@@ -207,50 +220,67 @@ Each stage includes validation, error handling, and the ability to go back and m
 
 ## 🏗️ Architecture
 
-### Architecture at a Glance
+### Use Case Architecture
 
-```mermaid
-%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#FF9900','primaryTextColor':'#fff','primaryBorderColor':'#232F3E','lineColor':'#FF9900','secondaryColor':'#146EB4','tertiaryColor':'#01A88D'}}}%%
-mindmap
-  root((AWS Marketplace<br/>Seller Portal))
-    Frontend
-      Next.js 14
-      CloudScape UI
-      React Components
-      Zustand State
-    Backend
-      FastAPI Python
-      REST APIs
-      Agent Orchestration
-    AI Agents
-      Help Agent
-      Marketplace Agent
-      8 Sub-Agents
-      Strands Framework
-    AWS Services
-      Bedrock Claude
-      Marketplace Catalog
-      CloudFormation
-      Lambda DynamoDB
-      S3 OpenSearch
-      CloudWatch IAM
-    Features
-      Credential Validation
-      Seller Registration
-      AI Product Analysis
-      Content Generation
-      Pricing Suggestions
-      Listing Creation
-      SaaS Integration
-    Future
-      Bedrock AgentCore
-      Browser Tool
-      Knowledge Base RAG
-      Enhanced Memory
-      Full Observability
+![AWS Marketplace Seller Portal Architecture](docs/images/marketplace-seller-portal-architecture.png)
+
+| Information | Details |
+|-------------|---------|
+| **Use case type** | Conversational + Workflow Automation |
+| **Agent type** | Multi-Agent Orchestration |
+| **Use case components** | Memory, Tools, Browser Automation (Future), Knowledge Base |
+| **Use case vertical** | AWS Marketplace / SaaS |
+| **Example complexity** | Advanced |
+| **SDK used** | Amazon Bedrock SDK, Strands Agents, Boto3, Next.js, FastAPI |
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    AWS Marketplace Seller Portal                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Frontend Layer - Next.js 14 + CloudScape UI                               │
+│  ├── 7-Stage Workflow (Credentials → SaaS Integration)                     │
+│  ├── Real-time Status Updates & Progress Tracking                          │
+│  ├── AI Help Chatbot (Floating Assistant)                                  │
+│  └── Zustand State Management                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Backend Layer - FastAPI Python                                             │
+│  ├── REST API Endpoints (9 endpoints)                                      │
+│  ├── Agent Orchestration & Workflow Management                             │
+│  └── AWS Service Integration (Boto3 SDK)                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  AI Agent Layer - Strands Framework                                         │
+│  ├── Marketplace Agent (Orchestrator + 8 Sub-Agents)                       │
+│  │   ├── Credentials Agent → Seller Agent → Product Agent                 │
+│  │   ├── Analysis Agent → Content Agent → Pricing Agent                   │
+│  │   └── Listing Agent → SaaS Agent                                        │
+│  ├── Help Agent (Documentation Q&A, Troubleshooting)                       │
+│  └── Claude 3.5 Sonnet (LLM for AI Analysis & Generation)                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Amazon Bedrock AgentCore (Future Migration)                                │
+│  ├── Runtime: Serverless agent execution                                   │
+│  ├── Gateway: API/Lambda → MCP-compatible tools                            │
+│  ├── Memory: Multi-strategy (USER_PREFERENCE + SEMANTIC)                   │
+│  ├── Identity: IAM integration & access management                         │
+│  ├── Tools: Browser Tool + Code Interpreter                                │
+│  └── Observability: CloudWatch + X-Ray tracing                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  AWS Services Integration                                                   │
+│  ├── Amazon Bedrock: Claude 3.5 Sonnet for AI capabilities                 │
+│  ├── AWS Marketplace Catalog: Product & offer management                   │
+│  ├── CloudFormation: SaaS infrastructure deployment                        │
+│  ├── Lambda: Serverless functions (metering, fulfillment)                  │
+│  ├── DynamoDB: Subscription & state management                             │
+│  ├── S3: Document storage & knowledge base                                 │
+│  ├── OpenSearch Serverless: Vector search for RAG                          │
+│  ├── API Gateway: Fulfillment endpoints                                    │
+│  ├── IAM/STS: Identity & credential validation                             │
+│  └── CloudWatch: Monitoring, logging, and observability                    │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### System Architecture Diagram
+### Detailed Component Architecture
 
 ```mermaid
 graph TB
@@ -386,42 +416,40 @@ graph TB
     style AgentCore fill:#9146FF,stroke:#232F3E,stroke-width:2px,color:#fff
 ```
 
-### High-Level Architecture Overview
+### Agent Workflow & Memory Strategies
 
-```mermaid
-flowchart LR
-    User([👤 User])
-    
-    subgraph Frontend["🖥️ Frontend - Next.js 14"]
-        UI[CloudScape UI Components]
-    end
-    
-    subgraph Backend["⚙️ Backend - FastAPI"]
-        API[REST API Endpoints]
-    end
-    
-    subgraph Agents["🤖 AI Agents - Strands"]
-        Help[Help Agent]
-        MP[Marketplace Agent]
-    end
-    
-    subgraph AWS["☁️ AWS Services"]
-        direction TB
-        Bedrock[Amazon Bedrock<br/>Claude 3.5]
-        Market[AWS Marketplace<br/>Catalog]
-        Infra[CloudFormation<br/>Lambda • DynamoDB<br/>S3 • OpenSearch]
-    end
-    
-    User <-->|HTTPS| Frontend
-    Frontend <-->|REST API| Backend
-    Backend <--> Agents
-    Agents <--> AWS
-    
-    style Frontend fill:#146EB4,stroke:#232F3E,stroke-width:3px,color:#fff
-    style Backend fill:#527FFF,stroke:#232F3E,stroke-width:3px,color:#fff
-    style Agents fill:#01A88D,stroke:#232F3E,stroke-width:3px,color:#fff
-    style AWS fill:#FF9900,stroke:#232F3E,stroke-width:3px,color:#fff
-```
+**Multi-Agent Orchestration**:
+- **Marketplace Agent**: Orchestrates 8 specialized sub-agents for each workflow stage
+- **Help Agent**: Provides real-time assistance with AWS Marketplace documentation
+
+**Memory Strategies** (Future - Bedrock AgentCore):
+- **USER_PREFERENCE**: Stores seller preferences, product templates, pricing models
+- **SEMANTIC**: Captures product analysis, market insights, listing history
+
+**Available Tools**:
+
+**Marketplace Operations** (`tools/marketplace_tools.py`):
+- `validate_credentials()`: AWS STS/IAM credential validation
+- `check_seller_status()`: Marketplace seller registration verification
+- `create_product_listing()`: Product and offer creation via Catalog API
+- `get_listing_status()`: Track listing approval and publication
+
+**AI Analysis & Generation** (`tools/bedrock_tools.py`):
+- `analyze_product()`: AI-powered product analysis using Claude 3.5
+- `generate_listing_content()`: Auto-generate titles, descriptions, highlights
+- `suggest_pricing_model()`: AI-recommended pricing strategies
+- `optimize_content()`: SEO and marketplace optimization
+
+**SaaS Infrastructure** (`tools/saas_tools.py`):
+- `deploy_saas_stack()`: CloudFormation stack deployment
+- `monitor_stack_status()`: Real-time deployment tracking
+- `create_fulfillment_api()`: API Gateway + Lambda setup
+- `setup_metering()`: Usage tracking and billing integration
+
+**Help & Documentation** (`tools/help_tools.py`):
+- `search_documentation()`: AWS Marketplace docs search
+- `troubleshoot_issue()`: Common problem resolution
+- `get_workflow_guidance()`: Step-by-step instructions
 
 ### Data Flow Architecture
 
@@ -1125,6 +1153,80 @@ The AWS credentials require the following permissions:
 | `anthropic.claude-3-sonnet-20240229-v1:0` | Secondary fallback | us-east-1 |
 
 **Note**: Ensure model access is enabled in the [Amazon Bedrock console](https://console.aws.amazon.com/bedrock/home#/modelaccess).
+
+## 📊 Monitoring
+
+### Application Logs
+Monitor the application in real-time:
+
+```bash
+# Backend logs
+tail -f /tmp/backend.log
+
+# Frontend logs (in dev mode)
+# Logs appear in the terminal where npm run dev is running
+```
+
+### AWS Service Monitoring
+- **CloudFormation**: Monitor SaaS stack deployment in AWS Console
+- **Marketplace Catalog**: Track listing status and approval progress
+- **Bedrock**: View AI model invocations and token usage
+- **CloudWatch**: Application metrics and error tracking
+
+### Health Checks
+```bash
+# Check backend health
+curl http://localhost:8000/health
+
+# Check frontend
+curl http://localhost:3000
+
+# Test API endpoint
+curl -X POST http://localhost:8000/validate-credentials \
+  -H "Content-Type: application/json" \
+  -d '{"access_key": "test", "secret_key": "test"}'
+```
+
+## 🧹 Cleanup
+
+### Stop Running Services
+```bash
+# Stop backend
+pkill -f "uvicorn main:app"
+
+# Stop frontend
+pkill -f "next-server"
+
+# Or use Ctrl+C in the respective terminals
+```
+
+### Clean Build Artifacts
+```bash
+# Clean Next.js cache
+cd frontend
+rm -rf .next
+rm -rf node_modules/.cache
+
+# Clean Python cache
+find . -type d -name "__pycache__" -exec rm -rf {} +
+find . -type f -name "*.pyc" -delete
+```
+
+### AWS Resource Cleanup
+If you deployed SaaS infrastructure, clean up CloudFormation stacks:
+
+```bash
+# List your stacks
+aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE
+
+# Delete a specific stack
+aws cloudformation delete-stack --stack-name <your-stack-name>
+
+# Monitor deletion
+aws cloudformation describe-stacks --stack-name <your-stack-name>
+```
+
+**Note**: Deleting CloudFormation stacks will remove all associated resources (Lambda, DynamoDB, API Gateway, etc.)
 
 ## 🐛 Troubleshooting
 

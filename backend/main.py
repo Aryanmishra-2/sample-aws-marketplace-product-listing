@@ -23,9 +23,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 # Import existing agents and tools
 from agent.strands_marketplace_agent import StrandsMarketplaceAgent
+from agent.marketplace_help_agent import MarketplaceHelpAgent
 from agent.tools.seller_registration_tools import SellerRegistrationTools
 from agents.serverless_saas_integration import ServerlessSaasIntegrationAgent
 from agents.workflow_orchestrator import WorkflowOrchestrator
+
+# Initialize help agent
+help_agent = MarketplaceHelpAgent()
 
 app = FastAPI(title="AWS Marketplace Seller Portal API")
 
@@ -1624,9 +1628,10 @@ if __name__ == "__main__":
 # Chatbot endpoint using AWS documentation
 @app.post("/chat")
 async def chat(data: Dict[str, Any]):
-    """Chat endpoint that uses AWS documentation to answer questions"""
+    """Chat endpoint using Strands-based help agent"""
     try:
         question = data.get("question", "")
+        conversation_history = data.get("conversation_history", [])
         
         if not question:
             return {
@@ -1636,21 +1641,29 @@ async def chat(data: Dict[str, Any]):
         
         print(f"[DEBUG] Chat question: {question}")
         
-        # Use Amazon Bedrock to generate response with AWS documentation context
-        # First, we'll use a simple keyword-based approach
-        # In production, this would use the AWS MCP server to search documentation
+        # Use Strands help agent for intelligent responses
+        response = await help_agent.chat(question, conversation_history)
         
-        # For now, return a helpful response
-        response = generate_chat_response(question)
-        
-        return {
-            "success": True,
-            "response": response,
-            "sources": []
-        }
+        return response
         
     except Exception as e:
         print(f"[ERROR] Chat error: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "response": generate_chat_response(question)  # Fallback to simple response
+        }
+
+@app.get("/chat/topics")
+async def get_chat_topics():
+    """Get quick help topics for the chatbot"""
+    try:
+        topics = help_agent.get_quick_help_topics()
+        return {
+            "success": True,
+            "topics": topics
+        }
+    except Exception as e:
         return {
             "success": False,
             "error": str(e)

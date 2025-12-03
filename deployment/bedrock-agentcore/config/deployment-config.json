@@ -1,0 +1,52 @@
+{
+  "account_id": "797583073197",
+  "region": "us-east-1",
+  "environment": "dev",
+  
+  "resources": {
+    "s3_bucket": "marketplace-agents-kb-797583073197",
+    "dynamodb_table": "marketplace-agent-memory",
+    "log_group": "/aws/bedrock/agents/marketplace",
+    "opensearch_collection": "marketplace-docs"
+  },
+  
+  "agents": {
+    "help_agent": {
+      "name": "MarketplaceHelpAgent",
+      "description": "AWS Marketplace Help and Documentation Assistant",
+      "model_id": "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+      "instruction_file": "agents/help-agent/instructions.txt",
+      "idle_session_ttl": 3600,
+      "knowledge_bases": ["KB-MARKETPLACE-DOCS"]
+    },
+    "marketplace_agent": {
+      "name": "MarketplaceListingAgent",
+      "description": "AWS Marketplace Product Listing Orchestrator",
+      "model_id": "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+      "instruction_file": "agents/marketplace-agent/instructions.txt",
+      "idle_session_ttl": 7200
+    }
+  },
+  
+  "knowledge_base": {
+    "name": "AWS Marketplace Documentation",
+    "description": "Comprehensive AWS Marketplace seller documentation",
+    "embedding_model": "amazon.titan-embed-text-v1",
+    "chunking_strategy": "FIXED_SIZE",
+    "max_tokens": 300,
+    "overlap_percentage": 20
+  },
+  
+  "lambda": {
+    "runtime": "python3.11",
+    "timeout": 30,
+    "memory_size": 512,
+    "layer_arn": "arn:aws:lambda:us-east-1:797583073197:layer:boto3-layer:1"
+  },
+  
+  "observability": {
+    "enable_xray": true,
+    "log_retention_days": 30,
+    "metrics_namespace": "BedrockAgents/Marketplace"
+  }
+}
