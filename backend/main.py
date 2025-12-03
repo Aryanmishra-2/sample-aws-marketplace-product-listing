@@ -130,6 +130,7 @@ async def validate_credentials(credentials: Credentials):
         permissions_check = {
             'has_marketplace_full_access': False,
             'has_marketplace_manage_products': False,
+            'has_marketplace_full_access_policy': False,
             'has_admin_access': user_type == 'Root User',
             'has_iam_read_access': False,
             'missing_permissions': [],
@@ -138,6 +139,33 @@ async def validate_credentials(credentials: Credentials):
         }
         
         print("[DEBUG] Checking marketplace permissions...")
+        
+        # Check for AWSMarketplaceFullAccess policy
+        try:
+            iam_client = session.client('iam')
+            if ':user/' in user_arn:
+                # For IAM users, check attached policies
+                user_name = user_arn.split('/')[-1]
+                attached_policies = iam_client.list_attached_user_policies(UserName=user_name)
+                for policy in attached_policies.get('AttachedPolicies', []):
+                    if 'AWSMarketplaceFullAccess' in policy['PolicyName'] or 'AWSMarketplaceSellerFullAccess' in policy['PolicyName']:
+                        permissions_check['has_marketplace_full_access_policy'] = True
+                        print(f"[DEBUG] Found policy: {policy['PolicyName']}")
+                        break
+            elif ':assumed-role/' in user_arn:
+                # For assumed roles, check role policies
+                role_name = user_arn.split('/')[-2]
+                try:
+                    attached_policies = iam_client.list_attached_role_policies(RoleName=role_name)
+                    for policy in attached_policies.get('AttachedPolicies', []):
+                        if 'AWSMarketplaceFullAccess' in policy['PolicyName'] or 'AWSMarketplaceSellerFullAccess' in policy['PolicyName']:
+                            permissions_check['has_marketplace_full_access_policy'] = True
+                            print(f"[DEBUG] Found policy: {policy['PolicyName']}")
+                            break
+                except:
+                    pass
+        except Exception as e:
+            print(f"[DEBUG] Could not check IAM policies: {str(e)}")
         
         # Test marketplace permissions with a single quick call
         marketplace_client = session.client('marketplace-catalog')

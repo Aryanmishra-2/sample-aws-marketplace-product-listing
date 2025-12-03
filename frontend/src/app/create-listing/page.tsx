@@ -17,7 +17,7 @@ import {
   StatusIndicator,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
-import GlobalHeader from '@/components/GlobalHeader';
+import WorkflowNav from '@/components/WorkflowNav';
 import axios from 'axios';
 
 interface Stage {
@@ -277,10 +277,8 @@ export default function CreateListingPage() {
   }
 
   return (
-    <>
-      <GlobalHeader />
-      <AppLayout
-        navigationHide
+    <AppLayout
+        navigation={<WorkflowNav />}
         toolsHide
         breadcrumbs={
         <BreadcrumbGroup
@@ -457,6 +455,5 @@ export default function CreateListingPage() {
         </ContentLayout>
       }
       />
-    </>
   );
 }

@@ -19,7 +19,7 @@ import {
   Badge,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
-import GlobalHeader from '@/components/GlobalHeader';
+import WorkflowNav from '@/components/WorkflowNav';
 import axios from 'axios';
 
 export default function SellerRegistrationPage() {
@@ -75,13 +75,11 @@ export default function SellerRegistrationPage() {
   // SCENARIO 1: Seller with existing products
   if (status === 'APPROVED' && productsCount > 0) {
     return (
-      <>
-        <GlobalHeader />
-        <AppLayout
-          navigationHide
-          toolsHide
-          breadcrumbs={
-            <BreadcrumbGroup
+      <AppLayout
+        navigation={<WorkflowNav />}
+        toolsHide
+        breadcrumbs={
+          <BreadcrumbGroup
               items={[
                 { text: 'Home', href: '/' },
                 { text: 'Seller Registration', href: '/seller-registration' },
@@ -90,9 +88,9 @@ export default function SellerRegistrationPage() {
                 e.preventDefault();
                 router.push(e.detail.href);
               }}
-            />
+          />
           }
-          content={
+        content={
             <ContentLayout
               header={
                 <Header
@@ -232,7 +230,7 @@ export default function SellerRegistrationPage() {
                           </Box>
                         </Box>
                       }
-                    />
+                  />
                   </Container>
                 )}
 
@@ -250,21 +248,18 @@ export default function SellerRegistrationPage() {
               </SpaceBetween>
             </ContentLayout>
           }
-        />
-      </>
+      />
     );
   }
 
   // SCENARIO 2: Seller registered but no products
   if (status === 'APPROVED' && productsCount === 0) {
     return (
-      <>
-        <GlobalHeader />
-        <AppLayout
-          navigationHide
-          toolsHide
-          breadcrumbs={
-            <BreadcrumbGroup
+      <AppLayout
+        navigation={<WorkflowNav />}
+        toolsHide
+        breadcrumbs={
+          <BreadcrumbGroup
               items={[
                 { text: 'Home', href: '/' },
                 { text: 'Seller Registration', href: '/seller-registration' },
@@ -273,9 +268,9 @@ export default function SellerRegistrationPage() {
                 e.preventDefault();
                 router.push(e.detail.href);
               }}
-            />
+          />
           }
-          content={
+        content={
             <ContentLayout
               header={
                 <Header
@@ -424,21 +419,18 @@ export default function SellerRegistrationPage() {
               </SpaceBetween>
             </ContentLayout>
           }
-        />
-      </>
+      />
     );
   }
 
   // SCENARIO 3: Not registered
   if (status === 'NOT_REGISTERED') {
     return (
-      <>
-        <GlobalHeader />
-        <AppLayout
-          navigationHide
-          toolsHide
-          breadcrumbs={
-            <BreadcrumbGroup
+      <AppLayout
+        navigation={<WorkflowNav />}
+        toolsHide
+        breadcrumbs={
+          <BreadcrumbGroup
               items={[
                 { text: 'Home', href: '/' },
                 { text: 'Seller Registration', href: '/seller-registration' },
@@ -447,9 +439,9 @@ export default function SellerRegistrationPage() {
                 e.preventDefault();
                 router.push(e.detail.href);
               }}
-            />
+          />
           }
-          content={
+        content={
             <ContentLayout
               header={
                 <Header
@@ -513,20 +505,17 @@ export default function SellerRegistrationPage() {
               </SpaceBetween>
             </ContentLayout>
           }
-        />
-      </>
+      />
     );
   }
 
   // PENDING or other status
   return (
-    <>
-      <GlobalHeader />
-      <AppLayout
-        navigationHide
-        toolsHide
-        breadcrumbs={
-          <BreadcrumbGroup
+    <AppLayout
+      navigation={<WorkflowNav />}
+      toolsHide
+      breadcrumbs={
+        <BreadcrumbGroup
             items={[
               { text: 'Home', href: '/' },
               { text: 'Seller Registration', href: '/seller-registration' },
@@ -535,7 +524,7 @@ export default function SellerRegistrationPage() {
               e.preventDefault();
               router.push(e.detail.href);
             }}
-          />
+        />
         }
         content={
           <ContentLayout
@@ -575,6 +564,5 @@ export default function SellerRegistrationPage() {
           </ContentLayout>
         }
       />
-    </>
   );
 }

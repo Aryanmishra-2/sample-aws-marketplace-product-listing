@@ -34,9 +34,10 @@
 }
 
 body {
-  background-color: var(--aws-bg-secondary);
+  background: linear-gradient(180deg, #ffffff 0%, #f9f9f9 100%);
   color: var(--aws-text-primary);
   font-family: "Amazon Ember", "Helvetica Neue", Roboto, Arial, sans-serif;
+  min-height: 100vh;
 }
 
 /* AWS-style progress indicators */

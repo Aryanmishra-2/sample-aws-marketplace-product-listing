@@ -21,7 +21,7 @@ import {
   ColumnLayout,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
-import GlobalHeader from '@/components/GlobalHeader';
+import WorkflowNav from '@/components/WorkflowNav';
 import DimensionManager from '@/components/DimensionManager';
 
 const AWS_CATEGORY_GROUPS = [
@@ -392,9 +392,8 @@ export default function ReviewSuggestionsPage() {
 
   return (
     <>
-      <GlobalHeader />
       <AppLayout
-        navigationHide
+        navigation={<WorkflowNav />}
         toolsHide
         breadcrumbs={
         <BreadcrumbGroup

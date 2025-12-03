@@ -16,7 +16,7 @@ import {
   Spinner,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
-import GlobalHeader from '@/components/GlobalHeader';
+import WorkflowNav from '@/components/WorkflowNav';
 import axios from 'axios';
 
 export default function AIAnalysisPage() {
@@ -153,9 +153,9 @@ export default function AIAnalysisPage() {
 
   return (
     <>
-      <GlobalHeader />
+      
       <AppLayout
-        navigationHide
+        navigation={<WorkflowNav />}
         toolsHide
         breadcrumbs={
         <BreadcrumbGroup

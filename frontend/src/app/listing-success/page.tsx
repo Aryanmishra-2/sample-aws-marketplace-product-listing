@@ -16,7 +16,7 @@ import {
   Link,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
-import GlobalHeader from '@/components/GlobalHeader';
+import WorkflowNav from '@/components/WorkflowNav';
 
 export default function ListingSuccessPage() {
   const router = useRouter();
@@ -49,9 +49,9 @@ export default function ListingSuccessPage() {
 
   return (
     <>
-      <GlobalHeader />
+      
       <AppLayout
-        navigationHide
+        navigation={<WorkflowNav />}
         toolsHide
         breadcrumbs={
         <BreadcrumbGroup

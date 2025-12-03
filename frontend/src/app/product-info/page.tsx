@@ -17,7 +17,7 @@ import {
   Textarea,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
-import GlobalHeader from '@/components/GlobalHeader';
+import WorkflowNav from '@/components/WorkflowNav';
 
 export default function ProductInfoPage() {
   const router = useRouter();
@@ -65,9 +65,9 @@ export default function ProductInfoPage() {
 
   return (
     <>
-      <GlobalHeader />
+      
       <AppLayout
-        navigationHide
+        navigation={<WorkflowNav />}
         toolsHide
         breadcrumbs={
         <BreadcrumbGroup

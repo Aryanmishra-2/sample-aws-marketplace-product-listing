@@ -90,9 +90,12 @@ export default function CredentialsPage() {
 
         setSellerStatus(statusResponse.data);
         
+        // Mark credentials step as complete
+        useStore.getState().markStepComplete('credentials');
+        
         // OPTIMIZATION: Auto-redirect based on seller status for faster UX
         // This reduces perceived wait time by immediately routing users
-        setCurrentStep('welcome');
+        setCurrentStep('seller_registration');
         
         // Route based on seller status (immediate redirect)
         if (statusResponse.data.seller_status === 'NOT_REGISTERED') {
@@ -157,80 +160,17 @@ export default function CredentialsPage() {
             </SpaceBetween>
           }
         >
-          <SpaceBetween size="l">
-            {permissions && (
-              <Container header={<Header variant="h2">IAM Permissions Status</Header>}>
-                <SpaceBetween size="m">
-                  <ColumnLayout columns={3} variant="text-grid">
-                    <div>
-                      <Box variant="awsui-key-label">Marketplace Access</Box>
-                      <StatusIndicator type={permissions.has_marketplace_full_access ? 'success' : 'warning'}>
-                        {permissions.has_marketplace_full_access ? 'Full Access' : 'Limited'}
-                      </StatusIndicator>
-                    </div>
-                    <div>
-                      <Box variant="awsui-key-label">Product Management</Box>
-                      <StatusIndicator type={permissions.has_marketplace_manage_products ? 'success' : 'error'}>
-                        {permissions.has_marketplace_manage_products ? 'Enabled' : 'Missing'}
-                      </StatusIndicator>
-                    </div>
-                    <div>
-                      <Box variant="awsui-key-label">Admin Access</Box>
-                      <StatusIndicator type={permissions.has_admin_access ? 'success' : 'info'}>
-                        {permissions.has_admin_access ? 'Yes' : 'No'}
-                      </StatusIndicator>
-                    </div>
-                  </ColumnLayout>
+          <ColumnLayout columns={2} borders="vertical">
+            {/* Left Column - Credentials Form */}
+            <div>
+              <SpaceBetween size="l">
+                {error && (
+                  <Alert type="error" dismissible onDismiss={() => setError('')}>
+                    {error}
+                  </Alert>
+                )}
 
-                  {permissions.recommendations && permissions.recommendations.length > 0 && (
-                    <SpaceBetween size="s">
-                      <Box variant="h4">Recommendations</Box>
-                      {permissions.recommendations.map((rec: any, idx: number) => (
-                        <Alert
-                          key={idx}
-                          type={rec.severity === 'high' ? 'warning' : 'info'}
-                          header={rec.title}
-                        >
-                          <SpaceBetween size="xs">
-                            <Box>{rec.message}</Box>
-                            <Box><strong>Action:</strong> {rec.action}</Box>
-                            {rec.policy_arn && (
-                              <Box fontSize="body-s" color="text-body-secondary">
-                                Policy ARN: {rec.policy_arn}
-                              </Box>
-                            )}
-                            {rec.required_actions && (
-                              <Box>
-                                <Box variant="awsui-key-label">Required Permissions:</Box>
-                                <ul style={{ marginLeft: '20px', marginTop: '4px' }}>
-                                  {rec.required_actions.map((action: string, i: number) => (
-                                    <li key={i}><Box fontSize="body-s">{action}</Box></li>
-                                  ))}
-                                </ul>
-                              </Box>
-                            )}
-                          </SpaceBetween>
-                        </Alert>
-                      ))}
-                    </SpaceBetween>
-                  )}
-
-                  {!canProceed && (
-                    <Alert type="error" header="Insufficient Permissions">
-                      You need additional IAM permissions to use this application. Please contact your AWS administrator to grant the required marketplace permissions.
-                    </Alert>
-                  )}
-                </SpaceBetween>
-              </Container>
-            )}
-
-            {error && (
-              <Alert type="error" dismissible onDismiss={() => setError('')}>
-                {error}
-              </Alert>
-            )}
-
-            <Container
+                <Container
               header={
                 <Header
                   variant="h2"
@@ -301,37 +241,130 @@ export default function CredentialsPage() {
               </form>
             </Container>
 
-            {!sellerStatus && (
-              <Container>
-                <SpaceBetween size="m">
-                  <Header variant="h3">What happens next?</Header>
-                  <ColumnLayout columns={3} variant="text-grid">
-                    <div>
-                      <Box variant="h4">1. Validate Account</Box>
-                      <Box variant="p">
-                        We'll validate your AWS credentials and determine your organization
-                        (AWS Inc vs AWS India)
-                      </Box>
-                    </div>
-                    <div>
-                      <Box variant="h4">2. Check Status</Box>
-                      <Box variant="p">
-                        Check your current seller registration status and guide you through
-                        the process if needed
-                      </Box>
-                    </div>
-                    <div>
-                      <Box variant="h4">3. Create Listing</Box>
-                      <Box variant="p">
-                        Use AI to analyze your product and create a complete marketplace
-                        listing automatically
-                      </Box>
-                    </div>
-                  </ColumnLayout>
+                {!sellerStatus && (
+                  <Container>
+                    <SpaceBetween size="m">
+                      <Header variant="h3">What happens next?</Header>
+                      <ColumnLayout columns={1} variant="text-grid">
+                        <div>
+                          <Box variant="h4">1. Validate Account</Box>
+                          <Box variant="p">Validate AWS credentials and organization</Box>
+                        </div>
+                        <div>
+                          <Box variant="h4">2. Check Status</Box>
+                          <Box variant="p">Check seller registration status</Box>
+                        </div>
+                        <div>
+                          <Box variant="h4">3. Create Listing</Box>
+                          <Box variant="p">AI-guided listing creation</Box>
+                        </div>
+                      </ColumnLayout>
+                    </SpaceBetween>
+                  </Container>
+                )}
+              </SpaceBetween>
+            </div>
+
+            {/* Right Column - Status Display */}
+            <div>
+              {sellerStatus && permissions && (
+                <SpaceBetween size="l">
+                  <Container header={<Header variant="h2">Validation Status</Header>}>
+                    <SpaceBetween size="m">
+                      <div>
+                        <Box variant="awsui-key-label">AWS Account ID</Box>
+                        <Box fontWeight="bold" fontSize="heading-m">{sellerStatus.account_id}</Box>
+                      </div>
+                      <div>
+                        <Box variant="awsui-key-label">Organization</Box>
+                        <Badge color={
+                          useStore.getState().accountInfo?.region_type === 'AWS_INDIA' ? 'green' :
+                          useStore.getState().accountInfo?.region_type === 'AWS_INC' ? 'blue' : 'grey'
+                        }>
+                          {useStore.getState().accountInfo?.organization || 'Unknown'}
+                        </Badge>
+                      </div>
+                      <div>
+                        <Box variant="awsui-key-label">Seller Status</Box>
+                        <Badge color={sellerStatus.seller_status === 'APPROVED' ? 'green' : 'grey'}>
+                          {sellerStatus.seller_status}
+                        </Badge>
+                      </div>
+                      {sellerStatus.owned_products && sellerStatus.owned_products.length > 0 && (
+                        <div>
+                          <Box variant="awsui-key-label">Existing Products</Box>
+                          <Box fontWeight="bold">{sellerStatus.owned_products.length}</Box>
+                        </div>
+                      )}
+                    </SpaceBetween>
+                  </Container>
+
+                  <Container header={<Header variant="h2">IAM Permissions</Header>}>
+                    <SpaceBetween size="m">
+                      <div>
+                        <Box variant="awsui-key-label">AWSMarketplaceFullAccess Policy</Box>
+                        <StatusIndicator type={permissions.has_marketplace_full_access_policy ? 'success' : 'warning'}>
+                          {permissions.has_marketplace_full_access_policy ? 'Attached' : 'Not Attached'}
+                        </StatusIndicator>
+                      </div>
+                      <div>
+                        <Box variant="awsui-key-label">Marketplace Access</Box>
+                        <StatusIndicator type={permissions.has_marketplace_full_access ? 'success' : 'warning'}>
+                          {permissions.has_marketplace_full_access ? 'Full Access' : 'Limited'}
+                        </StatusIndicator>
+                      </div>
+                      <div>
+                        <Box variant="awsui-key-label">Product Management</Box>
+                        <StatusIndicator type={permissions.has_marketplace_manage_products ? 'success' : 'error'}>
+                          {permissions.has_marketplace_manage_products ? 'Enabled' : 'Missing'}
+                        </StatusIndicator>
+                      </div>
+
+                      {permissions.recommendations && permissions.recommendations.length > 0 && (
+                        <SpaceBetween size="s">
+                          <Box variant="h4">Recommendations</Box>
+                          {permissions.recommendations.map((rec: any, idx: number) => (
+                            <Alert
+                              key={idx}
+                              type={rec.severity === 'high' ? 'warning' : 'info'}
+                              header={rec.title}
+                            >
+                              <SpaceBetween size="xs">
+                                <Box fontSize="body-s">{rec.message}</Box>
+                                <Box fontSize="body-s"><strong>Action:</strong> {rec.action}</Box>
+                              </SpaceBetween>
+                            </Alert>
+                          ))}
+                        </SpaceBetween>
+                      )}
+
+                      {canProceed && (
+                        <Alert type="success" header="✅ Ready to Proceed">
+                          All required permissions are in place. You can create product listings.
+                        </Alert>
+                      )}
+
+                      {!canProceed && (
+                        <Alert type="error" header="❌ Insufficient Permissions">
+                          Contact your AWS administrator to grant required marketplace permissions.
+                        </Alert>
+                      )}
+                    </SpaceBetween>
+                  </Container>
                 </SpaceBetween>
-              </Container>
-            )}
-          </SpaceBetween>
+              )}
+
+              {!sellerStatus && (
+                <Container>
+                  <Box textAlign="center" padding={{ vertical: 'xxl' }}>
+                    <Box variant="h3" color="text-body-secondary">
+                      Enter credentials to see status
+                    </Box>
+                  </Box>
+                </Container>
+              )}
+            </div>
+          </ColumnLayout>
         </ContentLayout>
       }
     />

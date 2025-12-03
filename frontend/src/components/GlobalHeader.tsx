@@ -176,49 +176,7 @@ export default function GlobalHeader() {
           </div>
         </div>
 
-        {/* Progress Bar Row */}
-        <div style={{ marginTop: '8px' }}>
-          <div style={{ 
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            borderRadius: '4px',
-            height: '10px',
-            overflow: 'hidden',
-            position: 'relative',
-            border: '1px solid rgba(255, 153, 0, 0.3)'
-          }}>
-            <div style={{
-              background: progressValue === 100 
-                ? 'linear-gradient(90deg, #037f0c, #05a30f)' 
-                : 'linear-gradient(90deg, #ff9900, #ec7211)',
-              height: '100%',
-              width: `${progressValue}%`,
-              transition: 'width 0.3s ease-in-out',
-              boxShadow: progressValue > 0 ? '0 0 10px rgba(255, 153, 0, 0.6)' : 'none',
-              position: 'relative',
-              overflow: 'hidden'
-            }}>
-              <div style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent)',
-                animation: progressValue < 100 ? 'shimmer 2s infinite' : 'none'
-              }} />
-            </div>
-          </div>
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            marginTop: '6px',
-            fontSize: '12px',
-            color: '#aab7b8'
-          }}>
-            <span>Step {WORKFLOW_STEPS.findIndex(s => s.key === currentStep) + 1} of {WORKFLOW_STEPS.length}</span>
-            <span style={{ color: progressValue === 100 ? '#05a30f' : '#ff9900', fontWeight: 'bold' }}>{progressValue}%</span>
-          </div>
-        </div>
+
       </SpaceBetween>
     </div>
   );
