@@ -516,19 +516,27 @@ async def list_marketplace_products(credentials: Credentials):
                         try:
                             cf_client = session.client('cloudformation')
                             stack_name = f"saas-integration-{entity_id}"
+                            print(f"[DEBUG] Checking for CloudFormation stack: {stack_name}")
                             stack_response = cf_client.describe_stacks(StackName=stack_name)
                             if stack_response['Stacks']:
                                 stack_status = stack_response['Stacks'][0]['StackStatus']
+                                print(f"[DEBUG] Stack {stack_name} status: {stack_status}")
                                 if stack_status == 'CREATE_COMPLETE':
                                     stack_exists = True
                                     saas_integration_status = 'COMPLETED'
                                 elif stack_status in ['CREATE_IN_PROGRESS', 'UPDATE_IN_PROGRESS']:
                                     saas_integration_status = 'IN_PROGRESS'
-                                elif stack_status in ['CREATE_FAILED', 'ROLLBACK_COMPLETE']:
+                                elif stack_status in ['CREATE_FAILED', 'ROLLBACK_COMPLETE', 'DELETE_COMPLETE']:
                                     saas_integration_status = 'FAILED'
-                        except:
-                            # Stack doesn't exist or error checking
-                            pass
+                                    print(f"[DEBUG] Stack in failed/deleted state: {stack_status}")
+                        except cf_client.exceptions.ClientError as e:
+                            error_code = e.response.get('Error', {}).get('Code', '')
+                            if error_code == 'ValidationError' or 'does not exist' in str(e):
+                                print(f"[DEBUG] Stack {stack_name} does not exist")
+                            else:
+                                print(f"[ERROR] Error checking stack {stack_name}: {str(e)}")
+                        except Exception as e:
+                            print(f"[ERROR] Unexpected error checking stack: {str(e)}")
                     
                     # Determine allowed actions based on status
                     allowed_actions = []
