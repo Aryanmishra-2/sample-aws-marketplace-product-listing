@@ -309,6 +309,12 @@ export default function ReviewSuggestionsPage() {
       return false;
     }
 
+    // Validate fulfillment URL starts with https://
+    if (!fulfillmentUrl.startsWith('https://')) {
+      setError('Fulfillment URL must begin with "https://"');
+      return false;
+    }
+
     if (dimensions.length === 0) {
       setError('Please add at least one pricing dimension');
       return false;
@@ -562,12 +568,17 @@ export default function ReviewSuggestionsPage() {
                         />
                       </FormField>
 
-                      <FormField label="Fulfillment URL" constraintText="Required">
+                      <FormField 
+                        label="Fulfillment URL" 
+                        constraintText="Required - Must begin with https://"
+                        errorText={fulfillmentUrl && !fulfillmentUrl.startsWith('https://') ? 'URL must begin with https://' : undefined}
+                      >
                         <Input
                           value={fulfillmentUrl}
                           onChange={({ detail }) => setFulfillmentUrl(detail.value)}
                           placeholder="https://yourapp.com/signup"
                           type="url"
+                          invalid={fulfillmentUrl.length > 0 && !fulfillmentUrl.startsWith('https://')}
                         />
                       </FormField>
                     </ColumnLayout>
