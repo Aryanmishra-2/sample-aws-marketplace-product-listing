@@ -19,13 +19,14 @@ import threading
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Note: Legacy agent imports removed - agent logic is now integrated directly in endpoints
-# Tools are available in the tools/ directory
-# from agent.strands_marketplace_agent import StrandsMarketplaceAgent
-# from agent.marketplace_help_agent import MarketplaceHelpAgent
-# from agent.tools.seller_registration_tools import SellerRegistrationTools
-# from agents.serverless_saas_integration import ServerlessSaasIntegrationAgent
-# from agents.workflow_orchestrator import WorkflowOrchestrator
+# Agent imports - recovered agents for full functionality
+try:
+    from agents.serverless_saas_integration import ServerlessSaasIntegrationAgent
+    from agents.workflow_orchestrator import WorkflowOrchestrator
+    AGENTS_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Could not import agents: {e}")
+    AGENTS_AVAILABLE = False
 
 # Temporary mock class to replace removed SellerRegistrationTools
 class SellerRegistrationTools:
@@ -1244,6 +1245,53 @@ async def deploy_saas(data: Dict[str, Any]):
         print(f"[ERROR] deploy_saas exception: {str(e)}")
         print(f"[ERROR] Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+# Execute complete SaaS workflow using orchestrator
+@app.post("/execute-saas-workflow")
+async def execute_saas_workflow(data: Dict[str, Any]):
+    """Execute complete SaaS workflow: Metering → Lambda → Visibility"""
+    try:
+        if not AGENTS_AVAILABLE:
+            return {
+                "success": False,
+                "error": "Workflow orchestrator not available. Agents not properly imported."
+            }
+        
+        credentials = data.get("credentials", {})
+        lambda_function_name = data.get("lambda_function_name")
+        
+        access_key = credentials.get("aws_access_key_id")
+        secret_key = credentials.get("aws_secret_access_key")
+        session_token = credentials.get("aws_session_token")
+        
+        if not access_key or not secret_key:
+            return {
+                "success": False,
+                "error": "AWS credentials are required"
+            }
+        
+        # Initialize workflow orchestrator
+        orchestrator = WorkflowOrchestrator()
+        
+        # Execute full workflow
+        result = orchestrator.execute_full_workflow(
+            access_key=access_key,
+            secret_key=secret_key,
+            session_token=session_token,
+            lambda_function_name=lambda_function_name
+        )
+        
+        return {
+            "success": result.get("status") in ["success", "partial_success"],
+            "workflow_result": result
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Workflow execution failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 # Get CloudFormation stack status
 @app.post("/get-stack-status")
