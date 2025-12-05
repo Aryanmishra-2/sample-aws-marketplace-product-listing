@@ -31,14 +31,15 @@ interface Stage {
 }
 
 const INITIAL_STAGES: Stage[] = [
-  { name: 'Product Information', description: 'Setting product details, logo, and descriptions', progress: 12.5, status: 'pending' },
-  { name: 'Fulfillment Configuration', description: 'Configuring fulfillment URL and settings', progress: 25, status: 'pending' },
-  { name: 'Pricing Dimensions', description: 'Creating pricing dimensions and models', progress: 37.5, status: 'pending' },
-  { name: 'Price Review', description: 'Configuring contract durations and options', progress: 50, status: 'pending' },
-  { name: 'Refund Policy', description: 'Setting refund policy terms', progress: 62.5, status: 'pending' },
-  { name: 'EULA Configuration', description: 'Configuring End User License Agreement', progress: 75, status: 'pending' },
-  { name: 'Availability Settings', description: 'Setting geographic availability', progress: 87.5, status: 'pending' },
-  { name: 'Allowlist Configuration', description: 'Configuring buyer account allowlist', progress: 95, status: 'pending' },
+  { name: 'Product Information', description: 'Setting product details, logo, and descriptions', progress: 11, status: 'pending' },
+  { name: 'Fulfillment Configuration', description: 'Configuring fulfillment URL and settings', progress: 22, status: 'pending' },
+  { name: 'Pricing Dimensions', description: 'Creating pricing dimensions and models', progress: 33, status: 'pending' },
+  { name: 'Price Review', description: 'Configuring contract durations and options', progress: 44, status: 'pending' },
+  { name: 'Refund Policy', description: 'Setting refund policy terms', progress: 55, status: 'pending' },
+  { name: 'EULA Configuration', description: 'Configuring End User License Agreement', progress: 66, status: 'pending' },
+  { name: 'Availability Settings', description: 'Setting geographic availability', progress: 77, status: 'pending' },
+  { name: 'Allowlist Configuration', description: 'Configuring buyer account allowlist', progress: 88, status: 'pending' },
+  { name: 'Publish to Limited', description: 'Publishing product and offer to Limited stage', progress: 100, status: 'pending' },
 ];
 
 export default function CreateListingPage() {
@@ -156,7 +157,8 @@ export default function CreateListingPage() {
         'EULA': 5,
         'Availability': 6,
         'Allowlist': 7,
-        'Publishing': 7,
+        'Publish to Limited': 8,
+        'Publishing': 8,
       };
       
       // Handle stage updates

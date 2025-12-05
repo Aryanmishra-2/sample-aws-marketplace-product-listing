@@ -17,9 +17,7 @@ from queue import Queue
 import threading
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Import listing agents and tools
+# Import listing agents and tools from backend/agents
 from agents import (
     SellerRegistrationAgent,
     ProductInformationAgent,
@@ -1256,7 +1254,21 @@ async def deploy_saas(data: Dict[str, Any]):
         region = data.get("region", "us-east-1")
         credentials = data.get("credentials", {})
         
-        print(f"[DEBUG] Product ID: {product_id}, Email: {email}, Stack: {stack_name}, Region: {region}")
+        # Get pricing model from request - map to CloudFormation parameter values
+        # Frontend values: "Contract", "Usage", "Contract with Consumption"
+        # CloudFormation values: "Contract-based-pricing", "Usage-based-pricing", "Contract-with-consumption"
+        pricing_model_input = data.get("pricing_model", "Usage")
+        pricing_model_map = {
+            "Contract": "Contract-based-pricing",
+            "Usage": "Usage-based-pricing",
+            "Contract with Consumption": "Contract-with-consumption",
+            # Also handle lowercase variants
+            "contract": "Contract-based-pricing",
+            "usage": "Usage-based-pricing",
+        }
+        pricing_model = pricing_model_map.get(pricing_model_input, "Usage-based-pricing")
+        
+        print(f"[DEBUG] Product ID: {product_id}, Email: {email}, Stack: {stack_name}, Region: {region}, PricingModel: {pricing_model}")
         
         # Create boto3 session
         session = boto3.Session(
@@ -1310,7 +1322,7 @@ async def deploy_saas(data: Dict[str, Any]):
                 TemplateBody=template_body,
                 Parameters=[
                     {'ParameterKey': 'ProductId', 'ParameterValue': product_id},
-                    {'ParameterKey': 'PricingModel', 'ParameterValue': 'Usage-based-pricing'},
+                    {'ParameterKey': 'PricingModel', 'ParameterValue': pricing_model},
                     {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': email}
                 ],
                 Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND']
@@ -1634,6 +1646,9 @@ async def create_listing_with_stream(data: Dict[str, Any]):
             refund_policy = listing_data.get("refund_policy", "")
             eula_type = listing_data.get("eula_type", "STANDARD")
             availability_type = listing_data.get("availability_type", "PUBLIC")
+            auto_publish_to_limited = listing_data.get("auto_publish_to_limited", False)
+            offer_name = listing_data.get("offer_name", f"{product_title} - Public Offer")
+            offer_description = listing_data.get("offer_description", f"Public offer for {product_title}")
             
             # Validate required fields
             if not product_title:
@@ -1850,11 +1865,19 @@ async def create_listing_with_stream(data: Dict[str, Any]):
                     
                     for dim in pricing_dimensions:
                         dim_type = dim.get("type", "Metered")  # Get type from frontend
+                        # AWS Marketplace dimension type requirements:
+                        # - Entitled: ["Entitled"] for contract-based
+                        # - Metered: ["Metered", "ExternallyMetered"] for usage-based
+                        if dim_type == "Metered":
+                            types_list = ["Metered", "ExternallyMetered"]
+                        else:
+                            types_list = [dim_type]  # "Entitled" stays as-is
+                        
                         formatted_dimensions.append({
                             "Key": dim.get("key", dim.get("name", "").lower().replace(" ", "_").replace("-", "_")),
                             "Description": dim.get("description", dim.get("name", "")),
                             "Name": dim.get("name", ""),
-                            "Types": [dim_type],  # Use the type from the dimension
+                            "Types": types_list,
                             "Unit": "Units"
                         })
                     
@@ -1988,10 +2011,12 @@ async def create_listing_with_stream(data: Dict[str, Any]):
             if offer_id:
                 try:
                     # Use ListingTools for correct API format
+                    # Frontend sends 'scmp' for standard, 'custom' for custom EULA
+                    is_standard_eula = eula_type.lower() in ["standard", "scmp"]
                     eula_result = listing_tools.update_legal_terms(
                         offer_id=offer_id,
-                        eula_type="StandardEula" if eula_type == "STANDARD" else "CustomEula",
-                        eula_url=listing_data.get("custom_eula_url") if eula_type != "STANDARD" else None
+                        eula_type="StandardEula" if is_standard_eula else "CustomEula",
+                        eula_url=listing_data.get("custom_eula_url") if not is_standard_eula else None
                     )
                     
                     if eula_result.get("success"):
@@ -2089,13 +2114,69 @@ async def create_listing_with_stream(data: Dict[str, Any]):
             })
             
             # ============================================================
+            # Stage 9: Publish to Limited (if auto_publish_to_limited is True)
+            # ============================================================
+            published_to_limited = False
+            if auto_publish_to_limited and product_id and offer_id:
+                emit_event(session_id, "stage", {
+                    "stage": "Publish to Limited",
+                    "status": "in_progress",
+                    "message": "Publishing product to Limited visibility..."
+                })
+                
+                try:
+                    # Use ListingTools to release product and offer to Limited
+                    release_result = listing_tools.release_product_and_offer_to_limited(
+                        product_id=product_id,
+                        offer_id=offer_id,
+                        offer_name=offer_name,
+                        offer_description=offer_description,
+                        pricing_model="Usage" if pricing_model == "usage" else "Contract"
+                    )
+                    
+                    if release_result.get("success"):
+                        # Wait for release changeset to complete
+                        release_wait_result = wait_for_changeset(
+                            marketplace_client,
+                            release_result['change_set_id'],
+                            session_id,
+                            "Publish to Limited"
+                        )
+                        if release_wait_result["success"]:
+                            published_to_limited = True
+                            emit_event(session_id, "changeset", {
+                                "stage": "Publish to Limited",
+                                "status": "SUCCEEDED",
+                                "message": "Product published to Limited visibility"
+                            })
+                        else:
+                            emit_event(session_id, "changeset", {
+                                "stage": "Publish to Limited",
+                                "status": "WARNING",
+                                "message": f"Publish to Limited pending: {release_wait_result.get('error', 'Unknown')[:50]}"
+                            })
+                    else:
+                        emit_event(session_id, "changeset", {
+                            "stage": "Publish to Limited",
+                            "status": "WARNING",
+                            "message": f"Publish to Limited pending: {release_result.get('error', 'Unknown')[:50]}"
+                        })
+                except Exception as e:
+                    print(f"[WARNING] Publish to Limited failed: {e}")
+                    emit_event(session_id, "changeset", {
+                        "stage": "Publish to Limited",
+                        "status": "WARNING",
+                        "message": f"Publish to Limited pending: {str(e)[:50]}"
+                    })
+            
+            # ============================================================
             # All stages complete - send completion event
             # ============================================================
             emit_event(session_id, "complete", {
                 "product_id": product_id,
                 "offer_id": offer_id,
-                "published_to_limited": False,
-                "message": f"Product '{product_title}' created successfully with all configurations"
+                "published_to_limited": published_to_limited,
+                "message": f"Product '{product_title}' created successfully" + (" and published to Limited" if published_to_limited else " (Draft)")
             })
             
         except Exception as e:

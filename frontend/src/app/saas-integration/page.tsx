@@ -45,7 +45,7 @@ const INITIAL_STAGES: DeploymentStage[] = [
 export default function SaaSIntegrationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, productId: storeProductId, credentials, setStackId, setCurrentStep, setProductId } = useStore();
+  const { isAuthenticated, productId: storeProductId, credentials, setStackId, setCurrentStep, setProductId, listingData } = useStore();
   
   // Get productId from URL or store
   const urlProductId = searchParams.get('productId');
@@ -271,11 +271,15 @@ export default function SaaSIntegrationPage() {
     setDeployedStackName(actualStackName);
 
     try {
+      // Get pricing model from listingData (ui_pricing_model has the full value)
+      const pricingModel = listingData?.ui_pricing_model || listingData?.pricing_model || 'Usage';
+      
       const response = await axios.post('/api/deploy-saas', {
         product_id: productId,
         email,
         stack_name: stackName,
         region: region.value,
+        pricing_model: pricingModel,
         credentials: {
           aws_access_key_id: accessKey,
           aws_secret_access_key: secretKey,
