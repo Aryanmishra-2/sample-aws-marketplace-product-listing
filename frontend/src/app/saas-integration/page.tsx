@@ -68,6 +68,16 @@ export default function SaaSIntegrationPage() {
   const [startTime, setStartTime] = useState<number | null>(null);
   const [cfStatus, setCfStatus] = useState('');
   const [cfEvents, setCfEvents] = useState<any[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [existingStackId, setExistingStackId] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [showSnsConfirmation, setShowSnsConfirmation] = useState(false);
+  const [showBuyerExperience, setShowBuyerExperience] = useState(false);
+  const [buyerSteps, setBuyerSteps] = useState<any[]>([]);
+  const [showMeteringGuide, setShowMeteringGuide] = useState(false);
+  const [meteringSteps, setMeteringSteps] = useState<any[]>([]);
+  const [showVisibilityGuide, setShowVisibilityGuide] = useState(false);
+  const [visibilitySteps, setVisibilitySteps] = useState<any[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated || !productId) {
@@ -255,18 +265,62 @@ export default function SaaSIntegrationPage() {
     setDeploymentStages(newStages);
   };
 
-  const handleDeploy = async () => {
-    if (!email || !stackName || !accessKey || !secretKey) {
-      setError('Please fill in all required fields');
-      return;
+  const checkStackExists = async () => {
+    const actualStackName = `saas-integration-${productId}`;
+    
+    try {
+      const response = await axios.post('/api/check-stack-exists', {
+        stack_name: actualStackName,
+        region: region.value,
+        credentials: {
+          aws_access_key_id: accessKey,
+          aws_secret_access_key: secretKey,
+          aws_session_token: sessionToken || undefined,
+        },
+      });
+      
+      return response.data;
+    } catch (err) {
+      console.error('Error checking stack:', err);
+      return { exists: false };
     }
+  };
 
+  const handleDeleteStack = async () => {
+    setDeleting(true);
+    setError('');
+    
+    try {
+      const response = await axios.post('/api/delete-stack', {
+        stack_name: existingStackId,
+        region: region.value,
+        credentials: {
+          aws_access_key_id: accessKey,
+          aws_secret_access_key: secretKey,
+          aws_session_token: sessionToken || undefined,
+        },
+      });
+      
+      if (response.data.success) {
+        setShowDeleteConfirm(false);
+        setDeleting(false);
+        // Now proceed with deployment
+        await deployStack();
+      } else {
+        throw new Error(response.data.error || 'Failed to delete stack');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Failed to delete stack');
+      setDeleting(false);
+    }
+  };
+
+  const deployStack = async () => {
     setLoading(true);
     setError('');
     setStartTime(Date.now());
     setDeploymentStages(INITIAL_STAGES.map(s => ({ ...s, status: 'pending' as const })));
     
-    // The backend uses this stack name format: saas-integration-{product_id}
     const actualStackName = `saas-integration-${productId}`;
     setDeployedStackName(actualStackName);
 
@@ -311,6 +365,24 @@ export default function SaaSIntegrationPage() {
       console.error('Deployment error:', err);
       setError(err.response?.data?.error || err.message || 'Failed to deploy SaaS integration');
       setLoading(false);
+    }
+  };
+
+  const handleDeploy = async () => {
+    if (!email || !stackName || !accessKey || !secretKey) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    // Check if stack already exists
+    const stackCheck = await checkStackExists();
+    
+    if (stackCheck.exists) {
+      setExistingStackId(stackCheck.stack_name);
+      setShowDeleteConfirm(true);
+    } else {
+      // Stack doesn't exist, proceed with deployment
+      await deployStack();
     }
   };
 
@@ -361,7 +433,7 @@ export default function SaaSIntegrationPage() {
                 actions={
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button onClick={handleBack}>← Back</Button>
-                    {success && <Button variant="primary" onClick={() => router.push('/')}>Continue →</Button>}
+                    {success && !showSnsConfirmation && <Button variant="primary" onClick={() => setShowSnsConfirmation(true)}>Continue →</Button>}
                     {!success && <Button variant="primary" onClick={handleDeploy} loading={loading} disabled={loading}>Deploy Stack 🚀</Button>}
                   </SpaceBetween>
                 }
@@ -369,7 +441,29 @@ export default function SaaSIntegrationPage() {
                 <SpaceBetween size="l">
                   {error && <Alert type="error" dismissible onDismiss={() => setError('')}>{error}</Alert>}
 
-                  {success && (
+                  {showDeleteConfirm && (
+                    <Alert
+                      type="warning"
+                      header="⚠️ Stack Already Exists"
+                      action={
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button onClick={() => router.push('/seller-registration')} disabled={deleting}>Cancel</Button>
+                          <Button variant="primary" onClick={handleDeleteStack} loading={deleting}>Delete and Redeploy</Button>
+                        </SpaceBetween>
+                      }
+                    >
+                      <SpaceBetween size="s">
+                        <Box>A CloudFormation stack with this product ID already exists:</Box>
+                        <Box fontWeight="bold">{existingStackId}</Box>
+                        <Box>Would you like to delete the existing stack and deploy a new one?</Box>
+                        <Box color="text-status-warning" fontSize="body-s">
+                          ⚠️ Warning: This will delete all existing resources including DynamoDB tables, Lambda functions, and API Gateway endpoints.
+                        </Box>
+                      </SpaceBetween>
+                    </Alert>
+                  )}
+
+                  {success && !showSnsConfirmation && (
                     <Alert type="success" header="✅ Deployment Successful!">
                       <SpaceBetween size="m">
                         <Box>SaaS integration infrastructure deployed successfully!</Box>
@@ -409,19 +503,238 @@ export default function SaaSIntegrationPage() {
                               Open Product in Console
                             </Button>
                           </li>
+                        </ol>
+                      </SpaceBetween>
+                    </Alert>
+                  )}
+
+                  {showSnsConfirmation && !showBuyerExperience && (
+                    <Alert 
+                      type="info" 
+                      header="📧 Confirm Amazon SNS Subscription"
+                      action={
+                        <Button variant="primary" onClick={async () => {
+                          setLoading(true);
+                          try {
+                            const response = await axios.post('/api/buyer-experience-guide', {});
+                            if (response.data.success && response.data.steps) {
+                              setBuyerSteps(response.data.steps);
+                            }
+                          } catch (err) {
+                            console.error('Failed to load buyer experience guide:', err);
+                          } finally {
+                            setLoading(false);
+                            setShowBuyerExperience(true);
+                          }
+                        }}>
+                          I've Confirmed →
+                        </Button>
+                      }
+                    >
+                      <SpaceBetween size="m">
+                        <Box>
+                          To receive email notifications at <strong>{email}</strong>, you need to confirm the SNS subscription.
+                        </Box>
+                        
+                        <Box variant="h4">Steps to Confirm:</Box>
+                        <ol style={{ marginLeft: '20px' }}>
                           <li>
-                            <Box fontWeight="bold">Confirm SNS Subscription</Box>
+                            <Box fontWeight="bold">Open your email inbox</Box>
                             <Box fontSize="body-s" color="text-body-secondary">
-                              📧 Check your email ({email}) and confirm the SNS subscription to receive marketplace notifications
+                              Check the email address: {email}
                             </Box>
                           </li>
                           <li>
-                            <Box fontWeight="bold">Test the Integration</Box>
+                            <Box fontWeight="bold">Find the confirmation email</Box>
                             <Box fontSize="body-s" color="text-body-secondary">
-                              Test the buyer experience by subscribing to your product from a test account
+                              Subject: "AWS Notification - Subscription Confirmation"
+                            </Box>
+                          </li>
+                          <li>
+                            <Box fontWeight="bold">Click "Confirm subscription"</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              This link will open in your browser to confirm the subscription
                             </Box>
                           </li>
                         </ol>
+                        
+                        <Box color="text-status-info" fontSize="body-s">
+                          ℹ️ After confirmation, you will receive emails for new buyer registrations, entitlement changes, and subscription events.
+                        </Box>
+                      </SpaceBetween>
+                    </Alert>
+                  )}
+
+                  {showBuyerExperience && (
+                    <Alert 
+                      type="success" 
+                      header="🛒 Test Buyer Experience"
+                      action={
+                        <Button variant="primary" onClick={async () => {
+                          setLoading(true);
+                          setError('');
+                          
+                          try {
+                            // Run buyer experience and automatically route to next step
+                            const response = await axios.post('/api/run-buyer-experience', {
+                              product_id: productId,
+                              credentials: {
+                                aws_access_key_id: accessKey,
+                                aws_secret_access_key: secretKey,
+                                aws_session_token: sessionToken || undefined,
+                              }
+                            });
+                            
+                            if (response.data.success) {
+                              const pricingModel = response.data.pricing_model;
+                              const nextStep = response.data.next_step;
+                              
+                              // Show appropriate guide based on routing
+                              if (nextStep === 'metering') {
+                                // Usage-based or Contract-with-consumption - show metering guide
+                                const meteringResponse = await axios.post('/api/metering-guide', {});
+                                if (meteringResponse.data.success) {
+                                  setMeteringSteps(meteringResponse.data.steps);
+                                  setShowMeteringGuide(true);
+                                }
+                              } else if (nextStep === 'public_visibility') {
+                                // Contract-based - show public visibility guide
+                                const visibilityResponse = await axios.post('/api/public-visibility-guide', {});
+                                if (visibilityResponse.data.success) {
+                                  setVisibilitySteps(visibilityResponse.data.steps);
+                                  setShowVisibilityGuide(true);
+                                }
+                              }
+                            } else {
+                              setError(response.data.error || 'Buyer experience simulation failed');
+                            }
+                          } catch (err: any) {
+                            console.error('Failed to run buyer experience:', err);
+                            setError(err.response?.data?.error || 'Failed to complete buyer experience');
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}>
+                          Complete Testing →
+                        </Button>
+                      }
+                    >
+                      <SpaceBetween size="m">
+                        <Box>
+                          Now let's test your SaaS integration by simulating the buyer experience. Follow these steps to ensure everything works correctly:
+                        </Box>
+                        
+                        {buyerSteps.map((step, index) => (
+                          <Container key={index} header={<Header variant="h3">Step {step.step}: {step.title}</Header>}>
+                            <SpaceBetween size="s">
+                              <Box>{step.description}</Box>
+                              <Box variant="h4">Actions:</Box>
+                              <ul style={{ marginLeft: '20px' }}>
+                                {step.actions?.map((action: string, idx: number) => (
+                                  <li key={idx}><Box fontSize="body-s">{action}</Box></li>
+                                ))}
+                              </ul>
+                              {step.expected && (
+                                <>
+                                  <Box variant="h4">Expected Outcomes:</Box>
+                                  <ul style={{ marginLeft: '20px' }}>
+                                    {step.expected.map((outcome: string, idx: number) => (
+                                      <li key={idx}><Box fontSize="body-s" color="text-status-success">✓ {outcome}</Box></li>
+                                    ))}
+                                  </ul>
+                                </>
+                              )}
+                            </SpaceBetween>
+                          </Container>
+                        ))}
+                        
+                        <Box color="text-status-info" fontSize="body-s">
+                          ℹ️ Complete all steps to verify your SaaS integration is working correctly. You should receive email notifications and see customer records in DynamoDB.
+                        </Box>
+                      </SpaceBetween>
+                    </Alert>
+                  )}
+
+                  {showMeteringGuide && (
+                    <Alert 
+                      type="info" 
+                      header="📊 Metering Setup Guide"
+                      action={
+                        <Button variant="primary" onClick={() => router.push('/')}>
+                          Finish →
+                        </Button>
+                      }
+                    >
+                      <SpaceBetween size="m">
+                        <Box>
+                          Your product uses usage-based pricing, which requires metering setup to track customer usage and bill accordingly.
+                        </Box>
+                        
+                        {meteringSteps.map((step, index) => (
+                          <Container key={index} header={<Header variant="h3">Step {step.step}: {step.title}</Header>}>
+                            <SpaceBetween size="s">
+                              <Box>{step.description}</Box>
+                              <Box variant="h4">Actions:</Box>
+                              <ul style={{ marginLeft: '20px' }}>
+                                {step.actions?.map((action: string, idx: number) => (
+                                  <li key={idx}><Box fontSize="body-s">{action}</Box></li>
+                                ))}
+                              </ul>
+                              {step.expected && (
+                                <>
+                                  <Box variant="h4">Expected Outcomes:</Box>
+                                  <ul style={{ marginLeft: '20px' }}>
+                                    {step.expected.map((outcome: string, idx: number) => (
+                                      <li key={idx}><Box fontSize="body-s" color="text-status-success">✓ {outcome}</Box></li>
+                                    ))}
+                                  </ul>
+                                </>
+                              )}
+                            </SpaceBetween>
+                          </Container>
+                        ))}
+                      </SpaceBetween>
+                    </Alert>
+                  )}
+
+                  {showVisibilityGuide && (
+                    <Alert 
+                      type="info" 
+                      header="🌐 Public Visibility Request Guide"
+                      action={
+                        <Button variant="primary" onClick={() => router.push('/')}>
+                          Finish →
+                        </Button>
+                      }
+                    >
+                      <SpaceBetween size="m">
+                        <Box>
+                          Your product uses contract-based pricing. Follow these steps to request public visibility for your product.
+                        </Box>
+                        
+                        {visibilitySteps.map((step, index) => (
+                          <Container key={index} header={<Header variant="h3">Step {step.step}: {step.title}</Header>}>
+                            <SpaceBetween size="s">
+                              <Box>{step.description}</Box>
+                              <Box variant="h4">Actions:</Box>
+                              <ul style={{ marginLeft: '20px' }}>
+                                {step.actions?.map((action: string, idx: number) => (
+                                  <li key={idx}><Box fontSize="body-s">{action}</Box></li>
+                                ))}
+                              </ul>
+                              {step.expected && (
+                                <>
+                                  <Box variant="h4">What to Expect:</Box>
+                                  <ul style={{ marginLeft: '20px' }}>
+                                    {step.expected.map((outcome: string, idx: number) => (
+                                      <li key={idx}><Box fontSize="body-s" color="text-status-info">ℹ️ {outcome}</Box></li>
+                                    ))}
+                                  </ul>
+                                </>
+                              )}
+                            </SpaceBetween>
+                          </Container>
+                        ))}
                       </SpaceBetween>
                     </Alert>
                   )}

@@ -5,7 +5,21 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Box, SpaceBetween, StatusIndicator } from '@cloudscape-design/components';
 import { useState, useEffect } from 'react';
 
-const WORKFLOW_STAGES = [
+interface SubStep {
+  label: string;
+  icon: string;
+}
+
+interface WorkflowStage {
+  key: string;
+  label: string;
+  path: string;
+  icon: string;
+  description: string;
+  subSteps?: SubStep[];
+}
+
+const WORKFLOW_STAGES: WorkflowStage[] = [
   { 
     key: 'credentials', 
     label: 'Credentials', 
@@ -53,7 +67,13 @@ const WORKFLOW_STAGES = [
     label: 'SaaS Integration', 
     path: '/saas-integration',
     icon: '🔧',
-    description: 'Deploy Infrastructure'
+    description: 'Deploy Infrastructure',
+    subSteps: [
+      { label: 'Stack Deployment', icon: '☁️' },
+      { label: 'SNS Confirmation', icon: '📧' },
+      { label: 'Buyer Experience', icon: '🛒' },
+      { label: 'Testing Complete', icon: '✅' },
+    ]
   },
 ];
 
@@ -71,22 +91,27 @@ export default function WorkflowNav() {
     return null;
   }
 
-  const currentStepIndex = WORKFLOW_STAGES.findIndex(s => s.key === currentStep);
-
-  const getStepStatus = (stage: typeof WORKFLOW_STAGES[0], index: number) => {
-    if (completedSteps.includes(stage.key as any)) {
+  const getStepStatus = (stage: WorkflowStage, index: number) => {
+    // Check if this stage is completed
+    if (completedSteps.includes(stage.key)) {
       return 'completed';
     }
-    if (stage.key === currentStep || pathname === stage.path) {
+    // Check if this is the current page
+    if (pathname === stage.path) {
       return 'current';
     }
-    if (index < currentStepIndex) {
+    // Check if this stage index is less than current step number
+    if (index < currentStep) {
       return 'completed';
+    }
+    // Check if this stage index equals current step number
+    if (index === currentStep) {
+      return 'current';
     }
     return 'pending';
   };
 
-  const handleNavigation = (stage: typeof WORKFLOW_STAGES[0]) => {
+  const handleNavigation = (stage: WorkflowStage) => {
     router.push(stage.path);
   };
 
@@ -112,87 +137,118 @@ export default function WorkflowNav() {
           const isClickable = status === 'completed' || status === 'current';
           
           return (
-            <div
-              key={stage.key}
-              onClick={() => isClickable && handleNavigation(stage)}
-              style={{
-                padding: '12px',
-                borderRadius: '8px',
-                backgroundColor: status === 'current' ? '#fff8f0' : 'white',
-                border: status === 'current' ? '2px solid #ff9900' : '1px solid #d5dbdb',
-                cursor: isClickable ? 'pointer' : 'not-allowed',
-                opacity: status === 'pending' ? 0.6 : 1,
-                transition: 'all 0.2s ease',
-                position: 'relative',
-              }}
-              onMouseEnter={(e) => {
-                if (isClickable) {
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (isClickable) {
-                  e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                <div style={{ 
-                  fontSize: '24px',
-                  minWidth: '32px',
-                  textAlign: 'center'
-                }}>
-                  {stage.icon}
+            <div key={stage.key}>
+              <div
+                onClick={() => isClickable && handleNavigation(stage)}
+                style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  backgroundColor: status === 'current' ? '#fff8f0' : 'white',
+                  border: status === 'current' ? '2px solid #ff9900' : '1px solid #d5dbdb',
+                  cursor: isClickable ? 'pointer' : 'not-allowed',
+                  opacity: status === 'pending' ? 0.6 : 1,
+                  transition: 'all 0.2s ease',
+                  position: 'relative',
+                }}
+                onMouseEnter={(e) => {
+                  if (isClickable) {
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (isClickable) {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                  <div style={{ 
+                    fontSize: '24px',
+                    minWidth: '32px',
+                    textAlign: 'center'
+                  }}>
+                    {stage.icon}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ 
+                      fontWeight: status === 'current' ? 'bold' : '600',
+                      fontSize: '14px',
+                      color: status === 'current' ? '#ff9900' : '#232f3e',
+                      marginBottom: '4px'
+                    }}>
+                      {stage.label}
+                    </div>
+                    <div style={{ 
+                      fontSize: '12px',
+                      color: '#545b64',
+                      marginBottom: '6px'
+                    }}>
+                      {stage.description}
+                    </div>
+                    <div>
+                      {status === 'completed' && (
+                        <StatusIndicator type="success">Completed</StatusIndicator>
+                      )}
+                      {status === 'current' && (
+                        <StatusIndicator type="in-progress">In Progress</StatusIndicator>
+                      )}
+                      {status === 'pending' && (
+                        <StatusIndicator type="pending">Pending</StatusIndicator>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ 
-                    fontWeight: status === 'current' ? 'bold' : '600',
-                    fontSize: '14px',
-                    color: status === 'current' ? '#ff9900' : '#232f3e',
-                    marginBottom: '4px'
-                  }}>
-                    {stage.label}
-                  </div>
-                  <div style={{ 
-                    fontSize: '12px',
-                    color: '#545b64',
-                    marginBottom: '6px'
-                  }}>
-                    {stage.description}
-                  </div>
-                  <div>
-                    {status === 'completed' && (
-                      <StatusIndicator type="success">Completed</StatusIndicator>
-                    )}
-                    {status === 'current' && (
-                      <StatusIndicator type="in-progress">In Progress</StatusIndicator>
-                    )}
-                    {status === 'pending' && (
-                      <StatusIndicator type="pending">Pending</StatusIndicator>
-                    )}
-                  </div>
+                
+                <div style={{
+                  position: 'absolute',
+                  top: '8px',
+                  right: '8px',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  backgroundColor: status === 'completed' ? '#037f0c' : status === 'current' ? '#ff9900' : '#d5dbdb',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '12px',
+                  fontWeight: 'bold'
+                }}>
+                  {status === 'completed' ? '✓' : index + 1}
                 </div>
               </div>
               
-              <div style={{
-                position: 'absolute',
-                top: '8px',
-                right: '8px',
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                backgroundColor: status === 'completed' ? '#037f0c' : status === 'current' ? '#ff9900' : '#d5dbdb',
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '12px',
-                fontWeight: 'bold'
-              }}>
-                {status === 'completed' ? '✓' : index + 1}
-              </div>
+              {/* Show sub-steps for SaaS Integration when current */}
+              {stage.subSteps && status === 'current' && (
+                <div style={{ 
+                  marginLeft: '20px', 
+                  marginTop: '8px',
+                  paddingLeft: '16px',
+                  borderLeft: '2px solid #ff9900'
+                }}>
+                  {stage.subSteps.map((subStep, subIndex) => (
+                    <div 
+                      key={subIndex}
+                      style={{
+                        padding: '8px 12px',
+                        marginBottom: '4px',
+                        backgroundColor: 'white',
+                        borderRadius: '6px',
+                        border: '1px solid #e9ebed',
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <span style={{ fontSize: '16px' }}>{subStep.icon}</span>
+                      <span style={{ color: '#545b64' }}>{subStep.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

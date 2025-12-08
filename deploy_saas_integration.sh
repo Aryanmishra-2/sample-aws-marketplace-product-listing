@@ -11,7 +11,7 @@ TEMPLATE_FILE="deployment/cloudformation/Integration.yaml"
 # Parameters
 PRODUCT_ID="prod-cyxse6dkyvfo4"
 PRICING_MODEL="${PRICING_MODEL:-Contract-based-pricing}"  # Options: Contract-with-consumption, Contract-based-pricing, Usage-based-pricing
-UPDATE_FULFILLMENT_URL="${UPDATE_FULFILLMENT_URL:-false}"  # Set to "true" if you want to auto-update the fulfillment URL
+UPDATE_FULFILLMENT_URL="${UPDATE_FULFILLMENT_URL:-true}"  # Set to "true" if you want to auto-update the fulfillment URL
 
 # Prompt for admin email if not provided
 if [ -z "$ADMIN_EMAIL" ]; then

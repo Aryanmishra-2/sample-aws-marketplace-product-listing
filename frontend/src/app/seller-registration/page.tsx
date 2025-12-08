@@ -210,6 +210,18 @@ export default function SellerRegistrationPage() {
                                   Configure SaaS
                                 </Button>
                               )}
+                              {item.saas_integration_status === 'COMPLETED' && (
+                                <Button
+                                  variant="normal"
+                                  onClick={() => {
+                                    useStore.getState().setProductId(item.product_id);
+                                    useStore.getState().setCurrentStep('saas_deployment');
+                                    router.push(`/saas-integration?productId=${item.product_id}`);
+                                  }}
+                                >
+                                  Redeploy
+                                </Button>
+                              )}
                               {item.allowed_actions.includes('view_console') && (
                                 <Button
                                   iconName="external"

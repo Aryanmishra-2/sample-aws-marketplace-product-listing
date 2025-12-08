@@ -1241,6 +1241,458 @@ async def create_listing(data: Dict[str, Any]):
             "stages": stages
         }
 
+@app.post("/check-stack-exists")
+async def check_stack_exists(data: Dict[str, Any]):
+    """Check if a CloudFormation stack already exists"""
+    try:
+        stack_name = data.get("stack_name")
+        region = data.get("region", "us-east-1")
+        credentials = data.get("credentials", {})
+        
+        session = boto3.Session(
+            aws_access_key_id=credentials.get("aws_access_key_id"),
+            aws_secret_access_key=credentials.get("aws_secret_access_key"),
+            aws_session_token=credentials.get("aws_session_token"),
+            region_name=region
+        )
+        
+        cf_client = session.client('cloudformation')
+        
+        try:
+            response = cf_client.describe_stacks(StackName=stack_name)
+            stacks = response.get('Stacks', [])
+            
+            if stacks:
+                stack = stacks[0]
+                status = stack['StackStatus']
+                
+                # Consider stack as existing if it's not deleted
+                if status not in ['DELETE_COMPLETE', 'DELETE_FAILED']:
+                    return {
+                        "exists": True,
+                        "stack_name": stack_name,
+                        "stack_id": stack['StackId'],
+                        "status": status
+                    }
+            
+            return {"exists": False}
+            
+        except cf_client.exceptions.ClientError as e:
+            if 'does not exist' in str(e):
+                return {"exists": False}
+            raise
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to check stack: {str(e)}")
+        return {"exists": False, "error": str(e)}
+
+@app.post("/delete-stack")
+async def delete_stack(data: Dict[str, Any]):
+    """Delete a CloudFormation stack and wait for completion"""
+    try:
+        stack_name = data.get("stack_name")
+        region = data.get("region", "us-east-1")
+        credentials = data.get("credentials", {})
+        
+        print(f"[DEBUG] Deleting stack: {stack_name}")
+        
+        session = boto3.Session(
+            aws_access_key_id=credentials.get("aws_access_key_id"),
+            aws_secret_access_key=credentials.get("aws_secret_access_key"),
+            aws_session_token=credentials.get("aws_session_token"),
+            region_name=region
+        )
+        
+        cf_client = session.client('cloudformation')
+        
+        # Initiate stack deletion
+        cf_client.delete_stack(StackName=stack_name)
+        print(f"[DEBUG] Stack deletion initiated")
+        
+        # Wait for deletion to complete (with timeout)
+        max_wait = 600  # 10 minutes
+        wait_interval = 10  # 10 seconds
+        elapsed = 0
+        
+        while elapsed < max_wait:
+            try:
+                response = cf_client.describe_stacks(StackName=stack_name)
+                status = response['Stacks'][0]['StackStatus']
+                
+                print(f"[DEBUG] Stack status: {status}")
+                
+                if status == 'DELETE_COMPLETE':
+                    print(f"[DEBUG] Stack deleted successfully")
+                    return {"success": True, "message": "Stack deleted successfully"}
+                elif status == 'DELETE_FAILED':
+                    return {"success": False, "error": "Stack deletion failed"}
+                
+                import time
+                time.sleep(wait_interval)
+                elapsed += wait_interval
+                
+            except cf_client.exceptions.ClientError as e:
+                if 'does not exist' in str(e):
+                    print(f"[DEBUG] Stack deleted successfully")
+                    return {"success": True, "message": "Stack deleted successfully"}
+                raise
+        
+        return {"success": False, "error": "Stack deletion timeout"}
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to delete stack: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/run-buyer-experience")
+async def run_buyer_experience(data: Dict[str, Any]):
+    """Run buyer experience simulation and route to appropriate next step based on pricing model"""
+    try:
+        credentials = data.get("credentials", {})
+        product_id = data.get("product_id")
+        
+        access_key = credentials.get("aws_access_key_id")
+        secret_key = credentials.get("aws_secret_access_key")
+        session_token = credentials.get("aws_session_token")
+        
+        # Import buyer experience agent
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agents'))
+        from buyer_experience import BuyerExperienceAgent
+        
+        # Run buyer experience simulation
+        agent = BuyerExperienceAgent()
+        buyer_result = agent.simulate_buyer_journey(access_key, secret_key, session_token)
+        
+        if buyer_result.get("status") != "success":
+            return {
+                "success": False,
+                "error": "Buyer experience simulation did not complete successfully",
+                "buyer_result": buyer_result
+            }
+        
+        # Fetch pricing model to determine next step
+        print(f"[DEBUG] Fetching pricing model for product: {product_id}")
+        pricing_model = None
+        
+        try:
+            session = boto3.Session(
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                aws_session_token=session_token,
+                region_name='us-east-1'
+            )
+            
+            catalog_client = session.client('marketplace-catalog')
+            
+            # Find the entity
+            list_response = catalog_client.list_entities(
+                Catalog='AWSMarketplace',
+                EntityType='SaaSProduct',
+                MaxResults=50
+            )
+            
+            entity_id = None
+            for entity in list_response.get('EntitySummaryList', []):
+                eid = entity.get('EntityId', '')
+                if eid.startswith(product_id):
+                    entity_id = eid
+                    break
+            
+            if entity_id:
+                describe_response = catalog_client.describe_entity(
+                    Catalog='AWSMarketplace',
+                    EntityId=entity_id
+                )
+                
+                details = describe_response.get('Details', '{}')
+                if isinstance(details, str):
+                    details = json.loads(details)
+                
+                # Check pricing terms
+                pricing_terms = details.get('PricingTerms', [])
+                has_usage_based = False
+                has_contract = False
+                
+                for term in pricing_terms:
+                    term_type = term.get('Type', '')
+                    if term_type == 'UsageBasedPricingTerm':
+                        has_usage_based = True
+                    elif term_type in ['ConfigurableUpfrontPricingTerm', 'FixedUpfrontPricingTerm']:
+                        has_contract = True
+                
+                # Determine pricing model
+                if has_usage_based and has_contract:
+                    pricing_model = "Contract-with-consumption"
+                elif has_usage_based:
+                    pricing_model = "Usage-based-pricing"
+                elif has_contract:
+                    pricing_model = "Contract-based-pricing"
+                else:
+                    # Check dimensions as fallback
+                    dimensions = details.get('Dimensions', [])
+                    for dim in dimensions:
+                        dim_types = dim.get('Types', [])
+                        if 'Metered' in dim_types:
+                            pricing_model = "Usage-based-pricing"
+                            break
+                        elif 'Entitled' in dim_types:
+                            pricing_model = "Contract-based-pricing"
+                            break
+        
+        except Exception as e:
+            print(f"[WARNING] Failed to fetch pricing model: {str(e)}")
+        
+        if not pricing_model:
+            pricing_model = "Contract-based-pricing"  # Default
+        
+        print(f"[DEBUG] Pricing model: {pricing_model}")
+        
+        # Route to appropriate agent based on pricing model
+        next_step = None
+        next_step_result = None
+        
+        if pricing_model in ["Usage-based-pricing", "Contract-with-consumption"]:
+            # Route to metering agent
+            print("[DEBUG] Routing to metering agent...")
+            from metering import MeteringAgent
+            
+            metering_agent = MeteringAgent()
+            metering_result = metering_agent.check_entitlement_and_add_metering(
+                access_key, secret_key, session_token
+            )
+            
+            next_step = "metering"
+            next_step_result = metering_result
+            
+        else:  # Contract-based-pricing
+            # Route to public visibility agent
+            print("[DEBUG] Routing to public visibility agent...")
+            from public_visibility import PublicVisibilityAgent
+            
+            visibility_agent = PublicVisibilityAgent()
+            visibility_result = visibility_agent.raise_public_visibility_request(
+                access_key, secret_key, session_token
+            )
+            
+            next_step = "public_visibility"
+            next_step_result = visibility_result
+        
+        return {
+            "success": True,
+            "buyer_result": buyer_result,
+            "pricing_model": pricing_model,
+            "next_step": next_step,
+            "next_step_result": next_step_result
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] run_buyer_experience failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.post("/buyer-experience-guide")
+async def buyer_experience_guide(data: Dict[str, Any]):
+    """Get buyer experience simulation guide"""
+    try:
+        # Import buyer experience agent
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agents'))
+        from buyer_experience import BuyerExperienceAgent
+        
+        agent = BuyerExperienceAgent()
+        checklist = agent.get_simulation_checklist()
+        
+        return {
+            "success": True,
+            "checklist": checklist,
+            "steps": [
+                {
+                    "step": 1,
+                    "title": "Access Product in AWS Marketplace Management Portal",
+                    "description": "Open AWS Marketplace Management Portal and navigate to your SaaS product listing",
+                    "actions": [
+                        "Open AWS Marketplace Management Portal",
+                        "Navigate to your SaaS product listing",
+                        "Select your product"
+                    ]
+                },
+                {
+                    "step": 2,
+                    "title": "Validate Fulfillment URL Update",
+                    "description": "Check that the fulfillment URL was updated successfully",
+                    "actions": [
+                        "Go to the 'Request Log' tab",
+                        "Check that the last request status is 'Succeeded'",
+                        "This confirms the fulfillment URL was updated"
+                    ]
+                },
+                {
+                    "step": 3,
+                    "title": "Review Product Information",
+                    "description": "Verify your product information is accurate",
+                    "actions": [
+                        "Select 'View on AWS Marketplace'",
+                        "Review product information",
+                        "Verify pricing, description, and features"
+                    ]
+                },
+                {
+                    "step": 4,
+                    "title": "Simulate Purchase Process",
+                    "description": "Test the buyer purchase flow",
+                    "actions": [
+                        "Select 'View purchase options'",
+                        "Under 'How long do you want your contract to run?', select '1 month'",
+                        "Set 'Renewal Settings' to 'No'",
+                        "Under 'Contract Options', set any option quantity to 1",
+                        "Select 'Create contract' then 'Pay now'"
+                    ]
+                },
+                {
+                    "step": 5,
+                    "title": "Account Setup and Registration",
+                    "description": "Complete the registration process",
+                    "actions": [
+                        "Select 'Set up your account'",
+                        "You'll be redirected to your custom registration page",
+                        "Fill in the registration information (company name, email, etc.)",
+                        "Select 'Register'"
+                    ]
+                },
+                {
+                    "step": 6,
+                    "title": "Verify Registration Success",
+                    "description": "Confirm the registration completed successfully",
+                    "expected": [
+                        "Blue banner appears confirming successful registration",
+                        "Email notification sent to your admin email",
+                        "Customer record created in DynamoDB"
+                    ]
+                }
+            ]
+        }
+    except Exception as e:
+        print(f"[ERROR] Failed to get buyer experience guide: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/metering-guide")
+async def metering_guide(data: Dict[str, Any]):
+    """Get metering setup guide for usage-based pricing"""
+    try:
+        return {
+            "success": True,
+            "steps": [
+                {
+                    "step": 1,
+                    "title": "Check Customer Entitlement",
+                    "description": "Verify customer records exist in DynamoDB",
+                    "actions": [
+                        "Open AWS Console → DynamoDB",
+                        "Find the 'NewSubscribers' or 'AWSMarketplaceSubscribers' table",
+                        "Verify customer records exist from your test purchase",
+                        "Note the customerIdentifier for metering"
+                    ]
+                },
+                {
+                    "step": 2,
+                    "title": "Create Metering Records",
+                    "description": "Add usage records to the metering table",
+                    "actions": [
+                        "Find the 'AWSMarketplaceMeteringRecords' table",
+                        "Metering records are automatically created when customers use your service",
+                        "For testing, records can be manually added with usage dimensions"
+                    ]
+                },
+                {
+                    "step": 3,
+                    "title": "Trigger Metering Lambda",
+                    "description": "Process metering records and send to AWS Marketplace",
+                    "actions": [
+                        "Open AWS Console → Lambda",
+                        "Find the Lambda function with 'Hourly' in the name",
+                        "Click 'Test' to manually trigger the function",
+                        "Lambda will call BatchMeterUsage API to report usage to AWS Marketplace"
+                    ]
+                },
+                {
+                    "step": 4,
+                    "title": "Verify Metering Success",
+                    "description": "Confirm usage was reported successfully",
+                    "expected": [
+                        "Lambda execution succeeds without errors",
+                        "Metering records updated with metering_failed=False",
+                        "BatchMeterUsage response stored in records",
+                        "Usage appears in AWS Marketplace billing"
+                    ]
+                }
+            ]
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/public-visibility-guide")
+async def public_visibility_guide(data: Dict[str, Any]):
+    """Get public visibility request guide for contract-based pricing"""
+    try:
+        return {
+            "success": True,
+            "steps": [
+                {
+                    "step": 1,
+                    "title": "Prepare Product Information",
+                    "description": "Ensure all product details are finalized",
+                    "actions": [
+                        "Review product title, description, and features",
+                        "Verify pricing information is accurate",
+                        "Ensure all required documentation is uploaded",
+                        "Confirm support contact information is correct"
+                    ]
+                },
+                {
+                    "step": 2,
+                    "title": "Submit Public Visibility Request",
+                    "description": "Request to make your product publicly available",
+                    "actions": [
+                        "Open AWS Marketplace Management Portal",
+                        "Navigate to your product",
+                        "Go to 'Requests' tab",
+                        "Click 'Request changes to current version'",
+                        "Select 'Update product information'",
+                        "Change visibility from 'Limited' to 'Public'",
+                        "Submit the request"
+                    ]
+                },
+                {
+                    "step": 3,
+                    "title": "AWS Review Process",
+                    "description": "AWS will review your public visibility request",
+                    "expected": [
+                        "Review typically takes 1-3 business days",
+                        "You'll receive email notifications about the status",
+                        "AWS may request additional information or changes",
+                        "Once approved, your product will be publicly visible"
+                    ]
+                },
+                {
+                    "step": 4,
+                    "title": "Post-Approval Actions",
+                    "description": "After your product goes public",
+                    "actions": [
+                        "Verify product appears in AWS Marketplace search",
+                        "Test the public product page",
+                        "Monitor for customer subscriptions",
+                        "Respond to customer inquiries promptly"
+                    ]
+                }
+            ]
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 @app.post("/deploy-saas")
 async def deploy_saas(data: Dict[str, Any]):
     """Deploy SaaS integration - starts CloudFormation stack and returns immediately"""
