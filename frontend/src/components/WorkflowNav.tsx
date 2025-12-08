@@ -77,7 +77,11 @@ const WORKFLOW_STAGES: WorkflowStage[] = [
   },
 ];
 
-export default function WorkflowNav() {
+interface WorkflowNavProps {
+  currentSubStep?: number; // For SaaS Integration sub-steps (0-3)
+}
+
+export default function WorkflowNav({ currentSubStep = 0 }: WorkflowNavProps = {}) {
   const { accountInfo, currentStep, completedSteps } = useStore();
   const router = useRouter();
   const pathname = usePathname();
@@ -228,25 +232,44 @@ export default function WorkflowNav() {
                   paddingLeft: '16px',
                   borderLeft: '2px solid #ff9900'
                 }}>
-                  {stage.subSteps.map((subStep, subIndex) => (
-                    <div 
-                      key={subIndex}
-                      style={{
-                        padding: '8px 12px',
-                        marginBottom: '4px',
-                        backgroundColor: 'white',
-                        borderRadius: '6px',
-                        border: '1px solid #e9ebed',
-                        fontSize: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}
-                    >
-                      <span style={{ fontSize: '16px' }}>{subStep.icon}</span>
-                      <span style={{ color: '#545b64' }}>{subStep.label}</span>
-                    </div>
-                  ))}
+                  {stage.subSteps.map((subStep, subIndex) => {
+                    const isCompleted = subIndex < currentSubStep;
+                    const isCurrent = subIndex === currentSubStep;
+                    const isPending = subIndex > currentSubStep;
+                    
+                    return (
+                      <div 
+                        key={subIndex}
+                        style={{
+                          padding: '8px 12px',
+                          marginBottom: '4px',
+                          backgroundColor: isCurrent ? '#fff8f0' : 'white',
+                          borderRadius: '6px',
+                          border: isCurrent ? '2px solid #ff9900' : isCompleted ? '1px solid #037f0c' : '1px solid #e9ebed',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          opacity: isPending ? 0.6 : 1,
+                        }}
+                      >
+                        <span style={{ fontSize: '16px' }}>{subStep.icon}</span>
+                        <span style={{ 
+                          color: isCurrent ? '#ff9900' : isCompleted ? '#037f0c' : '#545b64',
+                          fontWeight: isCurrent ? 'bold' : 'normal',
+                          flex: 1
+                        }}>
+                          {subStep.label}
+                        </span>
+                        {isCompleted && (
+                          <span style={{ color: '#037f0c', fontSize: '14px', fontWeight: 'bold' }}>✓</span>
+                        )}
+                        {isCurrent && (
+                          <span style={{ color: '#ff9900', fontSize: '10px' }}>●</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

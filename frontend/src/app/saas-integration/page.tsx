@@ -78,6 +78,7 @@ export default function SaaSIntegrationPage() {
   const [meteringSteps, setMeteringSteps] = useState<any[]>([]);
   const [showVisibilityGuide, setShowVisibilityGuide] = useState(false);
   const [visibilitySteps, setVisibilitySteps] = useState<any[]>([]);
+  const [currentSubStep, setCurrentSubStep] = useState(0); // Track current sub-step (0-3)
 
   useEffect(() => {
     if (!isAuthenticated || !productId) {
@@ -97,7 +98,17 @@ export default function SaaSIntegrationPage() {
       setSecretKey(credentials.aws_secret_access_key || '');
       setSessionToken(credentials.aws_session_token || '');
     }
-  }, [isAuthenticated, productId, credentials, router, urlProductId, storeProductId, setProductId]);
+
+    // Check if coming from "Continue" button (stack already exists)
+    const skipDeployment = searchParams.get('skipDeployment');
+    if (skipDeployment === 'true') {
+      // Stack already exists, skip to SNS confirmation
+      setSuccess(true);
+      setDeployedStackName(`saas-integration-${productId}`);
+      setCurrentSubStep(1); // Start at SNS Confirmation
+      setShowSnsConfirmation(true);
+    }
+  }, [isAuthenticated, productId, credentials, router, urlProductId, storeProductId, setProductId, searchParams]);
 
   useEffect(() => {
     if (loading && startTime) {
@@ -144,6 +155,7 @@ export default function SaaSIntegrationPage() {
               setDeploymentProgress(100);
               setSuccess(true);
               setLoading(false);
+              setCurrentSubStep(0); // Stack Deployment complete
               clearInterval(pollInterval);
             } else if (status.includes('FAILED') || status.includes('ROLLBACK')) {
               // Mark all in-progress stages as error
@@ -289,8 +301,10 @@ export default function SaaSIntegrationPage() {
   const handleDeleteStack = async () => {
     setDeleting(true);
     setError('');
+    setShowDeleteConfirm(false);
     
     try {
+      // Initiate deletion (non-blocking)
       const response = await axios.post('/api/delete-stack', {
         stack_name: existingStackId,
         region: region.value,
@@ -301,17 +315,65 @@ export default function SaaSIntegrationPage() {
         },
       });
       
-      if (response.data.success) {
-        setShowDeleteConfirm(false);
-        setDeleting(false);
-        // Now proceed with deployment
-        await deployStack();
-      } else {
-        throw new Error(response.data.error || 'Failed to delete stack');
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to initiate stack deletion');
       }
+
+      // Poll for deletion completion
+      const stackNameToCheck = response.data.stack_name || existingStackId;
+      let deleteComplete = false;
+      let pollCount = 0;
+      const maxPolls = 120; // 10 minutes at 5s intervals
+      
+      while (!deleteComplete && pollCount < maxPolls) {
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+        pollCount++;
+        
+        try {
+          const statusResponse = await axios.post('/api/get-stack-status', {
+            stack_name: stackNameToCheck,
+            region: region.value,
+            credentials: {
+              aws_access_key_id: accessKey,
+              aws_secret_access_key: secretKey,
+              aws_session_token: sessionToken || undefined,
+            },
+          });
+          
+          const status = statusResponse.data.stack_status;
+          
+          if (status === 'DELETE_COMPLETE' || status === 'NOT_FOUND') {
+            deleteComplete = true;
+            console.log('[DEBUG] Stack deleted successfully');
+          } else if (status === 'DELETE_FAILED') {
+            throw new Error('Stack deletion failed');
+          } else {
+            console.log(`[DEBUG] Deletion in progress: ${status} (${pollCount * 5}s elapsed)`);
+          }
+        } catch (err: any) {
+          // If stack not found, deletion is complete
+          if (err.response?.data?.stack_status === 'NOT_FOUND') {
+            deleteComplete = true;
+            console.log('[DEBUG] Stack deleted successfully (not found)');
+          } else {
+            console.error('[DEBUG] Error checking deletion status:', err);
+          }
+        }
+      }
+      
+      if (!deleteComplete) {
+        throw new Error('Stack deletion timed out after 10 minutes');
+      }
+      
+      setDeleting(false);
+      
+      // Now proceed with deployment
+      await deployStack();
+      
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to delete stack');
       setDeleting(false);
+      setShowDeleteConfirm(true); // Show confirmation again on error
     }
   };
 
@@ -358,6 +420,7 @@ export default function SaaSIntegrationPage() {
         setCfStatus('CREATE_COMPLETE');
         // Mark all stages as completed
         setDeploymentStages(INITIAL_STAGES.map(s => ({ ...s, status: 'completed' as const, message: '✓ Complete' })));
+        setCurrentSubStep(0); // Stack Deployment complete
       }
       
       // Otherwise, polling will continue via useEffect
@@ -402,7 +465,7 @@ export default function SaaSIntegrationPage() {
 
   return (
     <AppLayout
-        navigation={<WorkflowNav />}
+        navigation={<WorkflowNav currentSubStep={currentSubStep} />}
         toolsHide
         breadcrumbs={
           <BreadcrumbGroup
@@ -433,15 +496,77 @@ export default function SaaSIntegrationPage() {
                 actions={
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button onClick={handleBack}>← Back</Button>
-                    {success && !showSnsConfirmation && <Button variant="primary" onClick={() => setShowSnsConfirmation(true)}>Continue →</Button>}
+                    {success && !showSnsConfirmation && <Button variant="primary" onClick={() => { setShowSnsConfirmation(true); setCurrentSubStep(1); }}>Continue →</Button>}
                     {!success && <Button variant="primary" onClick={handleDeploy} loading={loading} disabled={loading}>Deploy Stack 🚀</Button>}
                   </SpaceBetween>
                 }
               >
                 <SpaceBetween size="l">
+                  {!success && !loading && !showDeleteConfirm && !deleting && (
+                    <Alert type="info" header="📋 Complete SaaS Integration Workflow">
+                      <SpaceBetween size="m">
+                        <Box>
+                          After deploying the CloudFormation stack, you'll complete the following steps to fully integrate your SaaS product with AWS Marketplace:
+                        </Box>
+                        
+                        <Container>
+                          <SpaceBetween size="s">
+                            <Box variant="h4">Step 1: Deploy Infrastructure (5-10 minutes)</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              CloudFormation will create DynamoDB tables, Lambda functions, API Gateway, SNS topics, and IAM roles for your SaaS integration.
+                            </Box>
+                          </SpaceBetween>
+                        </Container>
+
+                        <Container>
+                          <SpaceBetween size="s">
+                            <Box variant="h4">Step 2: Confirm SNS Subscription</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              You'll receive an email to confirm your SNS subscription. This enables notifications for marketplace events like new subscriptions and entitlement changes.
+                            </Box>
+                          </SpaceBetween>
+                        </Container>
+
+                        <Container>
+                          <SpaceBetween size="s">
+                            <Box variant="h4">Step 3: Test Buyer Experience</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              Simulate the complete buyer journey by purchasing your product on AWS Marketplace, registering, and verifying the integration works end-to-end.
+                            </Box>
+                          </SpaceBetween>
+                        </Container>
+
+                        <Container>
+                          <SpaceBetween size="s">
+                            <Box variant="h4">Step 4: Complete Testing (Pricing-Based)</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              Based on your pricing model, you'll either:
+                            </Box>
+                            <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
+                              <li>
+                                <Box fontSize="body-s">
+                                  <strong>Usage-Based Pricing:</strong> Configure metering to track customer usage and bill accordingly
+                                </Box>
+                              </li>
+                              <li>
+                                <Box fontSize="body-s">
+                                  <strong>Contract-Based Pricing:</strong> Submit a public visibility request to make your product publicly available
+                                </Box>
+                              </li>
+                            </ul>
+                          </SpaceBetween>
+                        </Container>
+
+                        <Box color="text-status-info" fontSize="body-s">
+                          ℹ️ Total time: 15-30 minutes including deployment and testing
+                        </Box>
+                      </SpaceBetween>
+                    </Alert>
+                  )}
+
                   {error && <Alert type="error" dismissible onDismiss={() => setError('')}>{error}</Alert>}
 
-                  {showDeleteConfirm && (
+                  {showDeleteConfirm && !deleting && (
                     <Alert
                       type="warning"
                       header="⚠️ Stack Already Exists"
@@ -449,15 +574,57 @@ export default function SaaSIntegrationPage() {
                         <SpaceBetween direction="horizontal" size="xs">
                           <Button onClick={() => router.push('/seller-registration')} disabled={deleting}>Cancel</Button>
                           <Button variant="primary" onClick={handleDeleteStack} loading={deleting}>Delete and Redeploy</Button>
+                          <Button 
+                            variant="normal" 
+                            onClick={() => {
+                              // Skip deletion, go directly to SNS confirmation workflow
+                              setShowDeleteConfirm(false);
+                              setSuccess(true);
+                              setDeployedStackName(`saas-integration-${productId}`);
+                              setCurrentSubStep(1);
+                              setShowSnsConfirmation(true);
+                            }}
+                          >
+                            Use Existing Stack →
+                          </Button>
                         </SpaceBetween>
                       }
                     >
                       <SpaceBetween size="s">
                         <Box>A CloudFormation stack with this product ID already exists:</Box>
                         <Box fontWeight="bold">{existingStackId}</Box>
-                        <Box>Would you like to delete the existing stack and deploy a new one?</Box>
+                        <Box>Choose an option:</Box>
+                        <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
+                          <li>
+                            <Box fontWeight="bold">Delete and Redeploy</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              Delete the existing stack and deploy a fresh one (10-20 minutes)
+                            </Box>
+                          </li>
+                          <li style={{ marginTop: '8px' }}>
+                            <Box fontWeight="bold">Use Existing Stack</Box>
+                            <Box fontSize="body-s" color="text-body-secondary">
+                              Keep the existing stack and proceed to SNS confirmation and buyer experience workflow (instant)
+                            </Box>
+                          </li>
+                        </ul>
                         <Box color="text-status-warning" fontSize="body-s">
-                          ⚠️ Warning: This will delete all existing resources including DynamoDB tables, Lambda functions, and API Gateway endpoints.
+                          ⚠️ Warning: "Delete and Redeploy" will delete all existing resources including DynamoDB tables, Lambda functions, and API Gateway endpoints.
+                        </Box>
+                      </SpaceBetween>
+                    </Alert>
+                  )}
+
+                  {deleting && (
+                    <Alert type="info" header="🗑️ Deleting Existing Stack">
+                      <SpaceBetween size="m">
+                        <Box textAlign="center"><Spinner size="large" /></Box>
+                        <Box>Deleting CloudFormation stack: <strong>{existingStackId}</strong></Box>
+                        <Box fontSize="body-s" color="text-body-secondary">
+                          This may take 5-10 minutes. The stack and all its resources (DynamoDB tables, Lambda functions, API Gateway, etc.) are being removed.
+                        </Box>
+                        <Box fontSize="body-s" color="text-status-info">
+                          ℹ️ Once deletion is complete, a new stack will be deployed automatically.
                         </Box>
                       </SpaceBetween>
                     </Alert>
@@ -513,19 +680,11 @@ export default function SaaSIntegrationPage() {
                       type="info" 
                       header="📧 Confirm Amazon SNS Subscription"
                       action={
-                        <Button variant="primary" onClick={async () => {
-                          setLoading(true);
-                          try {
-                            const response = await axios.post('/api/buyer-experience-guide', {});
-                            if (response.data.success && response.data.steps) {
-                              setBuyerSteps(response.data.steps);
-                            }
-                          } catch (err) {
-                            console.error('Failed to load buyer experience guide:', err);
-                          } finally {
-                            setLoading(false);
-                            setShowBuyerExperience(true);
-                          }
+                        <Button variant="primary" onClick={() => {
+                          // Simply show the buyer experience section
+                          // Steps are displayed as fallback (no API call needed)
+                          setShowBuyerExperience(true);
+                          setCurrentSubStep(2); // Move to Buyer Experience
                         }}>
                           I've Confirmed →
                         </Button>
@@ -596,6 +755,7 @@ export default function SaaSIntegrationPage() {
                                 if (meteringResponse.data.success) {
                                   setMeteringSteps(meteringResponse.data.steps);
                                   setShowMeteringGuide(true);
+                                  setCurrentSubStep(3); // Move to Testing Complete
                                 }
                               } else if (nextStep === 'public_visibility') {
                                 // Contract-based - show public visibility guide
@@ -603,6 +763,7 @@ export default function SaaSIntegrationPage() {
                                 if (visibilityResponse.data.success) {
                                   setVisibilitySteps(visibilityResponse.data.steps);
                                   setShowVisibilityGuide(true);
+                                  setCurrentSubStep(3); // Move to Testing Complete
                                 }
                               }
                             } else {
@@ -624,29 +785,88 @@ export default function SaaSIntegrationPage() {
                           Now let's test your SaaS integration by simulating the buyer experience. Follow these steps to ensure everything works correctly:
                         </Box>
                         
-                        {buyerSteps.map((step, index) => (
-                          <Container key={index} header={<Header variant="h3">Step {step.step}: {step.title}</Header>}>
-                            <SpaceBetween size="s">
-                              <Box>{step.description}</Box>
-                              <Box variant="h4">Actions:</Box>
-                              <ul style={{ marginLeft: '20px' }}>
-                                {step.actions?.map((action: string, idx: number) => (
-                                  <li key={idx}><Box fontSize="body-s">{action}</Box></li>
-                                ))}
-                              </ul>
-                              {step.expected && (
-                                <>
-                                  <Box variant="h4">Expected Outcomes:</Box>
-                                  <ul style={{ marginLeft: '20px' }}>
-                                    {step.expected.map((outcome: string, idx: number) => (
-                                      <li key={idx}><Box fontSize="body-s" color="text-status-success">✓ {outcome}</Box></li>
-                                    ))}
-                                  </ul>
-                                </>
-                              )}
-                            </SpaceBetween>
-                          </Container>
-                        ))}
+                        {buyerSteps.length > 0 ? (
+                          buyerSteps.map((step, index) => (
+                            <Container key={index} header={<Header variant="h3">Step {step.step}: {step.title}</Header>}>
+                              <SpaceBetween size="s">
+                                <Box>{step.description}</Box>
+                                <Box variant="h4">Actions:</Box>
+                                <ul style={{ marginLeft: '20px' }}>
+                                  {step.actions?.map((action: string, idx: number) => (
+                                    <li key={idx}><Box fontSize="body-s">{action}</Box></li>
+                                  ))}
+                                </ul>
+                                {step.expected && (
+                                  <>
+                                    <Box variant="h4">Expected Outcomes:</Box>
+                                    <ul style={{ marginLeft: '20px' }}>
+                                      {step.expected.map((outcome: string, idx: number) => (
+                                        <li key={idx}><Box fontSize="body-s" color="text-status-success">✓ {outcome}</Box></li>
+                                      ))}
+                                    </ul>
+                                  </>
+                                )}
+                              </SpaceBetween>
+                            </Container>
+                          ))
+                        ) : (
+                          <Box>
+                            <Box variant="h4">Follow these steps to test your buyer experience:</Box>
+                            <ol style={{ marginLeft: '20px', marginTop: '12px' }}>
+                              <li>
+                                <Box fontWeight="bold">Open SaaS product page in the AWS Marketplace Management Portal</Box>
+                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
+                                  Select the product you created in the Lab: Create a SaaS listing.
+                                </Box>
+                              </li>
+                              <li>
+                                <Box fontWeight="bold">Validate fulfillment URL update</Box>
+                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
+                                  In the Request Log tab, validate that the last request's status is Succeeded. Because the solution updates your AWS Marketplace product's fulfillment URL, you need to make sure this is completed before continuing.
+                                </Box>
+                              </li>
+                              <li>
+                                <Box fontWeight="bold">View product on AWS Marketplace</Box>
+                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
+                                  Select View on AWS Marketplace.
+                                </Box>
+                              </li>
+                              <li>
+                                <Box fontWeight="bold">Start purchase process</Box>
+                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
+                                  Select View purchase options.
+                                </Box>
+                              </li>
+                              <li>
+                                <Box fontWeight="bold">Configure contract</Box>
+                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs' }}>
+                                  • Under "How long do you want your contract to run?", select 1 month<br/>
+                                  • Set your Renewal Settings to No<br/>
+                                  • Under Contract Options, set any option quantity to 1 (or select the cheapest option tier, if applicable)
+                                </Box>
+                              </li>
+                              <li>
+                                <Box fontWeight="bold" padding={{ top: 's' }}>Create contract</Box>
+                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
+                                  Select Create contract and then Pay now.
+                                </Box>
+                              </li>
+                              <li>
+                                <Box fontWeight="bold">Set up your account</Box>
+                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
+                                  Select Set up your account. Fill the information in the registration page. Select Register.
+                                </Box>
+                              </li>
+                              <li>
+                                <Box fontWeight="bold">Verify success</Box>
+                                <Box fontSize="body-s" color="text-status-success" padding={{ top: 'xs' }}>
+                                  ✓ After a few seconds, a blue banner should appear letting you know that the registration has completed successfully<br/>
+                                  ✓ You should have an email with the subscription details in your notification email inbox
+                                </Box>
+                              </li>
+                            </ol>
+                          </Box>
+                        )}
                         
                         <Box color="text-status-info" fontSize="body-s">
                           ℹ️ Complete all steps to verify your SaaS integration is working correctly. You should receive email notifications and see customer records in DynamoDB.

@@ -1305,39 +1305,17 @@ async def delete_stack(data: Dict[str, Any]):
         
         cf_client = session.client('cloudformation')
         
-        # Initiate stack deletion
+        # Initiate stack deletion (non-blocking)
         cf_client.delete_stack(StackName=stack_name)
-        print(f"[DEBUG] Stack deletion initiated")
+        print(f"[DEBUG] Stack deletion initiated for: {stack_name}")
         
-        # Wait for deletion to complete (with timeout)
-        max_wait = 600  # 10 minutes
-        wait_interval = 10  # 10 seconds
-        elapsed = 0
-        
-        while elapsed < max_wait:
-            try:
-                response = cf_client.describe_stacks(StackName=stack_name)
-                status = response['Stacks'][0]['StackStatus']
-                
-                print(f"[DEBUG] Stack status: {status}")
-                
-                if status == 'DELETE_COMPLETE':
-                    print(f"[DEBUG] Stack deleted successfully")
-                    return {"success": True, "message": "Stack deleted successfully"}
-                elif status == 'DELETE_FAILED':
-                    return {"success": False, "error": "Stack deletion failed"}
-                
-                import time
-                time.sleep(wait_interval)
-                elapsed += wait_interval
-                
-            except cf_client.exceptions.ClientError as e:
-                if 'does not exist' in str(e):
-                    print(f"[DEBUG] Stack deleted successfully")
-                    return {"success": True, "message": "Stack deleted successfully"}
-                raise
-        
-        return {"success": False, "error": "Stack deletion timeout"}
+        # Return immediately - frontend will poll for status
+        return {
+            "success": True, 
+            "message": "Stack deletion initiated",
+            "stack_name": stack_name,
+            "status": "DELETE_IN_PROGRESS"
+        }
         
     except Exception as e:
         print(f"[ERROR] Failed to delete stack: {str(e)}")
