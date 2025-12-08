@@ -16,18 +16,34 @@ class ServerlessSaasIntegrationAgent(Agent):
         self.workflow_orchestrator = WorkflowOrchestrator()
     
     @tool
-    def deploy_integration(self, access_key, secret_key, session_token=None):
+    def deploy_integration(self, access_key, secret_key, session_token=None, product_id=None):
         """Deploy AWS Marketplace SaaS integration with complete automated workflow"""
         
         print("=== Starting AWS Marketplace SaaS Integration Deployment ===")
         
-        # Get configuration from create_saas agent
+        # Set credentials and product ID in create_saas agent
+        self.create_saas_agent.set_credentials(access_key, secret_key, session_token)
+        if product_id:
+            self.create_saas_agent.set_product_id(product_id)
+        
+        # Get configuration from create_saas agent (will fetch from marketplace)
         product_id = self.create_saas_agent.get_product_id()
+        
+        print(f"\n=== Fetching Pricing Model from AWS Marketplace ===")
+        print(f"Product ID: {product_id}")
         pricing_model = self.create_saas_agent.get_pricing_model_dimension()
+        
+        if not pricing_model:
+            print(f"  ✗ Failed to fetch pricing model from marketplace")
+            print(f"  → Using default: Usage-based-pricing")
+            pricing_model = "Usage-based-pricing"
+        
         email_id = self.create_saas_agent.get_email_dimension()
         
+        print(f"\n=== Configuration Summary ===")
         print(f"Product ID: {product_id}")
         print(f"Pricing Model: {pricing_model}")
+        print(f"TypeOfSaaSListing will be: {self._get_saas_listing_type(pricing_model)}")
         print(f"Admin Email: {email_id}")
         
         # Validate credentials before deployment
@@ -56,6 +72,30 @@ class ServerlessSaasIntegrationAgent(Agent):
             aws_session_token=session_token
         )
         
+        # Check if stack already exists and delete it if needed
+        stack_name = f"saas-integration-{product_id}"
+        print(f"\nChecking if stack '{stack_name}' already exists...")
+        
+        if self._stack_exists(cf_client, stack_name):
+            print(f"  ⚠️  Stack '{stack_name}' already exists")
+            print("  → Deleting existing stack before redeployment...")
+            
+            try:
+                cf_client.delete_stack(StackName=stack_name)
+                print("  → Waiting for stack deletion to complete...")
+                
+                deletion_status = self._wait_for_stack_deletion(cf_client, stack_name)
+                if deletion_status == 'DELETED':
+                    print("  ✓ Existing stack deleted successfully")
+                else:
+                    print(f"  ✗ Stack deletion failed with status: {deletion_status}")
+                    return {"error": f"Failed to delete existing stack: {deletion_status}"}
+            except Exception as e:
+                print(f"  ✗ Error deleting stack: {str(e)}")
+                return {"error": f"Failed to delete existing stack: {str(e)}"}
+        else:
+            print("  ✓ No existing stack found, proceeding with deployment")
+        
         # Deploy AWS Marketplace SaaS integration CloudFormation template
         print("\nDeploying CloudFormation stack...")
         print("  → Creating DynamoDB tables for subscribers and metering")
@@ -67,12 +107,13 @@ class ServerlessSaasIntegrationAgent(Agent):
             template = f.read()
         
         response = cf_client.create_stack(
-            StackName=f"saas-integration-{product_id}",
+            StackName=stack_name,
             TemplateBody=template,
             Parameters=[
                 {'ParameterKey': 'ProductId', 'ParameterValue': product_id},
                 {'ParameterKey': 'PricingModel', 'ParameterValue': pricing_model},
-                {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': email_id}
+                {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': email_id},
+                {'ParameterKey': 'UpdateFulfillmentURL', 'ParameterValue': 'true'}
             ],
             Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND']
         )
@@ -429,6 +470,65 @@ class ServerlessSaasIntegrationAgent(Agent):
                 'success': False,
                 'error': str(e)
             }
+    
+    def _get_saas_listing_type(self, pricing_model):
+        """Map pricing model to TypeOfSaaSListing value"""
+        mapping = {
+            'Usage-based-pricing': 'subscriptions',
+            'Contract-based-pricing': 'contracts',
+            'Contract-with-consumption': 'contracts_with_subscription'
+        }
+        return mapping.get(pricing_model, 'subscriptions')
+    
+    def _stack_exists(self, cf_client, stack_name):
+        """Check if a CloudFormation stack exists"""
+        try:
+            response = cf_client.describe_stacks(StackName=stack_name)
+            stacks = response.get('Stacks', [])
+            if stacks:
+                status = stacks[0]['StackStatus']
+                # Consider stack as existing if it's not in a deleted state
+                if status not in ['DELETE_COMPLETE', 'DELETE_FAILED']:
+                    return True
+            return False
+        except cf_client.exceptions.ClientError as e:
+            # Stack doesn't exist
+            if 'does not exist' in str(e):
+                return False
+            raise
+    
+    def _wait_for_stack_deletion(self, cf_client, stack_name, max_wait_minutes=20):
+        """Wait for CloudFormation stack deletion to complete"""
+        print("  → Monitoring stack deletion progress...")
+        
+        for attempt in range(max_wait_minutes * 2):  # Check every 30 seconds
+            try:
+                response = cf_client.describe_stacks(StackName=stack_name)
+                status = response['Stacks'][0]['StackStatus']
+                
+                if status == 'DELETE_COMPLETE':
+                    print(f"  ✓ Stack deletion completed successfully")
+                    return 'DELETED'
+                elif status == 'DELETE_FAILED':
+                    print(f"  ✗ Stack deletion failed")
+                    return status
+                elif status == 'DELETE_IN_PROGRESS':
+                    print(f"  → Stack deletion in progress (attempt {attempt + 1}/{max_wait_minutes * 2})")
+                    time.sleep(30)
+                else:
+                    print(f"  → Unexpected status during deletion: {status}")
+                    time.sleep(30)
+                    
+            except cf_client.exceptions.ClientError as e:
+                # Stack no longer exists - deletion complete
+                if 'does not exist' in str(e):
+                    print(f"  ✓ Stack successfully deleted")
+                    return 'DELETED'
+                print(f"  ✗ Error checking stack status: {e}")
+                return 'ERROR'
+        
+        print(f"  ✗ Stack deletion timeout after {max_wait_minutes} minutes")
+        return 'TIMEOUT'
     
     def _get_fulfillment_url(self, cf_client, stack_id):
         """Extract MarketplaceFulfillmentURL from CloudFormation stack outputs"""

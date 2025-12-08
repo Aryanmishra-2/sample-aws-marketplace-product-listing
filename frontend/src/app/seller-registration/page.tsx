@@ -484,9 +484,7 @@ export default function SellerRegistrationPage() {
                                             return;
                                           }
                                           
-                                          // Mark seller_registration as complete
-                                          useStore.getState().markStepComplete('seller_registration');
-                                          useStore.getState().setCurrentStep('gather_context');
+                                          useStore.getState().setCurrentStep(2);
                                           router.push('/product-info');
                                         } else {
                                           setRevalidating(false);

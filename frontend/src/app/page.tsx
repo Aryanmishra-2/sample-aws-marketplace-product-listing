@@ -90,9 +90,6 @@ export default function CredentialsPage() {
 
         setSellerStatus(statusResponse.data);
         
-        // Mark credentials step as complete
-        useStore.getState().markStepComplete('credentials');
-        
         // OPTIMIZATION: Auto-redirect based on seller status for faster UX
         // This reduces perceived wait time by immediately routing users
         setCurrentStep('seller_registration');

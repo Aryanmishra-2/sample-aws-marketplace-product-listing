@@ -62,7 +62,7 @@ Parameters:
     Type: String
     AllowedPattern: .*
   UpdateFulfillmentURL:
-    Default: "false"
+    Default: "true"
     Type: String
     Description: "WARNING: This will update your product's fulfillment URL automatically. Be careful if your product is already public"
     AllowedValues:
