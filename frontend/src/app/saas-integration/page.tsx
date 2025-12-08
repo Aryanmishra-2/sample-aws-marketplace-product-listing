@@ -463,9 +463,42 @@ export default function SaaSIntegrationPage() {
     return null;
   }
 
+  const handleSubStepNavigation = (subStepIndex: number) => {
+    // Only allow navigation to completed or current sub-steps
+    if (subStepIndex <= currentSubStep) {
+      setCurrentSubStep(subStepIndex);
+      
+      // Update UI state based on sub-step
+      if (subStepIndex === 0) {
+        // Stack Deployment - show deployment section
+        setShowSnsConfirmation(false);
+        setShowBuyerExperience(false);
+        setShowMeteringGuide(false);
+        setShowVisibilityGuide(false);
+      } else if (subStepIndex === 1) {
+        // SNS Confirmation
+        setShowSnsConfirmation(true);
+        setShowBuyerExperience(false);
+        setShowMeteringGuide(false);
+        setShowVisibilityGuide(false);
+      } else if (subStepIndex === 2) {
+        // Buyer Experience
+        setShowSnsConfirmation(false);
+        setShowBuyerExperience(true);
+        setShowMeteringGuide(false);
+        setShowVisibilityGuide(false);
+      } else if (subStepIndex === 3) {
+        // Testing Complete - show metering or visibility guide
+        setShowSnsConfirmation(false);
+        setShowBuyerExperience(false);
+        // Keep current guide visible (metering or visibility)
+      }
+    }
+  };
+
   return (
     <AppLayout
-        navigation={<WorkflowNav currentSubStep={currentSubStep} />}
+        navigation={<WorkflowNav currentSubStep={currentSubStep} onSubStepClick={handleSubStepNavigation} />}
         toolsHide
         breadcrumbs={
           <BreadcrumbGroup
@@ -676,59 +709,114 @@ export default function SaaSIntegrationPage() {
                   )}
 
                   {showSnsConfirmation && !showBuyerExperience && (
-                    <Alert 
-                      type="info" 
-                      header="📧 Confirm Amazon SNS Subscription"
-                      action={
-                        <Button variant="primary" onClick={() => {
-                          // Simply show the buyer experience section
-                          // Steps are displayed as fallback (no API call needed)
-                          setShowBuyerExperience(true);
-                          setCurrentSubStep(2); // Move to Buyer Experience
-                        }}>
-                          I've Confirmed →
-                        </Button>
+                    <Container
+                      header={
+                        <Header
+                          variant="h2"
+                          description="Step 2 of 4: Enable marketplace notifications"
+                        >
+                          📧 Confirm Amazon SNS Subscription
+                        </Header>
                       }
                     >
-                      <SpaceBetween size="m">
-                        <Box>
-                          To receive email notifications at <strong>{email}</strong>, you need to confirm the SNS subscription.
-                        </Box>
-                        
-                        <Box variant="h4">Steps to Confirm:</Box>
-                        <ol style={{ marginLeft: '20px' }}>
-                          <li>
-                            <Box fontWeight="bold">Open your email inbox</Box>
-                            <Box fontSize="body-s" color="text-body-secondary">
-                              Check the email address: {email}
+                      <SpaceBetween size="l">
+                        <Alert type="info">
+                          <Box>
+                            To receive email notifications at <strong style={{ color: '#0073bb' }}>{email}</strong>, you need to confirm the SNS subscription.
+                          </Box>
+                        </Alert>
+
+                        <SpaceBetween size="m">
+                          {[
+                            {
+                              icon: '📬',
+                              title: 'Open your email inbox',
+                              description: `Check the email address: ${email}`,
+                              color: '#0073bb'
+                            },
+                            {
+                              icon: '🔍',
+                              title: 'Find the confirmation email',
+                              description: 'Subject: "AWS Notification - Subscription Confirmation"',
+                              color: '#0073bb'
+                            },
+                            {
+                              icon: '✅',
+                              title: 'Click "Confirm subscription"',
+                              description: 'This link will open in your browser to confirm the subscription',
+                              color: '#037f0c'
+                            }
+                          ].map((step, index) => (
+                            <Container key={index}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+                                <div style={{
+                                  fontSize: '32px',
+                                  minWidth: '48px',
+                                  textAlign: 'center',
+                                  lineHeight: '1'
+                                }}>
+                                  {step.icon}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <Box variant="h3" color="text-label">
+                                    Step {index + 1}: {step.title}
+                                  </Box>
+                                  <Box fontSize="body-m" color="text-body-secondary" padding={{ top: 'xs' }}>
+                                    {step.description}
+                                  </Box>
+                                </div>
+                                <div style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '50%',
+                                  backgroundColor: step.color,
+                                  color: 'white',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '16px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {index + 1}
+                                </div>
+                              </div>
+                            </Container>
+                          ))}
+                        </SpaceBetween>
+
+                        <Alert type="success">
+                          <SpaceBetween size="xs">
+                            <Box fontWeight="bold">What happens after confirmation?</Box>
+                            <Box fontSize="body-s">
+                              ✓ You'll receive emails for new buyer registrations<br/>
+                              ✓ Get notified about entitlement changes<br/>
+                              ✓ Stay updated on subscription events
                             </Box>
-                          </li>
-                          <li>
-                            <Box fontWeight="bold">Find the confirmation email</Box>
-                            <Box fontSize="body-s" color="text-body-secondary">
-                              Subject: "AWS Notification - Subscription Confirmation"
-                            </Box>
-                          </li>
-                          <li>
-                            <Box fontWeight="bold">Click "Confirm subscription"</Box>
-                            <Box fontSize="body-s" color="text-body-secondary">
-                              This link will open in your browser to confirm the subscription
-                            </Box>
-                          </li>
-                        </ol>
-                        
-                        <Box color="text-status-info" fontSize="body-s">
-                          ℹ️ After confirmation, you will receive emails for new buyer registrations, entitlement changes, and subscription events.
+                          </SpaceBetween>
+                        </Alert>
+
+                        <Box textAlign="center">
+                          <Button 
+                            variant="primary" 
+                            onClick={() => {
+                              setShowBuyerExperience(true);
+                              setCurrentSubStep(2);
+                            }}
+                          >
+                            I've Confirmed - Continue to Buyer Experience →
+                          </Button>
                         </Box>
                       </SpaceBetween>
-                    </Alert>
+                    </Container>
                   )}
 
                   {showBuyerExperience && (
-                    <Alert 
-                      type="success" 
-                      header="🛒 Test Buyer Experience"
-                      action={
+                    <Container
+                      header={
+                        <Header
+                          variant="h2"
+                          description="Step 3 of 4: Simulate the complete buyer journey"
+                          actions={
                         <Button variant="primary" onClick={async () => {
                           setLoading(true);
                           setError('');
@@ -778,12 +866,18 @@ export default function SaaSIntegrationPage() {
                         }}>
                           Complete Testing →
                         </Button>
+                          }
+                        >
+                          🛒 Test Buyer Experience
+                        </Header>
                       }
                     >
-                      <SpaceBetween size="m">
-                        <Box>
-                          Now let's test your SaaS integration by simulating the buyer experience. Follow these steps to ensure everything works correctly:
-                        </Box>
+                      <SpaceBetween size="l">
+                        <Alert type="info">
+                          <Box>
+                            Now let's test your SaaS integration by simulating the buyer experience. Follow these steps to ensure everything works correctly.
+                          </Box>
+                        </Alert>
                         
                         {buyerSteps.length > 0 ? (
                           buyerSteps.map((step, index) => (
@@ -810,69 +904,117 @@ export default function SaaSIntegrationPage() {
                             </Container>
                           ))
                         ) : (
-                          <Box>
-                            <Box variant="h4">Follow these steps to test your buyer experience:</Box>
-                            <ol style={{ marginLeft: '20px', marginTop: '12px' }}>
-                              <li>
-                                <Box fontWeight="bold">Open SaaS product page in the AWS Marketplace Management Portal</Box>
-                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
-                                  Select the product you created in the Lab: Create a SaaS listing.
-                                </Box>
-                              </li>
-                              <li>
-                                <Box fontWeight="bold">Validate fulfillment URL update</Box>
-                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
-                                  In the Request Log tab, validate that the last request's status is Succeeded. Because the solution updates your AWS Marketplace product's fulfillment URL, you need to make sure this is completed before continuing.
-                                </Box>
-                              </li>
-                              <li>
-                                <Box fontWeight="bold">View product on AWS Marketplace</Box>
-                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
-                                  Select View on AWS Marketplace.
-                                </Box>
-                              </li>
-                              <li>
-                                <Box fontWeight="bold">Start purchase process</Box>
-                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
-                                  Select View purchase options.
-                                </Box>
-                              </li>
-                              <li>
-                                <Box fontWeight="bold">Configure contract</Box>
-                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs' }}>
-                                  • Under "How long do you want your contract to run?", select 1 month<br/>
-                                  • Set your Renewal Settings to No<br/>
-                                  • Under Contract Options, set any option quantity to 1 (or select the cheapest option tier, if applicable)
-                                </Box>
-                              </li>
-                              <li>
-                                <Box fontWeight="bold" padding={{ top: 's' }}>Create contract</Box>
-                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
-                                  Select Create contract and then Pay now.
-                                </Box>
-                              </li>
-                              <li>
-                                <Box fontWeight="bold">Set up your account</Box>
-                                <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xs', bottom: 's' }}>
-                                  Select Set up your account. Fill the information in the registration page. Select Register.
-                                </Box>
-                              </li>
-                              <li>
-                                <Box fontWeight="bold">Verify success</Box>
-                                <Box fontSize="body-s" color="text-status-success" padding={{ top: 'xs' }}>
-                                  ✓ After a few seconds, a blue banner should appear letting you know that the registration has completed successfully<br/>
-                                  ✓ You should have an email with the subscription details in your notification email inbox
-                                </Box>
-                              </li>
-                            </ol>
-                          </Box>
+                          <SpaceBetween size="m">
+                            {[
+                              { icon: '🏢', title: 'Open SaaS product page', desc: 'Navigate to AWS Marketplace Management Portal and select your product', color: '#0073bb' },
+                              { icon: '✓', title: 'Validate fulfillment URL', desc: 'In Request Log tab, verify last request status is "Succeeded"', color: '#037f0c' },
+                              { icon: '👁️', title: 'View on Marketplace', desc: 'Select "View on AWS Marketplace"', color: '#0073bb' },
+                              { icon: '🛍️', title: 'Start purchase', desc: 'Select "View purchase options"', color: '#0073bb' },
+                              { icon: '⚙️', title: 'Configure contract', desc: '1 month duration, No renewal, quantity 1', color: '#ff9900' },
+                              { icon: '💳', title: 'Create contract', desc: 'Select "Create contract" then "Pay now"', color: '#ff9900' },
+                              { icon: '📝', title: 'Register account', desc: 'Fill registration form and select "Register"', color: '#0073bb' },
+                              { icon: '🎉', title: 'Verify success', desc: 'Blue banner appears + email notification received', color: '#037f0c' }
+                            ].map((step, index) => (
+                              <Container key={index}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+                                  <div style={{
+                                    fontSize: '36px',
+                                    minWidth: '56px',
+                                    textAlign: 'center',
+                                    lineHeight: '1'
+                                  }}>
+                                    {step.icon}
+                                  </div>
+                                  <div style={{ flex: 1 }}>
+                                    <Box variant="h3" color="text-label">
+                                      Step {index + 1}: {step.title}
+                                    </Box>
+                                    <Box fontSize="body-m" color="text-body-secondary" padding={{ top: 'xs' }}>
+                                      {step.desc}
+                                    </Box>
+                                  </div>
+                                  <div style={{
+                                    width: '36px',
+                                    height: '36px',
+                                    borderRadius: '50%',
+                                    backgroundColor: step.color,
+                                    color: 'white',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '18px',
+                                    fontWeight: 'bold'
+                                  }}>
+                                    {index + 1}
+                                  </div>
+                                </div>
+                              </Container>
+                            ))}
+                          </SpaceBetween>
                         )}
                         
-                        <Box color="text-status-info" fontSize="body-s">
-                          ℹ️ Complete all steps to verify your SaaS integration is working correctly. You should receive email notifications and see customer records in DynamoDB.
+                        <Alert type="success">
+                          <SpaceBetween size="xs">
+                            <Box fontWeight="bold">Expected Results:</Box>
+                            <Box fontSize="body-s">
+                              ✓ Blue banner confirms successful registration<br/>
+                              ✓ Email notification with subscription details<br/>
+                              ✓ Customer record created in DynamoDB
+                            </Box>
+                          </SpaceBetween>
+                        </Alert>
+
+                        <Box textAlign="center">
+                          <Button 
+                            variant="primary" 
+                            onClick={async () => {
+                              setLoading(true);
+                              setError('');
+                              
+                              try {
+                                const response = await axios.post('/api/run-buyer-experience', {
+                                  product_id: productId,
+                                  credentials: {
+                                    aws_access_key_id: accessKey,
+                                    aws_secret_access_key: secretKey,
+                                    aws_session_token: sessionToken || undefined,
+                                  }
+                                });
+                                
+                                if (response.data.success) {
+                                  const nextStep = response.data.next_step;
+                                  
+                                  if (nextStep === 'metering') {
+                                    const meteringResponse = await axios.post('/api/metering-guide', {});
+                                    if (meteringResponse.data.success) {
+                                      setMeteringSteps(meteringResponse.data.steps);
+                                      setShowMeteringGuide(true);
+                                      setCurrentSubStep(3);
+                                    }
+                                  } else if (nextStep === 'public_visibility') {
+                                    const visibilityResponse = await axios.post('/api/public-visibility-guide', {});
+                                    if (visibilityResponse.data.success) {
+                                      setVisibilitySteps(visibilityResponse.data.steps);
+                                      setShowVisibilityGuide(true);
+                                      setCurrentSubStep(3);
+                                    }
+                                  }
+                                } else {
+                                  setError(response.data.error || 'Buyer experience simulation failed');
+                                }
+                              } catch (err: any) {
+                                console.error('Failed to run buyer experience:', err);
+                                setError(err.response?.data?.error || 'Failed to complete buyer experience');
+                              } finally {
+                                setLoading(false);
+                              }
+                            }}
+                          >
+                            Complete Testing - Proceed to Final Step →
+                          </Button>
                         </Box>
                       </SpaceBetween>
-                    </Alert>
+                    </Container>
                   )}
 
                   {showMeteringGuide && (

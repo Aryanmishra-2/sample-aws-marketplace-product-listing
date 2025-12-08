@@ -23,7 +23,8 @@ class BuyerExperienceAgent(Agent):
         
         # Step 1: Access Management Portal
         print("\n── Step 1: Access Product in AWS Marketplace Management Portal ──")
-        print("1. Open AWS Marketplace Management Portal")
+        print("1. Open AWS Marketplace Management Portal:")
+        print("   https://aws.amazon.com/marketplace/management/products")
         print("2. Navigate to your SaaS product listing")
         print(f"3. Select product: {product_id}")
         

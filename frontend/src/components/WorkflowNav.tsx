@@ -79,9 +79,10 @@ const WORKFLOW_STAGES: WorkflowStage[] = [
 
 interface WorkflowNavProps {
   currentSubStep?: number; // For SaaS Integration sub-steps (0-3)
+  onSubStepClick?: (subStepIndex: number) => void; // Callback for sub-step navigation
 }
 
-export default function WorkflowNav({ currentSubStep = 0 }: WorkflowNavProps = {}) {
+export default function WorkflowNav({ currentSubStep = 0, onSubStepClick }: WorkflowNavProps = {}) {
   const { accountInfo, currentStep, completedSteps } = useStore();
   const router = useRouter();
   const pathname = usePathname();
@@ -236,10 +237,12 @@ export default function WorkflowNav({ currentSubStep = 0 }: WorkflowNavProps = {
                     const isCompleted = subIndex < currentSubStep;
                     const isCurrent = subIndex === currentSubStep;
                     const isPending = subIndex > currentSubStep;
+                    const isClickable = isCompleted || isCurrent;
                     
                     return (
                       <div 
                         key={subIndex}
+                        onClick={() => isClickable && onSubStepClick && onSubStepClick(subIndex)}
                         style={{
                           padding: '8px 12px',
                           marginBottom: '4px',
@@ -251,6 +254,20 @@ export default function WorkflowNav({ currentSubStep = 0 }: WorkflowNavProps = {
                           alignItems: 'center',
                           gap: '8px',
                           opacity: isPending ? 0.6 : 1,
+                          cursor: isClickable ? 'pointer' : 'not-allowed',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (isClickable) {
+                            e.currentTarget.style.boxShadow = '0 1px 4px rgba(0, 0, 0, 0.1)';
+                            e.currentTarget.style.transform = 'translateX(2px)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (isClickable) {
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.transform = 'translateX(0)';
+                          }
                         }}
                       >
                         <span style={{ fontSize: '16px' }}>{subStep.icon}</span>
