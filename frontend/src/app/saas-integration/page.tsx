@@ -271,15 +271,12 @@ export default function SaaSIntegrationPage() {
     setDeployedStackName(actualStackName);
 
     try {
-      // Get pricing model from listingData (ui_pricing_model has the full value)
-      const pricingModel = listingData?.ui_pricing_model || listingData?.pricing_model || 'Usage';
-      
+      // Backend will fetch pricing model from AWS Marketplace Catalog API
       const response = await axios.post('/api/deploy-saas', {
         product_id: productId,
         email,
         stack_name: stackName,
         region: region.value,
-        pricing_model: pricingModel,
         credentials: {
           aws_access_key_id: accessKey,
           aws_secret_access_key: secretKey,

@@ -13,15 +13,15 @@ Metadata:
         default: "Product Id"
       SubscriptionSNSTopic:
         default: "Subscriptions SNS topic ARN"
-      PricingModel:
-        default: "Pricing model"
+      TypeOfSaaSListing:
+        default: "Type of SaaS Listing"
       # AWS IA configuration
 
     ParameterGroups:
       - Label: 
           default: Integration configurations
         Parameters:
-          - PricingModel
+          - TypeOfSaaSListing
           - ProductId
           - MarketplaceTechAdminEmail
       - Label: 
@@ -31,14 +31,14 @@ Metadata:
            - SNSRegion
            - UpdateFulfillmentURL
 Parameters:
-  PricingModel:
-    Description: "The pricing model that you choose determines how buyers are able to purchase your product. Ths value should match the price model you selected when creating your listing."
+  TypeOfSaaSListing:
+    Description: "The type of SaaS listing: subscriptions (usage-based), contracts (contract-based), or contracts_with_subscription (contract with consumption)"
     Type: String
-    Default: Contract-based-pricing
+    Default: subscriptions
     AllowedValues:
-    - Contract-with-consumption
-    - Contract-based-pricing
-    - Usage-based-pricing
+    - subscriptions
+    - contracts
+    - contracts_with_subscription
   SNSAccountID:
     Type: String
     Default: '287250355862'
@@ -62,21 +62,12 @@ Parameters:
     Type: String
     AllowedPattern: .*
   UpdateFulfillmentURL:
-    Default: "true"
+    Default: "false"
     Type: String
     Description: "WARNING: This will update your product's fulfillment URL automatically. Be careful if your product is already public"
     AllowedValues:
       - "true"
       - "false"
-
-Mappings:
-  PricingModelMap:
-    Usage-based-pricing:
-      PricingOption: subscriptions
-    Contract-based-pricing:
-      PricingOption: contracts
-    Contract-with-consumption:
-      PricingOption: contracts_with_subscription
 
 Resources:
   SampleApp:
@@ -123,10 +114,7 @@ Resources:
                     - !Split
                       - "/"
                       - !Ref AWS::StackId
-        TypeOfSaaSListing: !FindInMap  
-          - PricingModelMap
-          - !Ref PricingModel
-          - PricingOption  
+        TypeOfSaaSListing: !Ref TypeOfSaaSListing  
         SNSAccountID: !Ref SNSAccountID
         SNSRegion: !Ref SNSRegion
         ProductId: !Ref ProductId

@@ -106,12 +106,16 @@ class ServerlessSaasIntegrationAgent(Agent):
         with open('bedrock_agent/Integration.yaml', 'r') as f:
             template = f.read()
         
+        # Map pricing model to TypeOfSaaSListing for CloudFormation
+        type_of_saas_listing = self._get_saas_listing_type(pricing_model)
+        print(f"  → TypeOfSaaSListing: {type_of_saas_listing}")
+        
         response = cf_client.create_stack(
             StackName=stack_name,
             TemplateBody=template,
             Parameters=[
                 {'ParameterKey': 'ProductId', 'ParameterValue': product_id},
-                {'ParameterKey': 'PricingModel', 'ParameterValue': pricing_model},
+                {'ParameterKey': 'TypeOfSaaSListing', 'ParameterValue': type_of_saas_listing},
                 {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': email_id},
                 {'ParameterKey': 'UpdateFulfillmentURL', 'ParameterValue': 'true'}
             ],

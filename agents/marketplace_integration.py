@@ -50,14 +50,18 @@ class MarketplaceIntegrationAgent(Agent):
         with open('../bedrock_agent/Integration.yaml', 'r') as f:
             template = f.read()
         
+        # Get pricing model from customer info or fetch from marketplace
+        pricing_model = customer_info.get('pricing_model', 'Usage-based-pricing')
+        admin_email = customer_info.get('admin_email', 'admin@example.com')
+        
         response = cf_client.create_stack(
             StackName=f"marketplace-saas-{customer_info['customer_identifier']}",
             TemplateBody=template,
             Parameters=[
                 {'ParameterKey': 'ProductId', 'ParameterValue': customer_info['product_code']},
                 {'ParameterKey': 'AWSAccountId', 'ParameterValue': customer_info['customer_aws_account_id']},
-                {'ParameterKey': 'PricingModel', 'ParameterValue': 'Contract-based-pricing'},
-                {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': 'admin@example.com'}
+                {'ParameterKey': 'PricingModel', 'ParameterValue': pricing_model},
+                {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': admin_email}
             ],
             Capabilities=['CAPABILITY_IAM']
         )
