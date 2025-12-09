@@ -3,11 +3,21 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { product_id, email, stack_name, region, credentials } = body;
+    const { product_id, email, stack_name, region, credentials, pricing_model } = body;
+
+    console.log('[API ROUTE DEBUG] Received pricing_model from frontend:', pricing_model);
 
     if (!product_id || !email || !stack_name || !credentials) {
       return NextResponse.json(
         { success: false, error: 'Missing required data' },
+        { status: 400 }
+      );
+    }
+
+    if (!pricing_model) {
+      console.log('[API ROUTE ERROR] Pricing model is missing!');
+      return NextResponse.json(
+        { success: false, error: 'Pricing model is required' },
         { status: 400 }
       );
     }
@@ -17,20 +27,29 @@ export async function POST(request: NextRequest) {
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
+      const payloadToBackend = {
+        product_id,
+        email,
+        stack_name,
+        region: region || 'us-east-1',
+        pricing_model,
+        credentials,
+      };
+      
+      console.log('[API ROUTE DEBUG] Sending to backend with pricing_model:', pricing_model);
+      console.log('[API ROUTE DEBUG] Full payload to backend:', JSON.stringify(payloadToBackend, null, 2));
+      console.log('[API ROUTE DEBUG] Attempting to connect to: http://localhost:8000/deploy-saas');
+      
       const response = await fetch('http://localhost:8000/deploy-saas', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          product_id,
-          email,
-          stack_name,
-          region: region || 'us-east-1',
-          credentials,
-        }),
+        body: JSON.stringify(payloadToBackend),
         signal: controller.signal,
       });
+      
+      console.log('[API ROUTE DEBUG] Backend response status:', response.status);
 
       clearTimeout(timeoutId);
       const data = await response.json();

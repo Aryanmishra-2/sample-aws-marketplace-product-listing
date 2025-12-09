@@ -16,34 +16,37 @@ class ServerlessSaasIntegrationAgent(Agent):
         self.workflow_orchestrator = WorkflowOrchestrator()
     
     @tool
-    def deploy_integration(self, access_key, secret_key, session_token=None, product_id=None):
-        """Deploy AWS Marketplace SaaS integration with complete automated workflow"""
+    def deploy_integration(self, access_key, secret_key, session_token=None, product_id=None, pricing_model=None):
+        """Deploy AWS Marketplace SaaS integration with user-specified pricing model
+        
+        Args:
+            access_key: AWS access key
+            secret_key: AWS secret key
+            session_token: Optional AWS session token
+            product_id: AWS Marketplace product ID
+            pricing_model: Required. Pricing model type for CloudFormation template
+        """
         
         print("=== Starting AWS Marketplace SaaS Integration Deployment ===")
+        
+        # Check if pricing model is provided
+        if not pricing_model:
+            error_msg = "Pricing model is required for deployment. Please provide a pricing model."
+            print(f"\n❌ ERROR: {error_msg}")
+            return {"error": error_msg, "status": "failed"}
         
         # Set credentials and product ID in create_saas agent
         self.create_saas_agent.set_credentials(access_key, secret_key, session_token)
         if product_id:
             self.create_saas_agent.set_product_id(product_id)
         
-        # Get configuration from create_saas agent (will fetch from marketplace)
+        # Get configuration from create_saas agent
         product_id = self.create_saas_agent.get_product_id()
-        
-        print(f"\n=== Fetching Pricing Model from AWS Marketplace ===")
-        print(f"Product ID: {product_id}")
-        pricing_model = self.create_saas_agent.get_pricing_model_dimension()
-        
-        if not pricing_model:
-            print(f"  ✗ Failed to fetch pricing model from marketplace")
-            print(f"  → Using default: Usage-based-pricing")
-            pricing_model = "Usage-based-pricing"
-        
         email_id = self.create_saas_agent.get_email_dimension()
         
         print(f"\n=== Configuration Summary ===")
         print(f"Product ID: {product_id}")
         print(f"Pricing Model: {pricing_model}")
-        print(f"TypeOfSaaSListing will be: {self._get_saas_listing_type(pricing_model)}")
         print(f"Admin Email: {email_id}")
         
         # Validate credentials before deployment
@@ -103,19 +106,17 @@ class ServerlessSaasIntegrationAgent(Agent):
         print("  → Configuring API Gateway for customer registration")
         print("  → Setting up SNS topics for marketplace notifications")
         
-        with open('bedrock_agent/Integration.yaml', 'r') as f:
+        with open('deployment/cloudformation/Integration.yaml', 'r') as f:
             template = f.read()
         
-        # Map pricing model to TypeOfSaaSListing for CloudFormation
-        type_of_saas_listing = self._get_saas_listing_type(pricing_model)
-        print(f"  → TypeOfSaaSListing: {type_of_saas_listing}")
+        print(f"  → Deploying with TypeOfSaaSListing: {pricing_model}")
         
         response = cf_client.create_stack(
             StackName=stack_name,
             TemplateBody=template,
             Parameters=[
                 {'ParameterKey': 'ProductId', 'ParameterValue': product_id},
-                {'ParameterKey': 'TypeOfSaaSListing', 'ParameterValue': type_of_saas_listing},
+                {'ParameterKey': 'TypeOfSaaSListing', 'ParameterValue': pricing_model},
                 {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': email_id},
                 {'ParameterKey': 'UpdateFulfillmentURL', 'ParameterValue': 'true'}
             ],
@@ -170,48 +171,14 @@ class ServerlessSaasIntegrationAgent(Agent):
         else:
             print("  ✓ SNS subscription confirmed")
         
-        # Execute complete metering and visibility workflow for usage-based pricing
-        if pricing_model in ["Contract-with-consumption", "Usage-based-pricing"]:
-            print(f"\n=== Pricing model requires metering - starting automated workflow ===")
-            
-            # Locate the metering Lambda function from CloudFormation outputs
-            print("\nLocating Lambda function for metering...")
-            stack_name = f"saas-integration-{product_id}"
-            lambda_function_name = self._get_lambda_function_name(cf_client, stack_id, stack_name)
-            
-            if lambda_function_name:
-                print(f"  ✓ Found Lambda function: {lambda_function_name}")
-            else:
-                print("  → Lambda function not found in outputs - will proceed without it")
-            
-            # Execute complete workflow: Metering → Lambda → Public Visibility
-            print("\n=== Executing Complete Workflow ===")
-            print("Step 1: Create metering records")
-            print("Step 2: Trigger Lambda to send to AWS Marketplace")
-            print("Step 3: Verify metering success")
-            print("Step 4: Submit public visibility request")
-            
-            workflow_result = self.workflow_orchestrator.execute_full_workflow(
-                access_key, secret_key, session_token, lambda_function_name
-            )
-            
-            print("\n=== Workflow Complete ===")
-            
-            # Simulate buyer experience
-            print("\n=== Simulating Buyer Experience ===")
-            print("Next step: Simulate a customer purchasing and using your SaaS product")
-            print("This will test the complete integration workflow")
-            
-            return {
-                'stack_id': stack_id,
-                'workflow_result': workflow_result,
-                'sns_confirmed': sns_confirmed == 'y'
-            }
-        
         print(f"\n=== Deployment Complete ===")
         print(f"Stack ID: {stack_id}")
-        print(f"Pricing model {pricing_model} does not require metering workflow")
-        return {'stack_id': stack_id}
+        print("Next step: Confirm SNS subscription and test buyer experience")
+        
+        return {
+            'stack_id': stack_id,
+            'sns_confirmed': sns_confirmed == 'y'
+        }
     
     def _get_lambda_function_name(self, cf_client, stack_id, stack_name):
         """Find Lambda function that contains product_id and Hourly"""
@@ -475,15 +442,7 @@ class ServerlessSaasIntegrationAgent(Agent):
                 'error': str(e)
             }
     
-    def _get_saas_listing_type(self, pricing_model):
-        """Map pricing model to TypeOfSaaSListing value"""
-        mapping = {
-            'Usage-based-pricing': 'subscriptions',
-            'Contract-based-pricing': 'contracts',
-            'Contract-with-consumption': 'contracts_with_subscription'
-        }
-        return mapping.get(pricing_model, 'subscriptions')
-    
+
     def _stack_exists(self, cf_client, stack_name):
         """Check if a CloudFormation stack exists"""
         try:
@@ -600,6 +559,28 @@ class ServerlessSaasIntegrationAgent(Agent):
         print(f"  ✗ Stack deployment timeout after {max_wait_minutes} minutes")
         return 'TIMEOUT'
 
+    @tool
+    def get_pricing_model_from_user(self):
+        """Prompt user to select pricing model for SaaS integration"""
+        
+        print("\n=== Select Pricing Model ===")
+        print("Choose the pricing model for your SaaS product:")
+        print("1. subscriptions - Usage-based pricing (pay-as-you-go)")
+        print("2. contracts - Contract-based pricing (fixed term)")
+        print("3. contracts_with_subscription - Contract with consumption (hybrid)")
+        
+        while True:
+            choice = input("\nEnter your choice (1-3): ").strip()
+            
+            if choice == '1':
+                return 'subscriptions'
+            elif choice == '2':
+                return 'contracts'
+            elif choice == '3':
+                return 'contracts_with_subscription'
+            else:
+                print("❌ Invalid choice. Please enter 1, 2, or 3.")
+
 if __name__ == "__main__":
     agent = ServerlessSaasIntegrationAgent()
     
@@ -608,5 +589,14 @@ if __name__ == "__main__":
     secret_key = input("Enter AWS Secret Key: ")
     session_token = input("Enter Session Token (optional): ") or None
     
-    stack_id = agent.deploy_integration(access_key, secret_key, session_token)
-    print(f"Deployed stack: {stack_id}")
+    # Get pricing model from user
+    pricing_model = agent.get_pricing_model_from_user()
+    print(f"\n✓ Selected pricing model: {pricing_model}")
+    
+    # Deploy with pricing model
+    result = agent.deploy_integration(access_key, secret_key, session_token, pricing_model=pricing_model)
+    
+    if result.get('error'):
+        print(f"\n❌ Deployment failed: {result['error']}")
+    else:
+        print(f"\n✅ Deployed stack: {result.get('stack_id')}")

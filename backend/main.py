@@ -1677,14 +1677,27 @@ async def deploy_saas(data: Dict[str, Any]):
     import traceback
     import os
     try:
-        print("[DEBUG] deploy_saas called")
+        print("=" * 80)
+        print("[BACKEND DEBUG] ===== DEPLOY-SAAS ENDPOINT CALLED =====")
+        print(f"[BACKEND DEBUG] Raw request data: {data}")
+        print("=" * 80)
         product_id = data.get("product_id")
         email = data.get("email")
         stack_name = data.get("stack_name")
         region = data.get("region", "us-east-1")
+        pricing_model = data.get("pricing_model")
         credentials = data.get("credentials", {})
         
         print(f"[DEBUG] Product ID: {product_id}, Email: {email}, Stack: {stack_name}, Region: {region}")
+        print(f"[BACKEND DEBUG] ===== PRICING MODEL RECEIVED FROM FRONTEND =====")
+        print(f"[BACKEND DEBUG] pricing_model value: {pricing_model}")
+        print(f"[BACKEND DEBUG] pricing_model type: {type(pricing_model)}")
+        print(f"[BACKEND DEBUG] ================================================")
+        
+        # Validate pricing model is provided
+        if not pricing_model:
+            print("[BACKEND ERROR] Pricing model is missing!")
+            raise HTTPException(status_code=400, detail={"success": False, "error": "Pricing model is required"})
         
         # Create boto3 session
         session = boto3.Session(
@@ -1704,120 +1717,12 @@ async def deploy_saas(data: Dict[str, Any]):
             print(f"[ERROR] Invalid credentials: {str(e)}")
             raise HTTPException(status_code=400, detail={"success": False, "error": f"Invalid AWS credentials: {str(e)}"})
         
-        # Fetch pricing model from AWS Marketplace Catalog API
-        print(f"[DEBUG] Fetching pricing model from AWS Marketplace for product: {product_id}")
-        pricing_model = None
-        type_of_saas_listing = "subscriptions"  # Default
-        
-        try:
-            catalog_client = session.client('marketplace-catalog', region_name='us-east-1')
-            
-            # Find the entity with current revision
-            print(f"[DEBUG] Searching for product entity...")
-            list_response = catalog_client.list_entities(
-                Catalog='AWSMarketplace',
-                EntityType='SaaSProduct',
-                MaxResults=50
-            )
-            
-            entity_id = None
-            for entity in list_response.get('EntitySummaryList', []):
-                eid = entity.get('EntityId', '')
-                if eid.startswith(product_id):
-                    entity_id = eid
-                    print(f"[DEBUG] Found entity: {entity_id}")
-                    break
-            
-            if not entity_id:
-                # Try with pagination
-                next_token = list_response.get('NextToken')
-                while next_token and not entity_id:
-                    list_response = catalog_client.list_entities(
-                        Catalog='AWSMarketplace',
-                        EntityType='SaaSProduct',
-                        MaxResults=50,
-                        NextToken=next_token
-                    )
-                    for entity in list_response.get('EntitySummaryList', []):
-                        eid = entity.get('EntityId', '')
-                        if eid.startswith(product_id):
-                            entity_id = eid
-                            print(f"[DEBUG] Found entity: {entity_id}")
-                            break
-                    next_token = list_response.get('NextToken')
-            
-            if entity_id:
-                # Describe the entity to get pricing details
-                print(f"[DEBUG] Fetching product details...")
-                describe_response = catalog_client.describe_entity(
-                    Catalog='AWSMarketplace',
-                    EntityId=entity_id
-                )
-                
-                details = describe_response.get('Details', '{}')
-                if isinstance(details, str):
-                    import json
-                    details = json.loads(details)
-                
-                print(f"[DEBUG] Analyzing pricing terms...")
-                
-                # Check pricing terms
-                pricing_terms = details.get('PricingTerms', [])
-                has_usage_based = False
-                has_contract = False
-                
-                for term in pricing_terms:
-                    term_type = term.get('Type', '')
-                    print(f"[DEBUG] Found pricing term: {term_type}")
-                    
-                    if term_type == 'UsageBasedPricingTerm':
-                        has_usage_based = True
-                    elif term_type in ['ConfigurableUpfrontPricingTerm', 'FixedUpfrontPricingTerm']:
-                        has_contract = True
-                
-                # Determine pricing model
-                if has_usage_based and has_contract:
-                    pricing_model = "Contract-with-consumption"
-                    type_of_saas_listing = "contracts_with_subscription"
-                    print(f"[DEBUG] Detected: Contract with Consumption")
-                elif has_usage_based:
-                    pricing_model = "Usage-based-pricing"
-                    type_of_saas_listing = "subscriptions"
-                    print(f"[DEBUG] Detected: Usage-based Pricing")
-                elif has_contract:
-                    pricing_model = "Contract-based-pricing"
-                    type_of_saas_listing = "contracts"
-                    print(f"[DEBUG] Detected: Contract-based Pricing")
-                else:
-                    # Fallback: check dimensions
-                    dimensions = details.get('Dimensions', [])
-                    if dimensions:
-                        for dim in dimensions:
-                            dim_types = dim.get('Types', [])
-                            if 'Metered' in dim_types:
-                                pricing_model = "Usage-based-pricing"
-                                type_of_saas_listing = "subscriptions"
-                                print(f"[DEBUG] Detected from dimensions: Usage-based Pricing")
-                                break
-                            elif 'Entitled' in dim_types:
-                                pricing_model = "Contract-based-pricing"
-                                type_of_saas_listing = "contracts"
-                                print(f"[DEBUG] Detected from dimensions: Contract-based Pricing")
-                                break
-            else:
-                print(f"[WARNING] Could not find product entity in marketplace catalog")
-                
-        except Exception as e:
-            print(f"[WARNING] Failed to fetch pricing model from marketplace: {str(e)}")
-            print(f"[WARNING] Using default: Usage-based-pricing")
-        
-        if not pricing_model:
-            pricing_model = "Usage-based-pricing"
-            type_of_saas_listing = "subscriptions"
-            print(f"[DEBUG] Using default pricing model: {pricing_model}")
-        
-        print(f"[DEBUG] Final pricing model: {pricing_model}")
-        print(f"[DEBUG] TypeOfSaaSListing for CloudFormation: {type_of_saas_listing}")
+        # Use pricing model provided by user (already validated above)
+        type_of_saas_listing = pricing_model  # Frontend sends the CloudFormation value directly
+        print(f"[BACKEND DEBUG] ===== PREPARING CLOUDFORMATION PARAMETERS =====")
+        print(f"[BACKEND DEBUG] Using user-provided pricing model: {pricing_model}")
+        print(f"[BACKEND DEBUG] TypeOfSaaSListing for CloudFormation: {type_of_saas_listing}")
+        print(f"[BACKEND DEBUG] ================================================")
         
         # Find the Integration.yaml template
         possible_paths = [
@@ -1845,38 +1750,43 @@ async def deploy_saas(data: Dict[str, Any]):
         # Create CloudFormation client and start stack (non-blocking)
         cf_client = session.client('cloudformation')
         
-        # Map frontend pricing model selection to TypeOfSaaSListing
-        # Frontend sends: "Usage-based-pricing", "Contract-based-pricing", "Contract-with-consumption"
-        # CloudFormation needs: "subscriptions", "contracts", "contracts_with_subscription"
-        pricing_to_listing_type = {
-            'Usage-based-pricing': 'subscriptions',
-            'Contract-based-pricing': 'contracts',
-            'Contract-with-consumption': 'contracts_with_subscription'
-        }
-        type_of_saas_listing = pricing_to_listing_type.get(pricing_model, 'subscriptions')
+        # Frontend already sends the correct CloudFormation value
+        # (subscriptions, contracts, or contracts_with_subscription)
+        type_of_saas_listing = pricing_model
         
         print(f"[DEBUG] Creating CloudFormation stack: {actual_stack_name}")
-        print(f"[DEBUG] Parameters:")
-        print(f"  - ProductId: {product_id}")
-        print(f"  - Pricing Model (from frontend): {pricing_model}")
-        print(f"  - TypeOfSaaSListing (for CloudFormation): {type_of_saas_listing}")
-        print(f"  - Email: {email}")
+        print(f"[BACKEND DEBUG] ===== CLOUDFORMATION STACK PARAMETERS =====")
+        print(f"[BACKEND DEBUG] Parameters being sent to CloudFormation:")
+        print(f"[BACKEND DEBUG]   - ProductId: {product_id}")
+        print(f"[BACKEND DEBUG]   - Pricing Model (from frontend): {pricing_model}")
+        print(f"[BACKEND DEBUG]   - TypeOfSaaSListing (for CloudFormation): {type_of_saas_listing}")
+        print(f"[BACKEND DEBUG]   - Email: {email}")
+        print(f"[BACKEND DEBUG] ================================================")
         
         try:
+            cf_params = [
+                {'ParameterKey': 'ProductId', 'ParameterValue': product_id},
+                {'ParameterKey': 'TypeOfSaaSListing', 'ParameterValue': type_of_saas_listing},
+                {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': email},
+                {'ParameterKey': 'UpdateFulfillmentURL', 'ParameterValue': 'true'}
+            ]
+            
+            print(f"[BACKEND DEBUG] ===== CALLING CLOUDFORMATION CREATE_STACK =====")
+            print(f"[BACKEND DEBUG] Full parameters list: {cf_params}")
+            print(f"[BACKEND DEBUG] ================================================")
+            
             response = cf_client.create_stack(
                 StackName=actual_stack_name,
                 TemplateBody=template_body,
-                Parameters=[
-                    {'ParameterKey': 'ProductId', 'ParameterValue': product_id},
-                    {'ParameterKey': 'TypeOfSaaSListing', 'ParameterValue': type_of_saas_listing},
-                    {'ParameterKey': 'MarketplaceTechAdminEmail', 'ParameterValue': email},
-                    {'ParameterKey': 'UpdateFulfillmentURL', 'ParameterValue': 'true'}
-                ],
+                Parameters=cf_params,
                 Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND']
             )
             
             stack_id = response['StackId']
-            print(f"[DEBUG] Stack creation initiated: {stack_id}")
+            print(f"[BACKEND DEBUG] ===== STACK CREATION SUCCESS =====")
+            print(f"[BACKEND DEBUG] Stack creation initiated: {stack_id}")
+            print(f"[BACKEND DEBUG] Stack will use TypeOfSaaSListing: {type_of_saas_listing}")
+            print(f"[BACKEND DEBUG] ================================================")
             
             # Return immediately - frontend will poll for status
             return {

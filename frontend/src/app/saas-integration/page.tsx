@@ -79,6 +79,7 @@ export default function SaaSIntegrationPage() {
   const [showVisibilityGuide, setShowVisibilityGuide] = useState(false);
   const [visibilitySteps, setVisibilitySteps] = useState<any[]>([]);
   const [currentSubStep, setCurrentSubStep] = useState(0); // Track current sub-step (0-3)
+  const [pricingModel, setPricingModel] = useState<any>(null); // Pricing model selection
 
   useEffect(() => {
     if (!isAuthenticated || !productId) {
@@ -387,12 +388,16 @@ export default function SaaSIntegrationPage() {
     setDeployedStackName(actualStackName);
 
     try {
-      // Backend will fetch pricing model from AWS Marketplace Catalog API
+      // Pass pricing model to backend for CloudFormation deployment
+      console.log('[FRONTEND DEBUG] Deploying with pricing model:', pricingModel);
+      console.log('[FRONTEND DEBUG] Pricing model value being sent:', pricingModel?.value);
+      
       const response = await axios.post('/api/deploy-saas', {
         product_id: productId,
         email,
         stack_name: stackName,
         region: region.value,
+        pricing_model: pricingModel?.value, // Pass selected pricing model
         credentials: {
           aws_access_key_id: accessKey,
           aws_secret_access_key: secretKey,
@@ -434,6 +439,11 @@ export default function SaaSIntegrationPage() {
   const handleDeploy = async () => {
     if (!email || !stackName || !accessKey || !secretKey) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    if (!pricingModel) {
+      setError('Please select a pricing model');
       return;
     }
 
@@ -1157,6 +1167,23 @@ export default function SaaSIntegrationPage() {
 
                       <Container header={<Header variant="h2">Configuration</Header>}>
                         <SpaceBetween size="l">
+                          <FormField 
+                            label="Pricing Model" 
+                            description="Select the pricing model for your SaaS product"
+                            constraintText="Required"
+                          >
+                            <Select 
+                              selectedOption={pricingModel} 
+                              onChange={({ detail }) => setPricingModel(detail.selectedOption)} 
+                              options={[
+                                { label: 'Usage-based (Subscriptions)', value: 'subscriptions', description: 'Pay-as-you-go pricing model' },
+                                { label: 'Contract-based (Contracts)', value: 'contracts', description: 'Fixed-term contract pricing' },
+                                { label: 'Contract with Consumption', value: 'contracts_with_subscription', description: 'Hybrid pricing model' }
+                              ]} 
+                              placeholder="Select pricing model"
+                              disabled={loading || success} 
+                            />
+                          </FormField>
                           <FormField label="Email for SNS Notifications" description="Receives AWS Marketplace notifications" constraintText="Required">
                             <Input value={email} onChange={({ detail }) => setEmail(detail.value)} placeholder="admin@yourcompany.com" type="email" disabled={loading || success} />
                           </FormField>
