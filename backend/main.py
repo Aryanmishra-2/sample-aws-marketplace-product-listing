@@ -1574,6 +1574,183 @@ async def metering_guide(data: Dict[str, Any]):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.post("/metering-find-tables")
+async def metering_find_tables(data: Dict[str, Any]):
+    """Step 1: Find NewSubscribers and MeteringRecords tables"""
+    try:
+        credentials = data.get("credentials", {})
+        product_id = data.get("product_id")
+        
+        access_key = credentials.get("aws_access_key_id")
+        secret_key = credentials.get("aws_secret_access_key")
+        session_token = credentials.get("aws_session_token")
+        
+        print(f"[METERING DEBUG] Finding tables for product: {product_id}")
+        
+        dynamodb = boto3.client(
+            'dynamodb',
+            region_name='us-east-1',
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            aws_session_token=session_token
+        )
+        
+        tables = dynamodb.list_tables()['TableNames']
+        subscribers_table = None
+        metering_table = None
+        
+        for table in tables:
+            if product_id in table:
+                if 'NewSubscribers' in table or 'AWSMarketplaceSubscribers' in table:
+                    subscribers_table = table
+                    print(f"[METERING DEBUG] ✓ Found subscribers table: {table}")
+                if 'MeteringRecords' in table:
+                    metering_table = table
+                    print(f"[METERING DEBUG] ✓ Found metering table: {table}")
+        
+        if not subscribers_table:
+            return {
+                "success": False,
+                "error": "NewSubscribers table not found. Make sure the CloudFormation stack is deployed."
+            }
+        
+        if not metering_table:
+            return {
+                "success": False,
+                "error": "MeteringRecords table not found. Make sure the CloudFormation stack is deployed."
+            }
+        
+        return {
+            "success": True,
+            "subscribers_table": subscribers_table,
+            "metering_table": metering_table
+        }
+        
+    except Exception as e:
+        print(f"[METERING ERROR] Failed to find tables: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.post("/metering-get-customer")
+async def metering_get_customer(data: Dict[str, Any]):
+    """Step 2: Get customer from NewSubscribers table"""
+    try:
+        credentials = data.get("credentials", {})
+        subscribers_table = data.get("subscribers_table")
+        
+        access_key = credentials.get("aws_access_key_id")
+        secret_key = credentials.get("aws_secret_access_key")
+        session_token = credentials.get("aws_session_token")
+        
+        print(f"[METERING DEBUG] Getting customer from table: {subscribers_table}")
+        
+        dynamodb = boto3.client(
+            'dynamodb',
+            region_name='us-east-1',
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            aws_session_token=session_token
+        )
+        
+        response = dynamodb.scan(TableName=subscribers_table, Limit=10)
+        
+        if not response['Items']:
+            return {
+                "success": False,
+                "error": "No customers found in NewSubscribers table. Complete the buyer experience workflow first."
+            }
+        
+        # Get the first customer
+        customer = response['Items'][0]
+        customer_identifier = customer.get('customerIdentifier', {}).get('S', '')
+        product_code = customer.get('productCode', {}).get('S', '')
+        
+        print(f"[METERING DEBUG] ✓ Found customer: {customer_identifier}")
+        
+        return {
+            "success": True,
+            "customer_identifier": customer_identifier,
+            "product_code": product_code,
+            "customer_data": customer
+        }
+        
+    except Exception as e:
+        print(f"[METERING ERROR] Failed to get customer: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.post("/metering-insert-record")
+async def metering_insert_record(data: Dict[str, Any]):
+    """Step 3: Insert metering record into MeteringRecords table"""
+    try:
+        credentials = data.get("credentials", {})
+        metering_table = data.get("metering_table")
+        customer_identifier = data.get("customer_identifier")
+        usage_dimensions = data.get("usage_dimensions", [])
+        
+        access_key = credentials.get("aws_access_key_id")
+        secret_key = credentials.get("aws_secret_access_key")
+        session_token = credentials.get("aws_session_token")
+        
+        print(f"[METERING DEBUG] Inserting record for customer: {customer_identifier}")
+        
+        dynamodb = boto3.client(
+            'dynamodb',
+            region_name='us-east-1',
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            aws_session_token=session_token
+        )
+        
+        import time
+        current_timestamp = str(int(time.time()))
+        
+        # Prepare dimension usage
+        dimension_usage = []
+        for dimension in usage_dimensions:
+            dimension_usage.append({
+                "M": {
+                    "dimension": {"S": dimension},
+                    "value": {"N": "10"}
+                }
+            })
+        
+        # Create metering record
+        metering_record = {
+            "create_timestamp": {"N": current_timestamp},
+            "customerIdentifier": {"S": customer_identifier},
+            "dimension_usage": {"L": dimension_usage},
+            "metering_pending": {"S": "true"}
+        }
+        
+        dynamodb.put_item(TableName=metering_table, Item=metering_record)
+        print(f"[METERING DEBUG] ✓ Metering record inserted successfully")
+        
+        return {
+            "success": True,
+            "timestamp": current_timestamp,
+            "customer_identifier": customer_identifier,
+            "dimensions": usage_dimensions,
+            "message": "Metering record created successfully"
+        }
+        
+    except Exception as e:
+        print(f"[METERING ERROR] Failed to insert record: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 @app.post("/public-visibility-guide")
 async def public_visibility_guide(data: Dict[str, Any]):
     """Get public visibility request guide for contract-based pricing"""
@@ -3587,3 +3764,204 @@ async def get_entity_details(data: Dict[str, Any]):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+
+
+@app.post("/run-metering")
+async def run_metering(data: Dict[str, Any]):
+    """Run metering agent using the MeteringAgent class with strands"""
+    try:
+        credentials = data.get("credentials", {})
+        product_id = data.get("product_id")
+        access_key = credentials.get("aws_access_key_id")
+        secret_key = credentials.get("aws_secret_access_key")
+        session_token = credentials.get("aws_session_token")
+        
+        print("=" * 80)
+        print("[METERING] ===== STARTING METERING AGENT WORKFLOW =====")
+        print(f"[METERING] Product ID: {product_id}")
+        print("=" * 80)
+        
+        import time
+        steps = []
+        
+        # Step 1: Initialize MeteringAgent
+        print("\n[METERING] Step 1: Initializing MeteringAgent with strands...")
+        steps.append({
+            "step": 1, 
+            "name": "Initialize MeteringAgent", 
+            "status": "in_progress",
+            "substeps": []
+        })
+        
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agents'))
+            from metering import MeteringAgent
+            
+            agent = MeteringAgent()
+            agent.create_saas_agent.set_product_id(product_id)
+            
+            steps[-1]["status"] = "completed"
+            steps[-1]["message"] = "MeteringAgent initialized with product ID"
+            steps[-1]["product_id"] = product_id
+            print(f"[METERING] ✓ MeteringAgent ready with product: {product_id}")
+            
+        except Exception as e:
+            steps[-1]["status"] = "failed"
+            steps[-1]["error"] = str(e)
+            print(f"[METERING] ✗ Failed to initialize: {str(e)}")
+            import traceback
+            print(f"[METERING] [DEBUG] Traceback: {traceback.format_exc()}")
+            return {"success": False, "error": str(e), "steps": steps}
+        
+        # Step 2: Check Entitlement and Create Metering Records
+        print("\n[METERING] Step 2: Running entitlement check and creating metering records...")
+        steps.append({
+            "step": 2,
+            "name": "Check Entitlement & Create Metering Records",
+            "status": "in_progress",
+            "substeps": [
+                {"name": "Check pricing model", "status": "pending"},
+                {"name": "Connect to DynamoDB", "status": "pending"},
+                {"name": "Locate DynamoDB tables", "status": "pending"},
+                {"name": "Retrieve customer from subscribers", "status": "pending"},
+                {"name": "Get usage dimensions", "status": "pending"},
+                {"name": "Prepare metering record", "status": "pending"},
+                {"name": "Insert metering record", "status": "pending"},
+                {"name": "Verify record and check metering_pending flag", "status": "pending"}
+            ]
+        })
+        
+        try:
+            # Call the agent's check_entitlement_and_add_metering tool
+            print(f"[METERING] [DEBUG] Calling check_entitlement_and_add_metering...")
+            print(f"[METERING] [DEBUG] Product ID: {product_id}")
+            print(f"[METERING] [DEBUG] Access Key: {access_key[:10]}..." if access_key else "[METERING] [DEBUG] Access Key: None")
+            print(f"[METERING] [DEBUG] Has Session Token: {bool(session_token)}")
+            
+            result = agent.check_entitlement_and_add_metering(
+                access_key, secret_key, session_token
+            )
+            
+            print(f"[METERING] [DEBUG] Agent result: {json.dumps(result, indent=2)}")
+            
+            # Update substeps based on result
+            if result.get("status") == "success":
+                for substep in steps[-1]["substeps"]:
+                    substep["status"] = "completed"
+                
+                steps[-1]["status"] = "completed"
+                steps[-1]["customer_identifier"] = result.get("customer_identifier")
+                steps[-1]["timestamp"] = result.get("timestamp")
+                steps[-1]["pricing_model"] = result.get("pricing_model")
+                steps[-1]["subscribers_table"] = result.get("subscribers_table")
+                steps[-1]["metering_table"] = result.get("metering_table")
+                steps[-1]["usage_dimensions"] = result.get("usage_dimensions")
+                print(f"[METERING] ✓ Entitlement check completed successfully")
+                
+            elif result.get("status") == "skipped":
+                steps[-1]["status"] = "skipped"
+                steps[-1]["reason"] = result.get("reason")
+                print(f"[METERING] ⊘ Metering skipped: {result.get('reason')}")
+                return {
+                    "success": True,
+                    "skipped": True,
+                    "reason": result.get("reason"),
+                    "steps": steps
+                }
+                
+            elif result.get("error"):
+                steps[-1]["status"] = "failed"
+                steps[-1]["error"] = result["error"]
+                print(f"[METERING] ✗ Entitlement check failed: {result['error']}")
+                return {"success": False, "error": result["error"], "steps": steps}
+                
+        except Exception as e:
+            steps[-1]["status"] = "failed"
+            steps[-1]["error"] = str(e)
+            print(f"[METERING] ✗ Exception during entitlement check: {str(e)}")
+            import traceback
+            print(f"[METERING] [DEBUG] Full traceback:")
+            traceback.print_exc()
+            return {"success": False, "error": str(e), "steps": steps}
+        
+        # Step 3: Find and Trigger Lambda Function
+        print("\n[METERING] Step 3: Finding and triggering Lambda function...")
+        steps.append({
+            "step": 3,
+            "name": "Trigger Lambda to Process Metering",
+            "status": "in_progress",
+            "substeps": [
+                {"name": "Find hourly metering Lambda", "status": "in_progress"},
+                {"name": "Invoke Lambda function", "status": "pending"},
+                {"name": "Process metering records", "status": "pending"}
+            ]
+        })
+        
+        try:
+            lambda_client = boto3.client(
+                'lambda',
+                region_name='us-east-1',
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                aws_session_token=session_token
+            )
+            
+            # Find the hourly metering Lambda
+            functions = lambda_client.list_functions()['Functions']
+            lambda_function_name = None
+            
+            for func in functions:
+                func_name = func['FunctionName']
+                if product_id in func_name and 'Hourly' in func_name:
+                    lambda_function_name = func_name
+                    print(f"[METERING] ✓ Found Lambda: {lambda_function_name}")
+                    break
+            
+            if not lambda_function_name:
+                steps[-1]["substeps"][0]["status"] = "failed"
+                steps[-1]["status"] = "warning"
+                steps[-1]["message"] = "Lambda function not found - metering record created but not processed"
+                print("[METERING] ⚠ Lambda function not found")
+            else:
+                steps[-1]["substeps"][0]["status"] = "completed"
+                steps[-1]["substeps"][1]["status"] = "in_progress"
+                
+                # Use the agent's trigger_hourly_metering tool
+                lambda_result = agent.trigger_hourly_metering(
+                    lambda_function_name, access_key, secret_key, session_token
+                )
+                
+                steps[-1]["substeps"][1]["status"] = "completed"
+                steps[-1]["substeps"][2]["status"] = "completed"
+                steps[-1]["status"] = "completed"
+                steps[-1]["lambda_function"] = lambda_function_name
+                steps[-1]["lambda_result"] = lambda_result
+                print(f"[METERING] ✓ Lambda triggered: {lambda_result.get('status')}")
+                
+        except Exception as e:
+            steps[-1]["status"] = "warning"
+            steps[-1]["error"] = str(e)
+            steps[-1]["message"] = "Lambda trigger failed but metering record was created"
+            print(f"[METERING] ⚠ Lambda trigger failed: {str(e)}")
+        
+        print("\n" + "=" * 80)
+        print("[METERING] ===== METERING WORKFLOW COMPLETE =====")
+        print("=" * 80 + "\n")
+        
+        return {
+            "success": True,
+            "steps": steps,
+            "message": "Metering workflow completed successfully"
+        }
+        
+    except Exception as e:
+        print(f"[METERING] ✗ Workflow failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "steps": steps if 'steps' in locals() else []
+        }
