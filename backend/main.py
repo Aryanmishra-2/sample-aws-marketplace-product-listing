@@ -1327,6 +1327,12 @@ async def run_buyer_experience(data: Dict[str, Any]):
     try:
         credentials = data.get("credentials", {})
         product_id = data.get("product_id")
+        pricing_model = data.get("pricing_model")  # Get pricing model from user selection
+        
+        print(f"[BACKEND DEBUG] ===== BUYER EXPERIENCE WORKFLOW =====")
+        print(f"[BACKEND DEBUG] Product ID: {product_id}")
+        print(f"[BACKEND DEBUG] Pricing Model from frontend: {pricing_model}")
+        print(f"[BACKEND DEBUG] ================================================")
         
         access_key = credentials.get("aws_access_key_id")
         secret_key = credentials.get("aws_secret_access_key")
@@ -1349,90 +1355,31 @@ async def run_buyer_experience(data: Dict[str, Any]):
                 "buyer_result": buyer_result
             }
         
-        # Fetch pricing model to determine next step
-        print(f"[DEBUG] Fetching pricing model for product: {product_id}")
-        pricing_model = None
+        # Use pricing model from user selection (passed from frontend)
+        # Map CloudFormation values to agent routing logic
+        pricing_model_mapping = {
+            'subscriptions': 'Usage-based-pricing',
+            'contracts': 'Contract-based-pricing',
+            'contracts_with_subscription': 'Contract-with-consumption'
+        }
         
-        try:
-            session = boto3.Session(
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                aws_session_token=session_token,
-                region_name='us-east-1'
-            )
-            
-            catalog_client = session.client('marketplace-catalog')
-            
-            # Find the entity
-            list_response = catalog_client.list_entities(
-                Catalog='AWSMarketplace',
-                EntityType='SaaSProduct',
-                MaxResults=50
-            )
-            
-            entity_id = None
-            for entity in list_response.get('EntitySummaryList', []):
-                eid = entity.get('EntityId', '')
-                if eid.startswith(product_id):
-                    entity_id = eid
-                    break
-            
-            if entity_id:
-                describe_response = catalog_client.describe_entity(
-                    Catalog='AWSMarketplace',
-                    EntityId=entity_id
-                )
-                
-                details = describe_response.get('Details', '{}')
-                if isinstance(details, str):
-                    details = json.loads(details)
-                
-                # Check pricing terms
-                pricing_terms = details.get('PricingTerms', [])
-                has_usage_based = False
-                has_contract = False
-                
-                for term in pricing_terms:
-                    term_type = term.get('Type', '')
-                    if term_type == 'UsageBasedPricingTerm':
-                        has_usage_based = True
-                    elif term_type in ['ConfigurableUpfrontPricingTerm', 'FixedUpfrontPricingTerm']:
-                        has_contract = True
-                
-                # Determine pricing model
-                if has_usage_based and has_contract:
-                    pricing_model = "Contract-with-consumption"
-                elif has_usage_based:
-                    pricing_model = "Usage-based-pricing"
-                elif has_contract:
-                    pricing_model = "Contract-based-pricing"
-                else:
-                    # Check dimensions as fallback
-                    dimensions = details.get('Dimensions', [])
-                    for dim in dimensions:
-                        dim_types = dim.get('Types', [])
-                        if 'Metered' in dim_types:
-                            pricing_model = "Usage-based-pricing"
-                            break
-                        elif 'Entitled' in dim_types:
-                            pricing_model = "Contract-based-pricing"
-                            break
+        # Convert CloudFormation format to agent format if needed
+        if pricing_model in pricing_model_mapping:
+            agent_pricing_model = pricing_model_mapping[pricing_model]
+        else:
+            agent_pricing_model = pricing_model  # Already in agent format
         
-        except Exception as e:
-            print(f"[WARNING] Failed to fetch pricing model: {str(e)}")
-        
-        if not pricing_model:
-            pricing_model = "Contract-based-pricing"  # Default
-        
-        print(f"[DEBUG] Pricing model: {pricing_model}")
+        print(f"[BACKEND DEBUG] Pricing model for routing: {agent_pricing_model}")
         
         # Route to appropriate agent based on pricing model
         next_step = None
         next_step_result = None
         
-        if pricing_model in ["Usage-based-pricing", "Contract-with-consumption"]:
+        if agent_pricing_model in ["Usage-based-pricing", "Contract-with-consumption"]:
             # Route to metering agent
-            print("[DEBUG] Routing to metering agent...")
+            print("[BACKEND DEBUG] ===== ROUTING TO METERING AGENT =====")
+            print(f"[BACKEND DEBUG] Pricing model requires metering: {agent_pricing_model}")
+            print("[BACKEND DEBUG] ================================================")
             from metering import MeteringAgent
             
             metering_agent = MeteringAgent()
@@ -1445,7 +1392,10 @@ async def run_buyer_experience(data: Dict[str, Any]):
             
         else:  # Contract-based-pricing
             # Route to public visibility agent
-            print("[DEBUG] Routing to public visibility agent...")
+            print("[BACKEND DEBUG] ===== ROUTING TO PUBLIC VISIBILITY AGENT =====")
+            print(f"[BACKEND DEBUG] Pricing model: {agent_pricing_model}")
+            print("[BACKEND DEBUG] Starting public visibility workflow...")
+            print("[BACKEND DEBUG] ================================================")
             from public_visibility import PublicVisibilityAgent
             
             visibility_agent = PublicVisibilityAgent()
@@ -1456,10 +1406,14 @@ async def run_buyer_experience(data: Dict[str, Any]):
             next_step = "public_visibility"
             next_step_result = visibility_result
         
+        print(f"[BACKEND DEBUG] ===== WORKFLOW COMPLETE =====")
+        print(f"[BACKEND DEBUG] Next step: {next_step}")
+        print(f"[BACKEND DEBUG] ================================================")
+        
         return {
             "success": True,
             "buyer_result": buyer_result,
-            "pricing_model": pricing_model,
+            "pricing_model": agent_pricing_model,
             "next_step": next_step,
             "next_step_result": next_step_result
         }
@@ -1475,80 +1429,88 @@ async def run_buyer_experience(data: Dict[str, Any]):
 async def buyer_experience_guide(data: Dict[str, Any]):
     """Get buyer experience simulation guide"""
     try:
-        # Import buyer experience agent
-        import sys
-        import os
-        sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agents'))
-        from buyer_experience import BuyerExperienceAgent
-        
-        agent = BuyerExperienceAgent()
-        checklist = agent.get_simulation_checklist()
-        
         return {
             "success": True,
-            "checklist": checklist,
             "steps": [
                 {
                     "step": 1,
-                    "title": "Access Product in AWS Marketplace Management Portal",
-                    "description": "Open AWS Marketplace Management Portal and navigate to your SaaS product listing",
+                    "title": "Open SaaS Product Page",
+                    "description": "Access your product in the AWS Marketplace Management Portal",
                     "actions": [
-                        "Open AWS Marketplace Management Portal",
-                        "Navigate to your SaaS product listing",
-                        "Select your product"
+                        "Open AWS Marketplace Management Portal: https://aws.amazon.com/marketplace/management/products",
+                        "Select the product you created in the Lab: Create a SaaS listing"
                     ]
                 },
                 {
                     "step": 2,
                     "title": "Validate Fulfillment URL Update",
-                    "description": "Check that the fulfillment URL was updated successfully",
+                    "description": "Ensure the fulfillment URL was updated successfully before continuing",
                     "actions": [
-                        "Go to the 'Request Log' tab",
-                        "Check that the last request status is 'Succeeded'",
-                        "This confirms the fulfillment URL was updated"
+                        "In the Request Log tab, validate that the last request's status is Succeeded",
+                        "This confirms the solution has updated your AWS Marketplace product's fulfillment URL"
                     ]
                 },
                 {
                     "step": 3,
-                    "title": "Review Product Information",
-                    "description": "Verify your product information is accurate",
+                    "title": "View Product on Marketplace",
+                    "description": "Access your product as customers would see it",
                     "actions": [
-                        "Select 'View on AWS Marketplace'",
-                        "Review product information",
-                        "Verify pricing, description, and features"
+                        "Select 'View on AWS Marketplace'"
                     ]
                 },
                 {
                     "step": 4,
-                    "title": "Simulate Purchase Process",
-                    "description": "Test the buyer purchase flow",
+                    "title": "Start Purchase Process",
+                    "description": "Begin the test purchase flow",
                     "actions": [
-                        "Select 'View purchase options'",
-                        "Under 'How long do you want your contract to run?', select '1 month'",
-                        "Set 'Renewal Settings' to 'No'",
-                        "Under 'Contract Options', set any option quantity to 1",
-                        "Select 'Create contract' then 'Pay now'"
+                        "Select 'View purchase options'"
                     ]
                 },
                 {
                     "step": 5,
-                    "title": "Account Setup and Registration",
-                    "description": "Complete the registration process",
+                    "title": "Configure Contract Terms",
+                    "description": "Set up a test contract with minimal commitment",
                     "actions": [
-                        "Select 'Set up your account'",
-                        "You'll be redirected to your custom registration page",
-                        "Fill in the registration information (company name, email, etc.)",
-                        "Select 'Register'"
+                        "Under 'How long do you want your contract to run?', select 1 month",
+                        "Set your Renewal Settings to No",
+                        "Under Contract Options, set any option quantity to 1 (or select the cheapest option tier, if applicable)"
                     ]
                 },
                 {
                     "step": 6,
+                    "title": "Complete Purchase",
+                    "description": "Finalize the test purchase",
+                    "actions": [
+                        "Select 'Create contract'",
+                        "Then select 'Pay now'"
+                    ]
+                },
+                {
+                    "step": 7,
+                    "title": "Set Up Account",
+                    "description": "Begin the registration process",
+                    "actions": [
+                        "Select 'Set up your account'",
+                        "You will be redirected to your custom registration page"
+                    ]
+                },
+                {
+                    "step": 8,
+                    "title": "Complete Registration",
+                    "description": "Fill in your information and register",
+                    "actions": [
+                        "Fill in the information in the registration page (company name, contact email, etc.)",
+                        "Select 'Register'"
+                    ]
+                },
+                {
+                    "step": 9,
                     "title": "Verify Registration Success",
                     "description": "Confirm the registration completed successfully",
                     "expected": [
-                        "Blue banner appears confirming successful registration",
-                        "Email notification sent to your admin email",
-                        "Customer record created in DynamoDB"
+                        "After a few seconds, a blue banner should appear confirming successful registration",
+                        "You should receive an email with subscription details in your notification email inbox",
+                        "Customer record is created in DynamoDB"
                     ]
                 }
             ]
@@ -1621,49 +1583,56 @@ async def public_visibility_guide(data: Dict[str, Any]):
             "steps": [
                 {
                     "step": 1,
-                    "title": "Prepare Product Information",
-                    "description": "Ensure all product details are finalized",
+                    "title": "Prepare for Public Launch",
+                    "description": "Ensure your product is ready to go live",
                     "actions": [
                         "Review product title, description, and features",
                         "Verify pricing information is accurate",
                         "Ensure all required documentation is uploaded",
-                        "Confirm support contact information is correct"
+                        "Confirm support contact information is correct",
+                        "Test the complete buyer experience flow"
                     ]
                 },
                 {
                     "step": 2,
-                    "title": "Submit Public Visibility Request",
-                    "description": "Request to make your product publicly available",
+                    "title": "Access Your Product in Management Portal",
+                    "description": "Navigate to your SaaS product page",
                     "actions": [
-                        "Open AWS Marketplace Management Portal",
-                        "Navigate to your product",
-                        "Go to 'Requests' tab",
-                        "Click 'Request changes to current version'",
-                        "Select 'Update product information'",
-                        "Change visibility from 'Limited' to 'Public'",
-                        "Submit the request"
+                        "Open AWS Marketplace Management Portal: https://aws.amazon.com/marketplace/management/products",
+                        "Select your product in the SaaS product page"
                     ]
                 },
                 {
                     "step": 3,
-                    "title": "AWS Review Process",
-                    "description": "AWS will review your public visibility request",
-                    "expected": [
-                        "Review typically takes 1-3 business days",
-                        "You'll receive email notifications about the status",
-                        "AWS may request additional information or changes",
-                        "Once approved, your product will be publicly visible"
+                    "title": "Request Product Visibility Change",
+                    "description": "Initiate the public visibility request",
+                    "actions": [
+                        "Select 'Request changes'",
+                        "Choose 'Update product visibility'",
+                        "Follow the prompts to change from Limited to Public visibility"
                     ]
                 },
                 {
                     "step": 4,
+                    "title": "AWS Review Process",
+                    "description": "AWS will review your public visibility request",
+                    "expected": [
+                        "Review typically takes 1-3 business days",
+                        "You'll receive email notifications about the review status",
+                        "AWS may request additional information or changes",
+                        "Once approved, your product will be publicly visible to all AWS customers"
+                    ]
+                },
+                {
+                    "step": 5,
                     "title": "Post-Approval Actions",
                     "description": "After your product goes public",
                     "actions": [
-                        "Verify product appears in AWS Marketplace search",
-                        "Test the public product page",
-                        "Monitor for customer subscriptions",
-                        "Respond to customer inquiries promptly"
+                        "Verify product appears in AWS Marketplace search results",
+                        "Test the public product page as a customer would see it",
+                        "Monitor for customer subscriptions and usage",
+                        "Respond to customer inquiries promptly",
+                        "Track product performance and customer feedback"
                     ]
                 }
             ]
@@ -1937,6 +1906,65 @@ async def get_stack_status(data: Dict[str, Any]):
             
     except Exception as e:
         print(f"[ERROR] get_stack_status failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.post("/get-stack-parameters")
+async def get_stack_parameters(data: Dict[str, Any]):
+    """Get CloudFormation stack parameters including TypeOfSaaSListing"""
+    try:
+        stack_name = data.get("stack_name")
+        region = data.get("region", "us-east-1")
+        credentials = data.get("credentials", {})
+        
+        print(f"[BACKEND DEBUG] Getting parameters for stack: {stack_name}")
+        
+        # Create boto3 session
+        session = boto3.Session(
+            aws_access_key_id=credentials.get("aws_access_key_id"),
+            aws_secret_access_key=credentials.get("aws_secret_access_key"),
+            aws_session_token=credentials.get("aws_session_token"),
+            region_name=region
+        )
+        
+        cf_client = session.client('cloudformation')
+        
+        # Get stack details
+        try:
+            response = cf_client.describe_stacks(StackName=stack_name)
+            stack = response['Stacks'][0]
+            
+            parameters = {}
+            pricing_model = None
+            
+            # Extract parameters
+            for param in stack.get('Parameters', []):
+                param_key = param.get('ParameterKey')
+                param_value = param.get('ParameterValue')
+                parameters[param_key] = param_value
+                
+                if param_key == 'TypeOfSaaSListing':
+                    pricing_model = param_value
+                    print(f"[BACKEND DEBUG] Found TypeOfSaaSListing: {pricing_model}")
+            
+            return {
+                "success": True,
+                "pricing_model": pricing_model,
+                "parameters": parameters
+            }
+            
+        except cf_client.exceptions.ClientError as e:
+            if 'does not exist' in str(e):
+                return {
+                    "success": False,
+                    "error": "Stack not found"
+                }
+            raise
+            
+    except Exception as e:
+        print(f"[ERROR] get_stack_parameters failed: {str(e)}")
         return {
             "success": False,
             "error": str(e)

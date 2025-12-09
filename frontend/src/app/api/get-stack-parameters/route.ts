@@ -3,30 +3,30 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { product_id, credentials, pricing_model } = body;
+    const { stack_name, region, credentials } = body;
 
-    console.log('[API ROUTE DEBUG] Buyer experience with pricing_model:', pricing_model);
+    console.log('[API ROUTE DEBUG] Getting stack parameters for:', stack_name);
 
-    if (!product_id || !credentials) {
+    if (!stack_name || !credentials) {
       return NextResponse.json(
         { success: false, error: 'Missing required data' },
         { status: 400 }
       );
     }
 
-    // Call FastAPI backend with timeout (120 seconds for buyer experience)
+    // Call FastAPI backend
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      const response = await fetch('http://localhost:8000/run-buyer-experience', {
+      const response = await fetch('http://localhost:8000/get-stack-parameters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          product_id,
-          pricing_model,
+          stack_name,
+          region: region || 'us-east-1',
           credentials,
         }),
         signal: controller.signal,
@@ -37,30 +37,30 @@ export async function POST(request: NextRequest) {
 
       if (!response.ok) {
         return NextResponse.json(
-          { success: false, error: data.detail?.error || data.error || 'Buyer experience failed' },
+          { success: false, error: data.detail?.error || data.error || 'Failed to get stack parameters' },
           { status: response.status }
         );
       }
 
+      console.log('[API ROUTE DEBUG] Stack parameters retrieved:', data.pricing_model);
+
       return NextResponse.json({
         success: true,
-        buyer_result: data.buyer_result,
         pricing_model: data.pricing_model,
-        next_step: data.next_step,
-        next_step_result: data.next_step_result,
+        parameters: data.parameters,
       });
     } catch (fetchError: any) {
       clearTimeout(timeoutId);
       if (fetchError.name === 'AbortError') {
         return NextResponse.json(
-          { success: false, error: 'Buyer experience request timed out. Please try again.' },
+          { success: false, error: 'Request timed out' },
           { status: 504 }
         );
       }
       throw fetchError;
     }
   } catch (error: any) {
-    console.error('Run buyer experience error:', error);
+    console.error('Get stack parameters error:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }

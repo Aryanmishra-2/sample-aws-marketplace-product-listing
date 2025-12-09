@@ -103,11 +103,9 @@ export default function SaaSIntegrationPage() {
     // Check if coming from "Continue" button (stack already exists)
     const skipDeployment = searchParams.get('skipDeployment');
     if (skipDeployment === 'true') {
-      // Stack already exists, skip to SNS confirmation
-      setSuccess(true);
-      setDeployedStackName(`saas-integration-${productId}`);
-      setCurrentSubStep(1); // Start at SNS Confirmation
-      setShowSnsConfirmation(true);
+      // Stack already exists, redirect to workflow page
+      const stackName = `saas-integration-${productId}`;
+      router.push(`/saas-workflow?productId=${productId}&stackName=${stackName}`);
     }
   }, [isAuthenticated, productId, credentials, router, urlProductId, storeProductId, setProductId, searchParams]);
 
@@ -539,7 +537,9 @@ export default function SaaSIntegrationPage() {
                 actions={
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button onClick={handleBack}>← Back</Button>
-                    {success && !showSnsConfirmation && <Button variant="primary" onClick={() => { setShowSnsConfirmation(true); setCurrentSubStep(1); }}>Continue →</Button>}
+                    {success && !showSnsConfirmation && <Button variant="primary" onClick={() => { 
+                      router.push(`/saas-workflow?productId=${productId}&stackName=${deployedStackName}&pricingModel=${pricingModel?.value || ''}`);
+                    }}>Continue to Workflow →</Button>}
                     {!success && <Button variant="primary" onClick={handleDeploy} loading={loading} disabled={loading}>Deploy Stack 🚀</Button>}
                   </SpaceBetween>
                 }
@@ -976,45 +976,69 @@ export default function SaaSIntegrationPage() {
 
                         <Box textAlign="center">
                           <Button 
-                            variant="primary" 
-                            onClick={async () => {
+                            variant="primary"
+                            formAction="none"
+                            onClick={async (e) => {
+                              e.preventDefault(); // Prevent form submission
                               setLoading(true);
                               setError('');
                               
                               try {
-                                const response = await axios.post('/api/run-buyer-experience', {
-                                  product_id: productId,
-                                  credentials: {
-                                    aws_access_key_id: accessKey,
-                                    aws_secret_access_key: secretKey,
-                                    aws_session_token: sessionToken || undefined,
-                                  }
-                                });
+                                console.log('[FRONTEND DEBUG] Complete Testing clicked');
+                                console.log('[FRONTEND DEBUG] Current pricing model:', pricingModel?.value);
                                 
-                                if (response.data.success) {
-                                  const nextStep = response.data.next_step;
-                                  
-                                  if (nextStep === 'metering') {
-                                    const meteringResponse = await axios.post('/api/metering-guide', {});
-                                    if (meteringResponse.data.success) {
-                                      setMeteringSteps(meteringResponse.data.steps);
-                                      setShowMeteringGuide(true);
-                                      setCurrentSubStep(3);
+                                // If pricing model is not available (e.g., used Continue button), fetch from CloudFormation
+                                let currentPricingModel = pricingModel?.value;
+                                
+                                if (!currentPricingModel) {
+                                  console.log('[FRONTEND DEBUG] Pricing model not available, fetching from CloudFormation stack...');
+                                  try {
+                                    const stackResponse = await axios.post('/api/get-stack-parameters', {
+                                      stack_name: `saas-integration-${productId}`,
+                                      region: region.value,
+                                      credentials: {
+                                        aws_access_key_id: accessKey,
+                                        aws_secret_access_key: secretKey,
+                                        aws_session_token: sessionToken || undefined,
+                                      }
+                                    });
+                                    
+                                    if (stackResponse.data.success) {
+                                      currentPricingModel = stackResponse.data.pricing_model;
+                                      console.log('[FRONTEND DEBUG] Fetched pricing model from stack:', currentPricingModel);
                                     }
-                                  } else if (nextStep === 'public_visibility') {
-                                    const visibilityResponse = await axios.post('/api/public-visibility-guide', {});
-                                    if (visibilityResponse.data.success) {
-                                      setVisibilitySteps(visibilityResponse.data.steps);
-                                      setShowVisibilityGuide(true);
-                                      setCurrentSubStep(3);
-                                    }
+                                  } catch (stackErr) {
+                                    console.error('[FRONTEND DEBUG] Failed to fetch pricing model from stack:', stackErr);
+                                  }
+                                }
+                                
+                                // Route based on pricing model
+                                console.log('[FRONTEND DEBUG] Routing based on pricing model:', currentPricingModel);
+                                
+                                if (currentPricingModel === 'contracts') {
+                                  // Contract-based pricing -> Public Visibility
+                                  console.log('[FRONTEND DEBUG] Contract-based pricing detected, showing public visibility guide');
+                                  const visibilityResponse = await axios.post('/api/public-visibility-guide', {});
+                                  if (visibilityResponse.data.success) {
+                                    setVisibilitySteps(visibilityResponse.data.steps);
+                                    setShowVisibilityGuide(true);
+                                    setCurrentSubStep(3);
+                                  }
+                                } else if (currentPricingModel === 'subscriptions' || currentPricingModel === 'contracts_with_subscription') {
+                                  // Usage-based or hybrid -> Metering
+                                  console.log('[FRONTEND DEBUG] Usage-based pricing detected, showing metering guide');
+                                  const meteringResponse = await axios.post('/api/metering-guide', {});
+                                  if (meteringResponse.data.success) {
+                                    setMeteringSteps(meteringResponse.data.steps);
+                                    setShowMeteringGuide(true);
+                                    setCurrentSubStep(3);
                                   }
                                 } else {
-                                  setError(response.data.error || 'Buyer experience simulation failed');
+                                  setError('Unable to determine pricing model. Please redeploy the stack.');
                                 }
                               } catch (err: any) {
-                                console.error('Failed to run buyer experience:', err);
-                                setError(err.response?.data?.error || 'Failed to complete buyer experience');
+                                console.error('Failed to complete testing:', err);
+                                setError(err.response?.data?.error || 'Failed to complete testing workflow');
                               } finally {
                                 setLoading(false);
                               }
