@@ -5,11 +5,11 @@ import { useStore } from '@/lib/store';
 const WORKFLOW_STEPS = [
   { key: 'credentials', label: 'Credentials', progress: 0 },
   { key: 'welcome', label: 'Welcome', progress: 10 },
-  { key: 'gather_context', label: 'Product Info', progress: 25 },
-  { key: 'analyze_product', label: 'AI Analysis', progress: 40 },
-  { key: 'review_suggestions', label: 'Review', progress: 55 },
-  { key: 'create_listing', label: 'Create Listing', progress: 70 },
-  { key: 'saas_deployment', label: 'SaaS Deploy', progress: 85 },
+  { key: 'gather_context', label: 'Product Info', progress: 20 },
+  { key: 'analyze_product', label: 'AI Analysis', progress: 35 },
+  { key: 'review_suggestions', label: 'Review', progress: 50 },
+  { key: 'create_listing', label: 'Create Listing', progress: 65 },
+  { key: 'saas_deployment', label: 'SaaS Deploy', progress: 80 },
   { key: 'workflow_orchestrator', label: 'Complete', progress: 100 },
 ];
 

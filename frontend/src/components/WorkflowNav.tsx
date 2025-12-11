@@ -96,23 +96,61 @@ export default function WorkflowNav({ currentSubStep = 0, onSubStepClick }: Work
     return null;
   }
 
+  // Map store step keys to WorkflowNav stage keys
+  const stepKeyMapping: Record<string, string> = {
+    'credentials': 'credentials',
+    'seller_registration': 'seller_registration',
+    'gather_context': 'gather_context',
+    'ai_analysis': 'analyze_product',
+    'review_suggestions': 'review_suggestions',
+    'create_listing': 'create_listing',
+    'listing_success': 'create_listing',
+    'saas_deployment': 'saas_deployment',
+  };
+
   const getStepStatus = (stage: WorkflowStage, index: number) => {
-    // Check if this stage is completed
-    if (completedSteps.includes(stage.key)) {
-      return 'completed';
-    }
-    // Check if this is the current page
+    // Find the current page's stage index based on pathname
+    const currentPageIndex = WORKFLOW_STAGES.findIndex(s => s.path === pathname);
+    
+    // Check if this is the current page - takes highest priority
     if (pathname === stage.path) {
       return 'current';
     }
-    // Check if this stage index is less than current step number
-    if (index < currentStep) {
+    
+    // If we're on a valid workflow page, use pathname-based logic
+    if (currentPageIndex >= 0) {
+      // Stages before the current page are completed
+      if (index < currentPageIndex) {
+        return 'completed';
+      }
+      // Stages after the current page are pending
+      return 'pending';
+    }
+    
+    // Fallback: use store's currentStep if pathname doesn't match any stage
+    const currentStepKey = stepKeyMapping[currentStep] || currentStep;
+    const currentStepIndex = WORKFLOW_STAGES.findIndex(s => s.key === currentStepKey);
+    
+    // Check if this stage is in completedSteps (map the keys)
+    const isInCompletedSteps = completedSteps.some(step => {
+      const mappedKey = stepKeyMapping[step] || step;
+      return mappedKey === stage.key;
+    });
+    
+    if (isInCompletedSteps) {
       return 'completed';
     }
-    // Check if this stage index equals current step number
-    if (index === currentStep) {
+    
+    // Check if this stage index is less than current step index
+    if (currentStepIndex >= 0 && index < currentStepIndex) {
+      return 'completed';
+    }
+    
+    // Check if this stage index equals current step index
+    if (currentStepIndex >= 0 && index === currentStepIndex) {
       return 'current';
     }
+    
     return 'pending';
   };
 
@@ -128,7 +166,7 @@ export default function WorkflowNav({ currentSubStep = 0, onSubStepClick }: Work
         padding: '20px 16px',
         minHeight: 'calc(100vh - 120px)',
         maxHeight: 'calc(100vh - 120px)',
-        width: '280px',
+        width: '320px',
         overflowY: 'auto',
       }}
     >

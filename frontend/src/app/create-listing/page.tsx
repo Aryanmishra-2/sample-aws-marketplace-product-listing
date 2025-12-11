@@ -31,15 +31,15 @@ interface Stage {
 }
 
 const INITIAL_STAGES: Stage[] = [
-  { name: 'Product Information', description: 'Setting product details, logo, and descriptions', progress: 11, status: 'pending' },
-  { name: 'Fulfillment Configuration', description: 'Configuring fulfillment URL and settings', progress: 22, status: 'pending' },
-  { name: 'Pricing Dimensions', description: 'Creating pricing dimensions and models', progress: 33, status: 'pending' },
-  { name: 'Price Review', description: 'Configuring contract durations and options', progress: 44, status: 'pending' },
-  { name: 'Refund Policy', description: 'Setting refund policy terms', progress: 55, status: 'pending' },
-  { name: 'EULA Configuration', description: 'Configuring End User License Agreement', progress: 66, status: 'pending' },
-  { name: 'Availability Settings', description: 'Setting geographic availability', progress: 77, status: 'pending' },
-  { name: 'Allowlist Configuration', description: 'Configuring buyer account allowlist', progress: 88, status: 'pending' },
-  { name: 'Publish to Limited', description: 'Publishing product and offer to Limited stage', progress: 100, status: 'pending' },
+  { name: 'Product Information', description: 'Setting product details, logo, and descriptions', progress: 10, status: 'pending' },
+  { name: 'Fulfillment Configuration', description: 'Configuring fulfillment URL and settings', progress: 20, status: 'pending' },
+  { name: 'Pricing Dimensions', description: 'Creating pricing dimensions and models', progress: 30, status: 'pending' },
+  { name: 'Price Review', description: 'Configuring contract durations and options', progress: 40, status: 'pending' },
+  { name: 'Refund Policy', description: 'Setting refund policy terms', progress: 50, status: 'pending' },
+  { name: 'EULA Configuration', description: 'Configuring End User License Agreement', progress: 60, status: 'pending' },
+  { name: 'Availability Settings', description: 'Setting geographic availability', progress: 70, status: 'pending' },
+  { name: 'Allowlist Configuration', description: 'Configuring buyer account allowlist', progress: 80, status: 'pending' },
+  { name: 'Publish to Limited', description: 'Publishing product and offer to Limited stage', progress: 90, status: 'pending' },
 ];
 
 export default function CreateListingPage() {
@@ -175,6 +175,9 @@ export default function CreateListingPage() {
         }
       });
       
+      // Track Product Information sub-steps (needs both "Product created" and "Product details updated")
+      let productInfoSubStepsCompleted = 0;
+      
       // Handle changeset updates
       eventSource.addEventListener('changeset', (e: any) => {
         const data = JSON.parse(e.data);
@@ -183,7 +186,19 @@ export default function CreateListingPage() {
         const stageIndex = stageNameToIndex[data.stage] ?? 0;
         
         if (data.status === 'SUCCEEDED') {
-          updateStageStatus(stageIndex, 'completed', `✓ ${data.message}`);
+          // Special handling for Product Information - needs 2 sub-steps to complete
+          if (data.stage === 'Product Information') {
+            productInfoSubStepsCompleted++;
+            if (productInfoSubStepsCompleted >= 2) {
+              // Both "Product created" and "Product details updated" are done
+              updateStageStatus(stageIndex, 'completed', `✓ ${data.message}`);
+            } else {
+              // Only first sub-step done, keep in progress
+              updateStageStatus(stageIndex, 'in-progress', `✓ ${data.message} (1/2)`);
+            }
+          } else {
+            updateStageStatus(stageIndex, 'completed', `✓ ${data.message}`);
+          }
         } else if (data.status === 'FAILED') {
           updateStageStatus(stageIndex, 'error', `✗ ${data.message}`);
         }
@@ -194,13 +209,20 @@ export default function CreateListingPage() {
         const data = JSON.parse(e.data);
         console.log(`[SSE] Complete event:`, data);
         
-        setProgress(100);
+        // Only set progress to 100% if published to limited is complete
+        const isFullyComplete = data.published_to_limited === true;
+        setProgress(isFullyComplete ? 100 : 90);
         setSuccess(true);
         setLocalProductId(data.product_id);
         setOfferId(data.offer_id);
         setPublishedToLimited(data.published_to_limited || false);
         setProductId(data.product_id);
         setLoading(false);
+        
+        // Mark Publish to Limited as completed only if actually published
+        if (isFullyComplete) {
+          updateStageStatus(8, 'completed', '✓ Published to Limited');
+        }
         
         eventSource.close();
       });
