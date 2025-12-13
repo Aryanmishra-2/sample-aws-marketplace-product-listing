@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         pricing_model: data.pricing_model,
+        pricing_dimensions: data.pricing_dimensions,
         parameters: data.parameters,
       });
     } catch (fetchError: any) {

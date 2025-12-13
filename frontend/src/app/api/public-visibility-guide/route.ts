@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       return NextResponse.json(
-        { success: false, error: data.detail?.error || data.error || 'Failed to get guide' },
+        { success: false, error: data.detail?.error || data.error || 'Failed to get public visibility guide' },
         { status: response.status }
       );
     }

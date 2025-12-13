@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { product_id, email, stack_name, region, credentials, pricing_model } = body;
+    const { product_id, email, stack_name, region, credentials, pricing_model, pricing_dimensions } = body;
 
     console.log('[API ROUTE DEBUG] Received pricing_model from frontend:', pricing_model);
+    console.log('[API ROUTE DEBUG] Received pricing_dimensions from frontend:', pricing_dimensions);
 
     if (!product_id || !email || !stack_name || !credentials) {
       return NextResponse.json(
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
         stack_name,
         region: region || 'us-east-1',
         pricing_model,
+        pricing_dimensions: pricing_dimensions || null,
         credentials,
       };
       

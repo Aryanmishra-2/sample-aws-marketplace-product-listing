@@ -5,18 +5,12 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Box, SpaceBetween, StatusIndicator } from '@cloudscape-design/components';
 import { useState, useEffect } from 'react';
 
-interface SubStep {
-  label: string;
-  icon: string;
-}
-
 interface WorkflowStage {
   key: string;
   label: string;
   path: string;
   icon: string;
   description: string;
-  subSteps?: SubStep[];
 }
 
 const WORKFLOW_STAGES: WorkflowStage[] = [
@@ -67,22 +61,11 @@ const WORKFLOW_STAGES: WorkflowStage[] = [
     label: 'SaaS Integration', 
     path: '/saas-integration',
     icon: '🔧',
-    description: 'Deploy Infrastructure',
-    subSteps: [
-      { label: 'Stack Deployment', icon: '☁️' },
-      { label: 'SNS Confirmation', icon: '📧' },
-      { label: 'Buyer Experience', icon: '🛒' },
-      { label: 'Testing Complete', icon: '✅' },
-    ]
+    description: 'Deploy Infrastructure'
   },
 ];
 
-interface WorkflowNavProps {
-  currentSubStep?: number; // For SaaS Integration sub-steps (0-3)
-  onSubStepClick?: (subStepIndex: number) => void; // Callback for sub-step navigation
-}
-
-export default function WorkflowNav({ currentSubStep = 0, onSubStepClick }: WorkflowNavProps = {}) {
+export default function WorkflowNav() {
   const { accountInfo, currentStep, completedSteps } = useStore();
   const router = useRouter();
   const pathname = usePathname();
@@ -263,70 +246,7 @@ export default function WorkflowNav({ currentSubStep = 0, onSubStepClick }: Work
                 </div>
               </div>
               
-              {/* Show sub-steps for SaaS Integration when current */}
-              {stage.subSteps && status === 'current' && (
-                <div style={{ 
-                  marginLeft: '20px', 
-                  marginTop: '8px',
-                  paddingLeft: '16px',
-                  borderLeft: '2px solid #ff9900'
-                }}>
-                  {stage.subSteps.map((subStep, subIndex) => {
-                    const isCompleted = subIndex < currentSubStep;
-                    const isCurrent = subIndex === currentSubStep;
-                    const isPending = subIndex > currentSubStep;
-                    const isClickable = isCompleted || isCurrent;
-                    
-                    return (
-                      <div 
-                        key={subIndex}
-                        onClick={() => isClickable && onSubStepClick && onSubStepClick(subIndex)}
-                        style={{
-                          padding: '8px 12px',
-                          marginBottom: '4px',
-                          backgroundColor: isCurrent ? '#fff8f0' : 'white',
-                          borderRadius: '6px',
-                          border: isCurrent ? '2px solid #ff9900' : isCompleted ? '1px solid #037f0c' : '1px solid #e9ebed',
-                          fontSize: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          opacity: isPending ? 0.6 : 1,
-                          cursor: isClickable ? 'pointer' : 'not-allowed',
-                          transition: 'all 0.2s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (isClickable) {
-                            e.currentTarget.style.boxShadow = '0 1px 4px rgba(0, 0, 0, 0.1)';
-                            e.currentTarget.style.transform = 'translateX(2px)';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (isClickable) {
-                            e.currentTarget.style.boxShadow = 'none';
-                            e.currentTarget.style.transform = 'translateX(0)';
-                          }
-                        }}
-                      >
-                        <span style={{ fontSize: '16px' }}>{subStep.icon}</span>
-                        <span style={{ 
-                          color: isCurrent ? '#ff9900' : isCompleted ? '#037f0c' : '#545b64',
-                          fontWeight: isCurrent ? 'bold' : 'normal',
-                          flex: 1
-                        }}>
-                          {subStep.label}
-                        </span>
-                        {isCompleted && (
-                          <span style={{ color: '#037f0c', fontSize: '14px', fontWeight: 'bold' }}>✓</span>
-                        )}
-                        {isCurrent && (
-                          <span style={{ color: '#ff9900', fontSize: '10px' }}>●</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+
             </div>
           );
         })}

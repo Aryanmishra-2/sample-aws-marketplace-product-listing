@@ -290,31 +290,86 @@ class MeteringAgent(Agent):
             
             # Sub-step 5: Get usage dimensions
             print("\n[METERING AGENT] Sub-step 5: Getting usage dimensions...")
+            # Set credentials in create_saas_agent so it can fetch dimensions from marketplace
+            self.create_saas_agent.set_credentials(access_key, secret_key, session_token)
+            
+            # Try to load stored dimensions if not already set
+            if not self.create_saas_agent._pricing_dimensions:
+                print("[METERING AGENT] → No pricing dimensions set, trying to load from storage...")
+                stored_dimensions = self._load_stored_dimensions_for_stack(stack_name)
+                if stored_dimensions:
+                    print(f"[METERING AGENT] → Found {len(stored_dimensions)} stored dimensions")
+                    self.create_saas_agent.set_pricing_dimensions(stored_dimensions)
+                else:
+                    print("[METERING AGENT] → No stored dimensions found")
+            
             usage_dimensions = self.create_saas_agent.get_usage_dimensions()
-            print(f"[METERING AGENT] ✓ Usage dimensions: {usage_dimensions}")
+            print(f"[METERING AGENT] ✓ Usage dimensions retrieved: {usage_dimensions}")
+            
+            # Check if we have any dimensions to work with
+            if not usage_dimensions:
+                print("[METERING AGENT] ✗ No usage dimensions available - cannot create metering record")
+                print("[METERING AGENT] → This means no user-entered dimensions were found during listing creation")
+                print("[METERING AGENT] → Metering will be skipped for this product")
+                return {
+                    "status": "skipped", 
+                    "reason": "No usage dimensions found - user must enter pricing dimensions during listing creation"
+                }
+            
+            # Debug: Show detailed information about dimension source
+            print(f"\n[METERING AGENT] ===== DIMENSION DEBUGGING =====")
+            print(f"[METERING AGENT] → Total dimensions found: {len(usage_dimensions)}")
+            
+            # Check if dimensions came from user input during listing creation
+            if self.create_saas_agent._pricing_dimensions:
+                print(f"[METERING AGENT] → ✓ Dimensions source: USER-ENTERED during listing creation")
+                print(f"[METERING AGENT] → Original user dimensions:")
+                for i, dim in enumerate(self.create_saas_agent._pricing_dimensions, 1):
+                    dim_key = dim.get("key") or (dim.get("name", "").lower().replace(" ", "_").replace("-", "_") if dim.get("name") else "unknown")
+                    print(f"[METERING AGENT]     {i}. Name: '{dim.get('name', 'N/A')}' → Key: '{dim_key}'")
+            else:
+                print(f"[METERING AGENT] → ⚠ Dimensions source: MARKETPLACE API or STORAGE")
+            
+            print(f"[METERING AGENT] → Final dimension keys for DynamoDB:")
+            for i, dimension in enumerate(usage_dimensions, 1):
+                print(f"[METERING AGENT]     {i}. '{dimension}' (will be stored in DynamoDB)")
+            print(f"[METERING AGENT] ===== END DIMENSION DEBUGGING =====\n")
             
             # Sub-step 6: Prepare metering record
             print("\n[METERING AGENT] Sub-step 6: Preparing metering record...")
             current_timestamp = str(int(time.time()))
             print(f"[METERING AGENT] → Timestamp: {current_timestamp}")
             print(f"[METERING AGENT] → Customer: {customer_identifier}")
+            print(f"[METERING AGENT] → Creating dimension structure for DynamoDB with sample usage values...")
             print(f"[METERING AGENT] → Sample usage: 10 units per dimension")
             
+            # Create dimension usage structure with hardcoded sample values
             dimension_usage = []
-            for dimension in usage_dimensions:
+            for i, dimension in enumerate(usage_dimensions, 1):
+                print(f"[METERING AGENT]   Adding dimension {i}: '{dimension}' with value 10 to DynamoDB record")
                 dimension_usage.append({
                     "M": {
                         "dimension": {"S": dimension},
-                        "value": {"N": "10"}  # Sample usage value
+                        "value": {"N": "10"}  # Sample usage value for testing
                     }
                 })
+            
+            # Determine record source based on dimension origin
+            record_source = "user_entered_dimensions" if self.create_saas_agent._pricing_dimensions else "marketplace_api_or_storage"
             
             metering_record = {
                 "create_timestamp": {"N": current_timestamp},
                 "customerIdentifier": {"S": customer_identifier},
                 "dimension_usage": {"L": dimension_usage},
-                "metering_pending": {"S": "true"}  # Will be processed by Lambda
+                "metering_pending": {"S": "true"},  # Will be processed by Lambda
+                "dimension_keys": {"SS": usage_dimensions},  # Store the exact dimension keys used
+                "record_source": {"S": record_source}  # Track source of dimensions
             }
+            
+            # Final verification log
+            print(f"[METERING AGENT] → ✓ DynamoDB record prepared with {len(usage_dimensions)} user-entered dimensions")
+            print(f"[METERING AGENT] → Record source: {record_source}")
+            print(f"[METERING AGENT] → Dimension keys in record: {usage_dimensions}")
             print("[METERING AGENT] ✓ Metering record prepared")
             
             # Sub-step 7: Insert metering record
@@ -340,12 +395,27 @@ class MeteringAgent(Agent):
                 if verify_response['Items']:
                     inserted_record = verify_response['Items'][0]
                     metering_pending_value = inserted_record.get('metering_pending', {}).get('S')
+                    stored_dimension_keys = inserted_record.get('dimension_keys', {}).get('SS', [])
+                    record_source = inserted_record.get('record_source', {}).get('S', 'unknown')
                     
                     print(f"[METERING AGENT] ✓ Record found in table")
                     print(f"[METERING AGENT] → metering_pending value: {metering_pending_value}")
+                    print(f"[METERING AGENT] → record_source: {record_source}")
+                    print(f"[METERING AGENT] → VERIFICATION: Dimension keys stored in DynamoDB:")
+                    
+                    for i, key in enumerate(stored_dimension_keys, 1):
+                        print(f"[METERING AGENT]     {i}. '{key}' ✓ CONFIRMED in DynamoDB")
+                    
+                    # Verify dimension usage structure
+                    dimension_usage_list = inserted_record.get('dimension_usage', {}).get('L', [])
+                    print(f"[METERING AGENT] → VERIFICATION: Dimension usage entries in DynamoDB:")
+                    for i, usage_entry in enumerate(dimension_usage_list, 1):
+                        dimension_name = usage_entry.get('M', {}).get('dimension', {}).get('S', 'unknown')
+                        print(f"[METERING AGENT]     {i}. Dimension: '{dimension_name}' ✓ CONFIRMED in DynamoDB")
                     
                     if metering_pending_value == "true":
                         print("[METERING AGENT] ✓ metering_pending is set to 'true' - ready for Lambda processing")
+                        print(f"[METERING AGENT] ✓ SUCCESS: User-entered dimension keys are properly stored in DynamoDB!")
                     else:
                         print(f"[METERING AGENT] ⚠ metering_pending is '{metering_pending_value}' (expected 'true')")
                 else:
@@ -436,6 +506,56 @@ class MeteringAgent(Agent):
             result["visibility_result"] = visibility_result
         
         return result
+
+    def _load_stored_dimensions_for_stack(self, stack_name):
+        """Load stored pricing dimensions for a given stack"""
+        try:
+            # Extract product ID from stack name (format: saas-integration-{product_id})
+            if stack_name.startswith('saas-integration-'):
+                product_id = stack_name.replace('saas-integration-', '')
+                print(f"[METERING AGENT] → Extracted product ID from stack: {product_id}")
+                
+                import os
+                import json
+                
+                # Look for stored dimensions file
+                backend_dir = os.path.dirname(os.path.dirname(__file__))  # Go up from agents/ to project root
+                storage_dir = os.path.join(backend_dir, 'backend', 'storage')
+                dimensions_file = os.path.join(storage_dir, f'pricing_dimensions_{product_id}.json')
+                
+                print(f"[METERING AGENT] → Looking for stored dimensions: {dimensions_file}")
+                
+                if os.path.exists(dimensions_file):
+                    with open(dimensions_file, 'r') as f:
+                        dimension_data = json.load(f)
+                    
+                    all_stored_dimensions = dimension_data.get('pricing_dimensions', [])
+                    print(f"[METERING AGENT] → Found stored file with {len(all_stored_dimensions)} total dimensions")
+                    
+                    # Filter to only include METERED dimensions
+                    metered_dimensions = []
+                    for dim in all_stored_dimensions:
+                        dim_type = dim.get("type", "").lower()
+                        print(f"[METERING AGENT] → Checking stored dimension: {dim.get('name', 'N/A')} (type: {dim.get('type', 'N/A')})")
+                        
+                        if dim_type == "metered":
+                            metered_dimensions.append(dim)
+                            print(f"[METERING AGENT] → ✓ Including METERED dimension: {dim.get('name', 'N/A')}")
+                        else:
+                            print(f"[METERING AGENT] → ✗ Skipping NON-METERED dimension: {dim.get('name', 'N/A')} (type: {dim.get('type', 'N/A')})")
+                    
+                    print(f"[METERING AGENT] → Filtered to {len(metered_dimensions)} METERED dimensions")
+                    return metered_dimensions if metered_dimensions else None
+                else:
+                    print(f"[METERING AGENT] → No stored dimensions file found")
+                    return None
+            else:
+                print(f"[METERING AGENT] → Stack name doesn't match expected format: {stack_name}")
+                return None
+                
+        except Exception as e:
+            print(f"[METERING AGENT] → Error loading stored dimensions: {e}")
+            return None
 
 if __name__ == "__main__":
     agent = MeteringAgent()

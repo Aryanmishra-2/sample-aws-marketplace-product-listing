@@ -390,12 +390,41 @@ export default function SaaSIntegrationPage() {
       console.log('[FRONTEND DEBUG] Deploying with pricing model:', pricingModel);
       console.log('[FRONTEND DEBUG] Pricing model value being sent:', pricingModel?.value);
       
+      // Try to get pricing dimensions from stored listing data
+      let storedPricingDimensions = null;
+      
+      // First try: Get from store
+      if (listingData?.pricing_dimensions) {
+        storedPricingDimensions = listingData.pricing_dimensions;
+        console.log('[FRONTEND DEBUG] Using pricing dimensions from store listing data:', storedPricingDimensions);
+      } else {
+        // Second try: Get from localStorage (from create listing process)
+        console.log('[FRONTEND DEBUG] No pricing dimensions in store, trying localStorage...');
+        try {
+          const storedListingData = localStorage.getItem(`listing_data_${productId}`);
+          if (storedListingData) {
+            const parsed = JSON.parse(storedListingData);
+            storedPricingDimensions = parsed.pricing_dimensions;
+            console.log('[FRONTEND DEBUG] Found pricing dimensions in localStorage:', storedPricingDimensions);
+          } else {
+            console.log('[FRONTEND DEBUG] No listing data found in localStorage for product:', productId);
+          }
+        } catch (e) {
+          console.error('[FRONTEND DEBUG] Error reading from localStorage:', e);
+        }
+      }
+      
+      if (!storedPricingDimensions) {
+        console.log('[FRONTEND DEBUG] ⚠ NO PRICING DIMENSIONS FOUND - will be null in backend request');
+      }
+      
       const response = await axios.post('/api/deploy-saas', {
         product_id: productId,
         email,
         stack_name: stackName,
         region: region.value,
         pricing_model: pricingModel?.value, // Pass selected pricing model
+        pricing_dimensions: storedPricingDimensions, // Pass pricing dimensions if available
         credentials: {
           aws_access_key_id: accessKey,
           aws_secret_access_key: secretKey,
@@ -506,7 +535,7 @@ export default function SaaSIntegrationPage() {
 
   return (
     <AppLayout
-        navigation={<WorkflowNav currentSubStep={currentSubStep} onSubStepClick={handleSubStepNavigation} />}
+        navigation={<WorkflowNav />}
         toolsHide
         breadcrumbs={
           <BreadcrumbGroup
@@ -619,13 +648,54 @@ export default function SaaSIntegrationPage() {
                           <Button variant="primary" onClick={handleDeleteStack} loading={deleting}>Delete and Redeploy</Button>
                           <Button 
                             variant="normal" 
-                            onClick={() => {
-                              // Skip deletion, go directly to SNS confirmation workflow
-                              setShowDeleteConfirm(false);
-                              setSuccess(true);
-                              setDeployedStackName(`saas-integration-${productId}`);
-                              setCurrentSubStep(1);
-                              setShowSnsConfirmation(true);
+                            onClick={async () => {
+                              try {
+                                // Skip deletion, go directly to SNS confirmation workflow
+                                setShowDeleteConfirm(false);
+                                setSuccess(true);
+                                setDeployedStackName(`saas-integration-${productId}`);
+                                
+                                // Try to retrieve pricing dimensions from existing stack
+                                console.log('[SAAS-INTEGRATION] Retrieving pricing dimensions from existing stack...');
+                                try {
+                                  const stackResponse = await axios.post('/api/get-stack-parameters', {
+                                    stack_name: `saas-integration-${productId}`,
+                                    region: region.value,
+                                    credentials: {
+                                      aws_access_key_id: accessKey,
+                                      aws_secret_access_key: secretKey,
+                                      aws_session_token: sessionToken || undefined,
+                                    }
+                                  });
+                                  
+                                  if (stackResponse.data.success && stackResponse.data.pricing_dimensions) {
+                                    // Store pricing dimensions for later use in metering
+                                    const pricingDimensions = stackResponse.data.pricing_dimensions;
+                                    console.log('[SAAS-INTEGRATION] Retrieved pricing dimensions:', pricingDimensions);
+                                    
+                                    // Store in localStorage for metering workflow
+                                    const listingData = {
+                                      pricing_dimensions: pricingDimensions,
+                                      pricing_model: stackResponse.data.pricing_model,
+                                      retrieved_from: 'existing_stack',
+                                      timestamp: new Date().toISOString()
+                                    };
+                                    localStorage.setItem(`listing_data_${productId}`, JSON.stringify(listingData));
+                                    console.log('[SAAS-INTEGRATION] Stored pricing dimensions for metering workflow');
+                                  } else {
+                                    console.log('[SAAS-INTEGRATION] No pricing dimensions found in existing stack');
+                                  }
+                                } catch (stackErr) {
+                                  console.error('[SAAS-INTEGRATION] Failed to retrieve pricing dimensions from stack:', stackErr);
+                                  // Continue anyway - metering will use defaults
+                                }
+                                
+                                setCurrentSubStep(1);
+                                setShowSnsConfirmation(true);
+                              } catch (err) {
+                                console.error('[SAAS-INTEGRATION] Error using existing stack:', err);
+                                setError('Failed to use existing stack. Please try again.');
+                              }
                             }}
                           >
                             Use Existing Stack →

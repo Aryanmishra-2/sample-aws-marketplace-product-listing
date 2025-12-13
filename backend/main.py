@@ -12,6 +12,7 @@ import json
 import boto3
 import sys
 import os
+import time
 import asyncio
 from queue import Queue
 import threading
@@ -1832,12 +1833,21 @@ async def deploy_saas(data: Dict[str, Any]):
         stack_name = data.get("stack_name")
         region = data.get("region", "us-east-1")
         pricing_model = data.get("pricing_model")
+        pricing_dimensions = data.get("pricing_dimensions")
         credentials = data.get("credentials", {})
         
         print(f"[DEBUG] Product ID: {product_id}, Email: {email}, Stack: {stack_name}, Region: {region}")
-        print(f"[BACKEND DEBUG] ===== PRICING MODEL RECEIVED FROM FRONTEND =====")
+        print(f"[BACKEND DEBUG] ===== PRICING DATA RECEIVED FROM FRONTEND =====")
         print(f"[BACKEND DEBUG] pricing_model value: {pricing_model}")
         print(f"[BACKEND DEBUG] pricing_model type: {type(pricing_model)}")
+        print(f"[BACKEND DEBUG] pricing_dimensions value: {pricing_dimensions}")
+        print(f"[BACKEND DEBUG] pricing_dimensions type: {type(pricing_dimensions)}")
+        if pricing_dimensions:
+            print(f"[BACKEND DEBUG] pricing_dimensions length: {len(pricing_dimensions)}")
+            for i, dim in enumerate(pricing_dimensions):
+                print(f"[BACKEND DEBUG] Dimension {i+1}: {dim}")
+        else:
+            print(f"[BACKEND DEBUG] ⚠ NO PRICING DIMENSIONS RECEIVED FROM FRONTEND!")
         print(f"[BACKEND DEBUG] ================================================")
         
         # Validate pricing model is provided
@@ -1933,6 +1943,34 @@ async def deploy_saas(data: Dict[str, Any]):
             print(f"[BACKEND DEBUG] Stack creation initiated: {stack_id}")
             print(f"[BACKEND DEBUG] Stack will use TypeOfSaaSListing: {type_of_saas_listing}")
             print(f"[BACKEND DEBUG] ================================================")
+            
+            # Store pricing dimensions for later retrieval if provided
+            if pricing_dimensions:
+                try:
+                    import os
+                    import json
+                    
+                    # Create storage directory if it doesn't exist
+                    storage_dir = os.path.join(os.path.dirname(__file__), 'storage')
+                    os.makedirs(storage_dir, exist_ok=True)
+                    
+                    # Store pricing dimensions with product ID as key
+                    dimensions_file = os.path.join(storage_dir, f'pricing_dimensions_{product_id}.json')
+                    dimension_data = {
+                        'product_id': product_id,
+                        'pricing_dimensions': pricing_dimensions,
+                        'pricing_model': pricing_model,
+                        'stack_name': actual_stack_name,
+                        'timestamp': time.time()
+                    }
+                    
+                    with open(dimensions_file, 'w') as f:
+                        json.dump(dimension_data, f, indent=2)
+                    
+                    print(f"[BACKEND DEBUG] Stored pricing dimensions for product {product_id}")
+                except Exception as storage_error:
+                    print(f"[BACKEND WARNING] Failed to store pricing dimensions: {storage_error}")
+                    # Don't fail deployment if storage fails
             
             # Return immediately - frontend will poll for status
             return {
@@ -2126,9 +2164,30 @@ async def get_stack_parameters(data: Dict[str, Any]):
                     pricing_model = param_value
                     print(f"[BACKEND DEBUG] Found TypeOfSaaSListing: {pricing_model}")
             
+            # Try to retrieve stored pricing dimensions
+            pricing_dimensions = None
+            try:
+                # Extract product ID from stack name (format: saas-integration-{product_id})
+                if stack_name.startswith('saas-integration-'):
+                    product_id = stack_name.replace('saas-integration-', '')
+                    
+                    storage_dir = os.path.join(os.path.dirname(__file__), 'storage')
+                    dimensions_file = os.path.join(storage_dir, f'pricing_dimensions_{product_id}.json')
+                    
+                    if os.path.exists(dimensions_file):
+                        with open(dimensions_file, 'r') as f:
+                            dimension_data = json.load(f)
+                            pricing_dimensions = dimension_data.get('pricing_dimensions')
+                            print(f"[BACKEND DEBUG] Retrieved stored pricing dimensions for {product_id}: {len(pricing_dimensions) if pricing_dimensions else 0} dimensions")
+                    else:
+                        print(f"[BACKEND DEBUG] No stored pricing dimensions found for {product_id}")
+            except Exception as e:
+                print(f"[BACKEND WARNING] Failed to retrieve pricing dimensions: {e}")
+            
             return {
                 "success": True,
                 "pricing_model": pricing_model,
+                "pricing_dimensions": pricing_dimensions,
                 "parameters": parameters
             }
             
@@ -3840,6 +3899,35 @@ async def run_metering(data: Dict[str, Any]):
             print(f"[METERING] [DEBUG] Access Key: {access_key[:10]}..." if access_key else "[METERING] [DEBUG] Access Key: None")
             print(f"[METERING] [DEBUG] Has Session Token: {bool(session_token)}")
             
+            # Try to get pricing dimensions from request data if available
+            pricing_dimensions = data.get("pricing_dimensions")
+            if pricing_dimensions:
+                print(f"[METERING] [DEBUG] Found pricing dimensions in request: {len(pricing_dimensions)} dimensions")
+                agent.create_saas_agent.set_pricing_dimensions(pricing_dimensions)
+            else:
+                print(f"[METERING] [DEBUG] No pricing dimensions in request, will try to load from storage")
+                # Try to load stored dimensions if product_id is available
+                if product_id:
+                    try:
+                        import os
+                        storage_dir = os.path.join(os.path.dirname(__file__), 'storage')
+                        dimensions_file = os.path.join(storage_dir, f'pricing_dimensions_{product_id}.json')
+                        
+                        if os.path.exists(dimensions_file):
+                            with open(dimensions_file, 'r') as f:
+                                dimension_data = json.load(f)
+                            stored_dimensions = dimension_data.get('pricing_dimensions', [])
+                            if stored_dimensions:
+                                print(f"[METERING] [DEBUG] Loaded {len(stored_dimensions)} stored dimensions for product {product_id}")
+                                agent.create_saas_agent.set_pricing_dimensions(stored_dimensions)
+                            else:
+                                print(f"[METERING] [DEBUG] No dimensions found in stored file")
+                        else:
+                            print(f"[METERING] [DEBUG] No stored dimensions file found for product {product_id}")
+                    except Exception as load_error:
+                        print(f"[METERING] [DEBUG] Failed to load stored dimensions: {load_error}")
+                        print(f"[METERING] [DEBUG] Will use marketplace API or defaults")
+            
             result = agent.check_entitlement_and_add_metering(
                 access_key, secret_key, session_token
             )
@@ -3964,4 +4052,124 @@ async def run_metering(data: Dict[str, Any]):
             "success": False,
             "error": str(e),
             "steps": steps if 'steps' in locals() else []
+        }
+
+@app.post("/public-visibility-guide")
+async def public_visibility_guide():
+    """Provide step-by-step guide for raising public visibility after successful metering"""
+    try:
+        print("\n[PUBLIC VISIBILITY GUIDE] Generating public visibility guide...")
+        
+        # Define the public visibility steps
+        steps = [
+            {
+                "step": 1,
+                "title": "Verify Metering Success",
+                "description": "Ensure your metering integration is working correctly before requesting public visibility.",
+                "icon": "📊",
+                "color": "#0073bb",
+                "actions": [
+                    "Check that metering records are being created in DynamoDB",
+                    "Verify BatchMeterUsage API calls are successful",
+                    "Confirm Lambda function is processing metering data",
+                    "Test with sample customer subscriptions"
+                ],
+                "expected": [
+                    "Metering records show metering_failed=false",
+                    "BatchMeterUsage responses are successful",
+                    "Usage data appears in AWS Marketplace reports"
+                ]
+            },
+            {
+                "step": 2,
+                "title": "Prepare Product Information",
+                "description": "Gather all required information for your public visibility request.",
+                "icon": "📝",
+                "color": "#037f0c",
+                "actions": [
+                    "Finalize product title and description",
+                    "Prepare marketing materials and screenshots",
+                    "Set competitive pricing for all dimensions",
+                    "Review and update product categories",
+                    "Ensure support documentation is complete"
+                ],
+                "expected": [
+                    "Product information is complete and accurate",
+                    "Pricing is competitive and well-documented",
+                    "Marketing materials are professional quality"
+                ]
+            },
+            {
+                "step": 3,
+                "title": "Submit Public Visibility Request",
+                "description": "Use AWS Marketplace Management Portal to request public visibility.",
+                "icon": "🌐",
+                "color": "#ff9900",
+                "actions": [
+                    "Log into AWS Marketplace Management Portal",
+                    "Navigate to your product listing",
+                    "Click 'Request Public Visibility'",
+                    "Fill out the public visibility form",
+                    "Submit supporting documentation if required"
+                ],
+                "expected": [
+                    "Public visibility request is submitted",
+                    "Confirmation email is received",
+                    "Request appears in your portal dashboard"
+                ]
+            },
+            {
+                "step": 4,
+                "title": "AWS Review Process",
+                "description": "AWS Marketplace will review your product for public availability.",
+                "icon": "🔍",
+                "color": "#ec7211",
+                "actions": [
+                    "AWS reviews product information and compliance",
+                    "Technical validation of SaaS integration",
+                    "Security and quality assessment",
+                    "Pricing and competitive analysis"
+                ],
+                "expected": [
+                    "Review typically takes 1-3 business days",
+                    "Email notifications about review status",
+                    "Possible requests for additional information"
+                ]
+            },
+            {
+                "step": 5,
+                "title": "Go Live",
+                "description": "Once approved, your product becomes publicly available to all AWS customers.",
+                "icon": "🚀",
+                "color": "#232f3e",
+                "actions": [
+                    "Receive approval notification",
+                    "Product appears in public AWS Marketplace",
+                    "Monitor customer subscriptions and usage",
+                    "Respond to customer inquiries promptly"
+                ],
+                "expected": [
+                    "Product is publicly searchable",
+                    "Customers can subscribe directly",
+                    "Usage and revenue tracking begins",
+                    "Customer support requests may increase"
+                ]
+            }
+        ]
+        
+        print(f"[PUBLIC VISIBILITY GUIDE] ✓ Generated {len(steps)} steps for public visibility")
+        
+        return {
+            "success": True,
+            "steps": steps,
+            "message": "Public visibility guide generated successfully"
+        }
+        
+    except Exception as e:
+        print(f"[PUBLIC VISIBILITY GUIDE] ✗ Failed to generate guide: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
         }

@@ -1,0 +1,20 @@
+{
+  "product_id": "prod-hv6ocbi4codxs",
+  "pricing_dimensions": [
+    {
+      "name": "Active users",
+      "key": "no_of_users",
+      "description": "Number of users",
+      "type": "Entitled"
+    },
+    {
+      "name": "Active users",
+      "key": "users_volume",
+      "description": "volume of active users",
+      "type": "Metered"
+    }
+  ],
+  "pricing_model": "contracts_with_subscription",
+  "stack_name": "saas-integration-prod-hv6ocbi4codxs",
+  "timestamp": 1765615308.3136818
+}

@@ -41,7 +41,6 @@ export default function SaaSWorkflowPage() {
   const [currentStep, setCurrentStep] = useState(0); // 0: SNS, 1: Buyer Experience, 2: Complete
   const [buyerSteps, setBuyerSteps] = useState<any[]>([]);
   const [meteringSteps, setMeteringSteps] = useState<any[]>([]);
-  const [visibilitySteps, setVisibilitySteps] = useState<any[]>([]);
   const [showFinalGuide, setShowFinalGuide] = useState(false);
 
   useEffect(() => {
@@ -87,12 +86,13 @@ export default function SaaSWorkflowPage() {
     setCurrentStep(2);
   };
 
+
+
   const handleCompleteTesting = async () => {
     setLoading(true);
     setError('');
     setShowFinalGuide(false); // Reset
     setMeteringSteps([]); // Clear previous steps
-    setVisibilitySteps([]);
     
     try {
       console.log('[WORKFLOW DEBUG] Complete Testing with pricing model:', pricingModel);
@@ -135,8 +135,8 @@ export default function SaaSWorkflowPage() {
         console.log('[WORKFLOW DEBUG] Visibility response:', visibilityResponse.data);
         
         if (visibilityResponse.data.success) {
-          setVisibilitySteps(visibilityResponse.data.steps);
-          setShowFinalGuide(true);
+          // For contract-based pricing, navigate to public visibility page
+          router.push(`/public-visibility?productId=${productId}&stackName=${stackName}&pricingModel=${currentPricingModel}`);
         }
       } else if (currentPricingModel === 'subscriptions' || currentPricingModel === 'contracts_with_subscription') {
         // Usage-based or hybrid -> Run Metering Agent
@@ -149,13 +149,27 @@ export default function SaaSWorkflowPage() {
           sessionToken: !!sessionToken
         });
         
+        // Try to get pricing dimensions from localStorage (from create listing process)
+        let storedPricingDimensions = null;
+        try {
+          const listingData = localStorage.getItem(`listing_data_${productId}`);
+          if (listingData) {
+            const parsed = JSON.parse(listingData);
+            storedPricingDimensions = parsed.pricing_dimensions;
+            console.log('[WORKFLOW DEBUG] Found stored pricing dimensions:', storedPricingDimensions);
+          }
+        } catch (e) {
+          console.log('[WORKFLOW DEBUG] No stored pricing dimensions found');
+        }
+
         const meteringResponse = await axios.post('/api/run-metering', {
           product_id: productId,
           credentials: {
             aws_access_key_id: accessKey,
             aws_secret_access_key: secretKey,
             aws_session_token: sessionToken || undefined,
-          }
+          },
+          pricing_dimensions: storedPricingDimensions || undefined
         });
         
         console.log('[WORKFLOW DEBUG] Metering response:', meteringResponse.data);
@@ -167,6 +181,8 @@ export default function SaaSWorkflowPage() {
         if (meteringResponse.data.steps && meteringResponse.data.steps.length > 0) {
           setMeteringSteps(meteringResponse.data.steps);
           setShowFinalGuide(true);
+          
+          // Metering successful - user can proceed to public visibility when ready
         } else {
           console.error('[WORKFLOW ERROR] No metering steps returned');
         }
@@ -192,7 +208,7 @@ export default function SaaSWorkflowPage() {
 
   return (
     <AppLayout
-      navigation={<WorkflowNav currentSubStep={1} />}
+      navigation={<WorkflowNav />}
       toolsHide
       breadcrumbs={
         <BreadcrumbGroup
@@ -586,63 +602,35 @@ export default function SaaSWorkflowPage() {
                     </Container>
                   ))}
                 </SpaceBetween>
+
+                {/* Add button to proceed to public visibility after successful metering */}
+                {meteringSteps.some((step: any) => step.status === 'completed') && (
+                  <Container>
+                    <SpaceBetween size="m">
+                      <Alert type="success">
+                        <Box fontWeight="bold">Metering Integration Complete!</Box>
+                        <Box fontSize="body-s" padding={{ top: 'xs' }}>
+                          Your SaaS integration and metering are working correctly. You can now proceed to make your product publicly available on AWS Marketplace.
+                        </Box>
+                      </Alert>
+                      
+                      <Box textAlign="center">
+                        <Button 
+                          variant="primary"
+                          onClick={() => {
+                            router.push(`/public-visibility?productId=${productId}&stackName=${stackName}&pricingModel=${pricingModel}`);
+                          }}
+                        >
+                          Proceed to Public Visibility Steps →
+                        </Button>
+                      </Box>
+                    </SpaceBetween>
+                  </Container>
+                )}
               </Container>
             )}
 
-            {showFinalGuide && visibilitySteps.length > 0 && (
-              <Container
-                header={
-                  <Header
-                    variant="h2"
-                    description="Make your product publicly available"
-                    actions={
-                      <Button variant="primary" onClick={() => router.push('/')}>
-                        Finish →
-                      </Button>
-                    }
-                  >
-                    🌐 Public Visibility Request
-                  </Header>
-                }
-              >
-                <SpaceBetween size="l">
-                  <Alert type="info">
-                    Your product uses contract-based pricing. Submit a public visibility request to make your product available to all AWS customers.
-                  </Alert>
-                  <SpaceBetween size="m">
-                    {visibilitySteps.map((step: any, index: number) => (
-                      <Container key={index}>
-                        <SpaceBetween size="m">
-                          <Box variant="h3" color="text-label">Step {step.step}: {step.title}</Box>
-                          <Box fontSize="body-m" color="text-body-secondary">{step.description}</Box>
-                          {step.actions && step.actions.length > 0 && (
-                            <SpaceBetween size="xs">
-                              {step.actions.map((action: string, actionIndex: number) => (
-                                <Box key={actionIndex} fontSize="body-s" color="text-body-secondary">
-                                  • {action}
-                                </Box>
-                              ))}
-                            </SpaceBetween>
-                          )}
-                          {step.expected && step.expected.length > 0 && (
-                            <Box>
-                              <Box fontWeight="bold" fontSize="body-s" padding={{ bottom: 'xs' }}>Expected Results:</Box>
-                              <SpaceBetween size="xs">
-                                {step.expected.map((result: string, resultIndex: number) => (
-                                  <Box key={resultIndex} fontSize="body-s" color="text-status-success">
-                                    ✓ {result}
-                                  </Box>
-                                ))}
-                              </SpaceBetween>
-                            </Box>
-                          )}
-                        </SpaceBetween>
-                      </Container>
-                    ))}
-                  </SpaceBetween>
-                </SpaceBetween>
-              </Container>
-            )}
+
           </SpaceBetween>
         </ContentLayout>
       }
