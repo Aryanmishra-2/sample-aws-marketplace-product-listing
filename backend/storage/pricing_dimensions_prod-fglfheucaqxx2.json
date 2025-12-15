@@ -1,0 +1,20 @@
+{
+  "product_id": "prod-fglfheucaqxx2",
+  "pricing_dimensions": [
+    {
+      "name": "Active users",
+      "key": "users",
+      "description": "no of active users",
+      "type": "Entitled"
+    },
+    {
+      "name": "active users",
+      "key": "users_api",
+      "description": "no of active users",
+      "type": "Metered"
+    }
+  ],
+  "pricing_model": "contracts_with_subscription",
+  "stack_name": "saas-integration-prod-fglfheucaqxx2",
+  "timestamp": 1765476017.341509
+}
