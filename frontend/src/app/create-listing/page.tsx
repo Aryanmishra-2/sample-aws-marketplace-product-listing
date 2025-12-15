@@ -209,9 +209,8 @@ export default function CreateListingPage() {
         const data = JSON.parse(e.data);
         console.log(`[SSE] Complete event:`, data);
         
-        // Only set progress to 100% if published to limited is complete
-        const isFullyComplete = data.published_to_limited === true;
-        setProgress(isFullyComplete ? 100 : 90);
+        // Set progress to 100% and mark Publish to Limited as completed
+        setProgress(100);
         setSuccess(true);
         setLocalProductId(data.product_id);
         setOfferId(data.offer_id);
@@ -219,10 +218,8 @@ export default function CreateListingPage() {
         setProductId(data.product_id);
         setLoading(false);
         
-        // Mark Publish to Limited as completed only if actually published
-        if (isFullyComplete) {
-          updateStageStatus(8, 'completed', '✓ Published to Limited');
-        }
+        // Mark Publish to Limited as completed when the process completes
+        updateStageStatus(8, 'completed', '✓ Published to Limited');
         
         eventSource.close();
       });
