@@ -1,18 +1,19 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // CRITICAL: Disable StrictMode to prevent duplicate API calls
-  // StrictMode intentionally double-invokes effects in development
-  // This causes duplicate product creation calls
   reactStrictMode: false,
   
-  // Allow external API calls
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://localhost:8000/:path*', // Proxy to FastAPI backend
-      },
-    ];
+  // Standalone output for Docker/App Runner deployment
+  output: 'standalone',
+  
+  // Disable image optimization for simpler deployment
+  images: {
+    unoptimized: true,
+  },
+  
+  // Handle useSearchParams warnings
+  experimental: {
+    missingSuspenseWithCSRBailout: false,
   },
 };
 

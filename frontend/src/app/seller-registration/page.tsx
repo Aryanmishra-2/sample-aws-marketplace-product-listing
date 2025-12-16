@@ -47,7 +47,7 @@ export default function SellerRegistrationPage() {
   // Load marketplace products when seller is approved and has products
   useEffect(() => {
     const loadProducts = async () => {
-      if (sellerStatus?.seller_status === 'APPROVED' && sellerStatus?.owned_products?.length > 0 && credentials) {
+      if (sellerStatus?.seller_status === 'APPROVED' && (sellerStatus?.owned_products?.length ?? 0) > 0 && credentials) {
         setLoadingProducts(true);
         setLoadingError(null);
         try {
