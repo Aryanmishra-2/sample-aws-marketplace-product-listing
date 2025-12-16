@@ -34,6 +34,7 @@ export default function SellerRegistrationPage() {
   const [accountStatusConfirmed, setAccountStatusConfirmed] = useState(false);
   const [marketplaceProducts, setMarketplaceProducts] = useState<any[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
   const [revalidating, setRevalidating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
@@ -48,7 +49,9 @@ export default function SellerRegistrationPage() {
     const loadProducts = async () => {
       if (sellerStatus?.seller_status === 'APPROVED' && sellerStatus?.owned_products?.length > 0 && credentials) {
         setLoadingProducts(true);
+        setLoadingError(null);
         try {
+          console.log('Loading marketplace products...');
           const productsResponse = await axios.post('/api/list-marketplace-products', {
             aws_access_key_id: credentials.aws_access_key_id,
             aws_secret_access_key: credentials.aws_secret_access_key,
@@ -56,13 +59,23 @@ export default function SellerRegistrationPage() {
           });
           
           if (productsResponse.data.success) {
-            setMarketplaceProducts(productsResponse.data.products || []);
+            const products = productsResponse.data.products || [];
+            setMarketplaceProducts(products);
+            console.log(`Loaded ${products.length} marketplace products`);
+          } else {
+            setLoadingError(productsResponse.data.error || 'Failed to load products');
           }
         } catch (error) {
           console.error('Failed to list marketplace products:', error);
+          setLoadingError(error instanceof Error ? error.message : 'Failed to load products');
         } finally {
           setLoadingProducts(false);
         }
+      } else if (sellerStatus?.seller_status === 'APPROVED' && sellerStatus?.owned_products?.length === 0) {
+        // Clear products if seller has no products
+        setMarketplaceProducts([]);
+        setLoadingProducts(false);
+        setLoadingError(null);
       }
     };
 
@@ -107,19 +120,75 @@ export default function SellerRegistrationPage() {
               }
             >
               <SpaceBetween size="l">
+                {loadingProducts && marketplaceProducts.length === 0 && (
+                  <Alert type="info" header="🔄 Loading Your Products">
+                    <SpaceBetween size="s">
+                      <Box>
+                        <StatusIndicator type="loading">
+                          Fetching your marketplace products from AWS...
+                        </StatusIndicator>
+                      </Box>
+                      <Box fontSize="body-s" color="text-body-secondary">
+                        This may take a few moments while we check your product status and SaaS integrations.
+                      </Box>
+                    </SpaceBetween>
+                  </Alert>
+                )}
+
+                {loadingError && !loadingProducts && (
+                  <Alert 
+                    type="error" 
+                    header="❌ Failed to Load Products"
+                    action={
+                      <Button
+                        onClick={() => {
+                          window.location.reload();
+                        }}
+                      >
+                        Retry
+                      </Button>
+                    }
+                  >
+                    <SpaceBetween size="s">
+                      <Box>
+                        Unable to fetch your marketplace products: {loadingError}
+                      </Box>
+                      <Box fontSize="body-s" color="text-body-secondary">
+                        This might be due to network issues or AWS API limitations. Please try again.
+                      </Box>
+                    </SpaceBetween>
+                  </Alert>
+                )}
+
                 <Container>
                   <ColumnLayout columns={2} variant="text-grid">
                     <div>
                       <SpaceBetween size="xs">
                         <Box variant="h3">✅ Seller Profile Complete</Box>
-                        <Box color="text-body-secondary">
-                          {productsCount} existing product{productsCount > 1 ? 's' : ''} found
-                        </Box>
+                        {loadingProducts ? (
+                          <Box color="text-body-secondary">
+                            <StatusIndicator type="loading">Loading existing products...</StatusIndicator>
+                          </Box>
+                        ) : loadingError ? (
+                          <Box color="text-status-error">
+                            Failed to load products: {loadingError}
+                          </Box>
+                        ) : (
+                          <Box color="text-body-secondary">
+                            {marketplaceProducts.length} marketplace product{marketplaceProducts.length !== 1 ? 's' : ''} loaded
+                            {productsCount !== marketplaceProducts.length && (
+                              <Box fontSize="body-s" color="text-body-secondary">
+                                ({productsCount} total product{productsCount !== 1 ? 's' : ''} in seller account)
+                              </Box>
+                            )}
+                          </Box>
+                        )}
                       </SpaceBetween>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <Button
                         variant="primary"
+                        disabled={loadingProducts}
                         onClick={() => {
                           useStore.getState().setCurrentStep('gather_context');
                           router.push('/product-info');
@@ -131,13 +200,13 @@ export default function SellerRegistrationPage() {
                   </ColumnLayout>
                 </Container>
 
-                {marketplaceProducts.length > 0 && (
+                {(loadingProducts || marketplaceProducts.length > 0 || loadingError) && (
                   <Container
                     header={
                       <Header
                         variant="h2"
                         description="Your AWS Marketplace products with intelligent status detection"
-                        counter={`(${marketplaceProducts.length})`}
+                        counter={loadingProducts ? '(Loading...)' : `(${marketplaceProducts.length})`}
                       >
                         Your Marketplace Products
                       </Header>
@@ -252,12 +321,32 @@ export default function SellerRegistrationPage() {
                       loading={loadingProducts}
                       loadingText="Loading marketplace products..."
                       empty={
-                        <Box textAlign="center" color="inherit">
-                          <b>No products found</b>
-                          <Box padding={{ bottom: 's' }} variant="p" color="inherit">
-                            No marketplace products found.
+                        loadingError ? (
+                          <Box textAlign="center" color="inherit">
+                            <b>Failed to load products</b>
+                            <Box padding={{ bottom: 's' }} variant="p" color="inherit">
+                              {loadingError}
+                            </Box>
+                            <Button
+                              onClick={() => {
+                                // Trigger a reload by updating the seller status
+                                window.location.reload();
+                              }}
+                            >
+                              Retry
+                            </Button>
                           </Box>
-                        </Box>
+                        ) : (
+                          <Box textAlign="center" color="inherit">
+                            <b>No marketplace products found</b>
+                            <Box padding={{ bottom: 's' }} variant="p" color="inherit">
+                              {productsCount > 0 
+                                ? `You have ${productsCount} product${productsCount !== 1 ? 's' : ''} in your seller account, but they may not be marketplace products yet.`
+                                : 'No products found in your seller account.'
+                              }
+                            </Box>
+                          </Box>
+                        )
                       }
                   />
                   </Container>
