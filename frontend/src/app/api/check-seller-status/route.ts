@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { 
+  MarketplaceCatalogClient, 
+  ListEntitiesCommand 
+} from '@aws-sdk/client-marketplace-catalog';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,34 +16,57 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Call FastAPI backend
-    const response = await fetch('http://localhost:8000/check-seller-status', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    // Use AWS SDK directly to check seller status
+    const catalogClient = new MarketplaceCatalogClient({
+      region: 'us-east-1',
+      credentials: {
+        accessKeyId: aws_access_key_id,
+        secretAccessKey: aws_secret_access_key,
+        sessionToken: aws_session_token,
       },
-      body: JSON.stringify({
-        aws_access_key_id,
-        aws_secret_access_key,
-        aws_session_token,
-      }),
     });
 
-    const data = await response.json();
+    let sellerStatus = 'NOT_REGISTERED';
+    let ownedProducts: any[] = [];
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { success: false, error: data.error || 'Status check failed' },
-        { status: response.status }
-      );
+    try {
+      // Try to list products - if this works, seller is registered
+      const listCommand = new ListEntitiesCommand({
+        Catalog: 'AWSMarketplace',
+        EntityType: 'SaaSProduct',
+      });
+      
+      const response = await catalogClient.send(listCommand);
+      
+      if (response.EntitySummaryList) {
+        sellerStatus = 'APPROVED';
+        ownedProducts = response.EntitySummaryList.map((entity) => ({
+          product_id: entity.EntityId,
+          title: entity.Name || 'Untitled Product',
+          status: entity.EntityType || 'Unknown',
+          visibility: 'Limited',
+        }));
+      }
+    } catch (err: any) {
+      // If access denied, seller might not be registered
+      if (err.name === 'AccessDeniedException') {
+        sellerStatus = 'NOT_REGISTERED';
+      } else {
+        // Other errors - assume registered but no products
+        sellerStatus = 'APPROVED';
+      }
     }
 
     return NextResponse.json({
       success: true,
-      seller_status: data.seller_status,
-      account_id: data.account_id,
-      owned_products: data.owned_products || [],
-      message: data.message || '',
+      seller_status: sellerStatus,
+      is_registered: sellerStatus === 'APPROVED',
+      account_id: '',
+      owned_products: ownedProducts,
+      products: ownedProducts,
+      message: sellerStatus === 'APPROVED' 
+        ? 'Seller account is active' 
+        : 'Please register as a seller first',
     });
   } catch (error: any) {
     console.error('Check seller status error:', error);

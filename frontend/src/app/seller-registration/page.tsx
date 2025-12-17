@@ -254,9 +254,11 @@ export default function SellerRegistrationPage() {
                         {
                           id: 'actions',
                           header: 'Actions',
-                          cell: (item: any) => (
+                          cell: (item: any) => {
+                            const allowedActions = item.allowed_actions || [];
+                            return (
                             <SpaceBetween size="xs" direction="horizontal">
-                              {item.allowed_actions.includes('resume') && (
+                              {allowedActions.includes('resume') && (
                                 <Button
                                   onClick={() => {
                                     useStore.getState().setProductId(item.product_id);
@@ -267,7 +269,7 @@ export default function SellerRegistrationPage() {
                                   Resume
                                 </Button>
                               )}
-                              {item.allowed_actions.includes('configure_saas') && (
+                              {allowedActions.includes('configure_saas') && (
                                 <Button
                                   variant="primary"
                                   onClick={() => {
@@ -303,7 +305,7 @@ export default function SellerRegistrationPage() {
                                   </Button>
                                 </>
                               )}
-                              {item.allowed_actions.includes('view_console') && (
+                              {allowedActions.includes('view_console') && (
                                 <Button
                                   iconName="external"
                                   onClick={() => {
@@ -314,7 +316,8 @@ export default function SellerRegistrationPage() {
                                 </Button>
                               )}
                             </SpaceBetween>
-                          ),
+                          );
+                          },
                         },
                       ]}
                       items={marketplaceProducts}

@@ -138,18 +138,11 @@ export default function CreateListingPage() {
     setProgress(5);
 
     try {
-      // Generate session ID for SSE
-      const sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      
-      console.log(`[${timestamp}] [CALL-${callId}] 📤 Starting SSE stream with session: ${sessionId}`);
-      
-      // Start SSE connection
-      const eventSource = new EventSource(`http://localhost:8000/create-listing-stream/${sessionId}`);
-      
       // Map stage names from backend to frontend indices
       const stageNameToIndex: Record<string, number> = {
         'Initializing': 0,
         'Product Information': 0,
+        'Product Details': 0,
         'Fulfillment': 1,
         'Pricing Dimensions': 2,
         'Price Review': 3,
@@ -161,105 +154,62 @@ export default function CreateListingPage() {
         'Publishing': 8,
       };
       
-      // Handle stage updates
-      eventSource.addEventListener('stage', (e: any) => {
-        const data = JSON.parse(e.data);
-        console.log(`[SSE] Stage event:`, data);
-        
-        const stageIndex = stageNameToIndex[data.stage] ?? 0;
+      // Helper to simulate progress updates
+      const simulateProgress = async (stageIndex: number, message: string) => {
         setCurrentStageIndex(stageIndex);
-        
-        if (data.status === 'in_progress') {
-          updateStageStatus(stageIndex, 'in-progress', data.message);
-          setProgress(stages[stageIndex].progress);
-        }
-      });
+        updateStageStatus(stageIndex, 'in-progress', message);
+        setProgress(stages[stageIndex].progress);
+        await new Promise(resolve => setTimeout(resolve, 500));
+      };
       
-      // Track Product Information sub-steps (needs both "Product created" and "Product details updated")
-      let productInfoSubStepsCompleted = 0;
+      // Start with initializing
+      await simulateProgress(0, 'Initializing listing creation...');
       
-      // Handle changeset updates
-      eventSource.addEventListener('changeset', (e: any) => {
-        const data = JSON.parse(e.data);
-        console.log(`[SSE] Changeset event:`, data);
-        
-        const stageIndex = stageNameToIndex[data.stage] ?? 0;
-        
-        if (data.status === 'SUCCEEDED') {
-          // Special handling for Product Information - needs 2 sub-steps to complete
-          if (data.stage === 'Product Information') {
-            productInfoSubStepsCompleted++;
-            if (productInfoSubStepsCompleted >= 2) {
-              // Both "Product created" and "Product details updated" are done
-              updateStageStatus(stageIndex, 'completed', `✓ ${data.message}`);
-            } else {
-              // Only first sub-step done, keep in progress
-              updateStageStatus(stageIndex, 'in-progress', `✓ ${data.message} (1/2)`);
-            }
-          } else {
-            updateStageStatus(stageIndex, 'completed', `✓ ${data.message}`);
-          }
-        } else if (data.status === 'FAILED') {
-          updateStageStatus(stageIndex, 'error', `✗ ${data.message}`);
-        }
-      });
+      console.log(`[${timestamp}] [CALL-${callId}] 📤 Calling AgentCore create_listing`);
       
-      // Handle completion
-      eventSource.addEventListener('complete', (e: any) => {
-        const data = JSON.parse(e.data);
-        console.log(`[SSE] Complete event:`, data);
-        
-        // Set progress to 100% and mark Publish to Limited as completed
-        setProgress(100);
-        setSuccess(true);
-        setLocalProductId(data.product_id);
-        setOfferId(data.offer_id);
-        setPublishedToLimited(data.published_to_limited || false);
-        setProductId(data.product_id);
-        setLoading(false);
-        
-        // Mark Publish to Limited as completed when the process completes
-        updateStageStatus(8, 'completed', '✓ Published to Limited');
-        
-        eventSource.close();
-      });
-      
-      // Handle errors
-      eventSource.addEventListener('error', (e: any) => {
-        console.error(`[SSE] Error event:`, e);
-        
-        if (e.data) {
-          try {
-            const data = JSON.parse(e.data);
-            setError(data.message || 'Failed to create listing');
-            
-            if (currentStageIndex >= 0 && currentStageIndex < stages.length) {
-              updateStageStatus(currentStageIndex, 'error', `✗ ${data.message}`);
-            }
-          } catch (err) {
-            setError('Connection error occurred');
-          }
-        }
-        
-        setLoading(false);
-        setSuccess(false);
-        eventSource.close();
-      });
-      
-      // Trigger the backend to start processing
-      console.log(`[${timestamp}] [CALL-${callId}] 📤 Triggering backend listing creation`);
-      
+      // Call AgentCore API (no SSE - synchronous call)
       const response = await axios.post('/api/create-listing-stream', {
-        session_id: sessionId,
         listing_data: listingData,
         credentials: credentials,
       });
       
-      console.log(`[${timestamp}] [CALL-${callId}] 📥 Backend acknowledged:`, response.data);
+      console.log(`[${timestamp}] [CALL-${callId}] 📥 AgentCore response:`, response.data);
       
       if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to start listing creation');
+        throw new Error(response.data.error || response.data.message || 'Failed to create listing');
       }
+      
+      // Process stages from response
+      const responseStages = response.data.stages || [];
+      
+      for (const stage of responseStages) {
+        const stageIndex = stageNameToIndex[stage.stage] ?? 0;
+        const status = stage.status === 'complete' || stage.status === 'completed' ? 'completed' 
+                     : stage.status === 'failed' || stage.status === 'error' ? 'error'
+                     : stage.status === 'warning' ? 'completed'
+                     : 'in-progress';
+        
+        updateStageStatus(stageIndex, status, stage.status === 'warning' ? `⚠ ${stage.message}` : `✓ ${stage.message}`);
+        setProgress(stages[stageIndex].progress);
+        
+        // Small delay for visual feedback
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
+      // Set final state
+      setProgress(100);
+      setSuccess(true);
+      setLocalProductId(response.data.product_id || '');
+      setOfferId(response.data.offer_id || '');
+      setPublishedToLimited(response.data.published_to_limited || false);
+      if (response.data.product_id) {
+        setProductId(response.data.product_id);
+      }
+      setLoading(false);
+      
+      // Mark final stage as completed
+      const lastCompletedStage = responseStages.length > 0 ? responseStages.length - 1 : 8;
+      updateStageStatus(Math.min(lastCompletedStage, 8), 'completed', '✓ Listing creation complete');
       
     } catch (err: any) {
       console.error(`[${timestamp}] [CALL-${callId}] ❌ ERROR:`, err);

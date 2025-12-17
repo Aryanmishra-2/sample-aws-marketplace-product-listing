@@ -2,28 +2,48 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const response = await fetch('http://localhost:8000/public-visibility-guide', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({}),
+    // Return static public visibility guide content
+    return NextResponse.json({
+      success: true,
+      guide: {
+        title: "Public Visibility Guide",
+        description: "Make your AWS Marketplace product publicly visible",
+        steps: [
+          {
+            step: 1,
+            title: "Complete SaaS Integration",
+            description: "Ensure your SaaS integration is fully configured and tested"
+          },
+          {
+            step: 2,
+            title: "Verify Metering",
+            description: "Confirm that metering records are being sent correctly"
+          },
+          {
+            step: 3,
+            title: "Test Buyer Experience",
+            description: "Complete a full buyer journey test"
+          },
+          {
+            step: 4,
+            title: "Request Public Visibility",
+            description: "Submit a request to make your product publicly visible on AWS Marketplace"
+          }
+        ],
+        requirements: [
+          "SaaS integration must be complete",
+          "At least one successful metering record",
+          "Buyer experience test completed",
+          "Product listing information complete"
+        ],
+        documentation_url: "https://docs.aws.amazon.com/marketplace/latest/userguide/product-submission.html"
+      }
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { success: false, error: data.detail?.error || data.error || 'Failed to get public visibility guide' },
-        { status: response.status }
-      );
-    }
-
-    return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Public visibility guide error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

@@ -1,71 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { invokeAgentCore } from '@/lib/agentcore';
 
 export async function POST(request: NextRequest) {
   const requestId = Math.random().toString(36).substring(7);
   const timestamp = new Date().toISOString();
   
-  console.log(`[${timestamp}] [REQUEST-${requestId}] ========================================`);
-  console.log(`[${timestamp}] [REQUEST-${requestId}] NEW CREATE-LISTING REQUEST RECEIVED`);
-  console.log(`[${timestamp}] [REQUEST-${requestId}] ========================================`);
+  console.log(`[${timestamp}] [REQUEST-${requestId}] CREATE-LISTING REQUEST`);
   
   try {
     const body = await request.json();
-    const { listing_data, credentials } = body;
+    const { listing_data, credentials, product_id } = body;
 
     console.log(`[${timestamp}] [REQUEST-${requestId}] Product Title: ${listing_data?.title}`);
-    console.log(`[${timestamp}] [REQUEST-${requestId}] Forwarding to backend...`);
 
-    if (!listing_data || !credentials) {
+    // Extract credentials (support both camelCase and snake_case)
+    const accessKeyId = credentials?.accessKeyId || credentials?.aws_access_key_id;
+    const secretAccessKey = credentials?.secretAccessKey || credentials?.aws_secret_access_key;
+    const sessionToken = credentials?.sessionToken || credentials?.aws_session_token;
+
+    if (!listing_data || !accessKeyId || !secretAccessKey) {
       console.log(`[${timestamp}] [REQUEST-${requestId}] ERROR: Missing required data`);
       return NextResponse.json(
-        { success: false, error: 'Missing required data' },
+        { success: false, error: 'Missing required data (listing_data and credentials)' },
         { status: 400 }
       );
     }
 
-    // Call FastAPI backend
-    console.log(`[${timestamp}] [REQUEST-${requestId}] Calling backend at http://localhost:8000/create-listing`);
-    const response = await fetch('http://localhost:8000/create-listing', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    // Invoke AgentCore create_listing action
+    const result = await invokeAgentCore(
+      {
+        action: 'create_listing',
         listing_data,
-        credentials,
-      }),
-    });
+        product_id,
+      } as any,
+      { accessKeyId, secretAccessKey, sessionToken }
+    );
 
-    const data = await response.json();
-
-    console.log(`[${timestamp}] [REQUEST-${requestId}] Backend response status: ${response.status}`);
-    console.log(`[${timestamp}] [REQUEST-${requestId}] Backend success: ${data.success}`);
-    console.log(`[${timestamp}] [REQUEST-${requestId}] Product ID: ${data.product_id}`);
-
-    if (!response.ok) {
-      console.log(`[${timestamp}] [REQUEST-${requestId}] ERROR: Backend returned error`);
+    if (!result.success) {
+      console.log(`[${timestamp}] [REQUEST-${requestId}] ERROR: AgentCore error`);
       return NextResponse.json(
-        { success: false, error: data.error || 'Listing creation failed' },
-        { status: response.status }
+        { success: false, error: result.error || 'Listing creation failed' },
+        { status: 500 }
       );
     }
 
-    console.log(`[${timestamp}] [REQUEST-${requestId}] SUCCESS - Returning to frontend`);
-    console.log(`[${timestamp}] [REQUEST-${requestId}] ========================================`);
+    const response = result.response as Record<string, unknown>;
+
+    console.log(`[${timestamp}] [REQUEST-${requestId}] SUCCESS`);
     
     return NextResponse.json({
-      success: data.success !== false,
-      product_id: data.product_id,
-      offer_id: data.offer_id,
-      published_to_limited: data.published_to_limited || false,
-      message: data.message || 'Listing created successfully',
-      stages: data.stages || [],
-      error: data.error,
+      success: response.success !== false,
+      product_id: response.product_id,
+      offer_id: response.offer_id,
+      published_to_limited: response.published_to_limited || false,
+      message: response.message || 'Listing data prepared',
+      stages: response.stages || [],
+      listing_data: response.listing_data,
+      note: response.note,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`[${timestamp}] [REQUEST-${requestId}] EXCEPTION:`, error);
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

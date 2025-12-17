@@ -1,65 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { invokeAgentCore } from '@/lib/agentcore';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { stack_name, region, credentials } = body;
+    const { stack_name, product_id, credentials, region } = body;
 
-    if (!stack_name || !credentials) {
+    // Extract credentials (support both camelCase and snake_case)
+    const accessKeyId = credentials?.accessKeyId || credentials?.aws_access_key_id;
+    const secretAccessKey = credentials?.secretAccessKey || credentials?.aws_secret_access_key;
+    const sessionToken = credentials?.sessionToken || credentials?.aws_session_token;
+
+    if (!accessKeyId || !secretAccessKey) {
       return NextResponse.json(
-        { success: false, error: 'Missing required data' },
+        { success: false, error: 'AWS credentials are required' },
         { status: 400 }
       );
     }
 
-    // Call FastAPI backend with short timeout (deletion is now non-blocking)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds
-
-    try {
-      const response = await fetch('http://localhost:8000/delete-stack', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          stack_name,
-          region: region || 'us-east-1',
-          credentials,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const data = await response.json();
-
-      if (!response.ok) {
-        return NextResponse.json(
-          { success: false, error: data.detail?.error || data.error || 'Stack deletion failed' },
-          { status: response.status }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: data.message || 'Stack deletion initiated',
-        stack_name: data.stack_name,
-        status: data.status,
-      });
-    } catch (fetchError: any) {
-      clearTimeout(timeoutId);
-      if (fetchError.name === 'AbortError') {
-        return NextResponse.json(
-          { success: false, error: 'Stack deletion request timed out. Please try again.' },
-          { status: 504 }
-        );
-      }
-      throw fetchError;
+    if (!stack_name && !product_id) {
+      return NextResponse.json(
+        { success: false, error: 'stack_name or product_id is required' },
+        { status: 400 }
+      );
     }
-  } catch (error: any) {
-    console.error('Delete stack error:', error);
+
+    // Invoke AgentCore delete_stack action
+    const result = await invokeAgentCore(
+      {
+        action: 'delete_stack',
+        stack_name,
+        product_id,
+        region: region || 'us-east-1',
+      } as any,
+      { accessKeyId, secretAccessKey, sessionToken }
+    );
+
+    if (!result.success) {
+      return NextResponse.json(
+        { success: false, error: result.error || 'Failed to delete stack' },
+        { status: 500 }
+      );
+    }
+
+    const response = result.response as Record<string, unknown>;
+
+    return NextResponse.json({
+      success: response.success !== false,
+      stack_name: response.stack_name,
+      message: response.message || 'Stack deletion initiated',
+    });
+  } catch (error: unknown) {
+    console.error('Delete stack API error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete stack';
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

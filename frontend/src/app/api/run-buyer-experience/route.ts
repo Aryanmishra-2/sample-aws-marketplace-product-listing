@@ -1,68 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { invokeAgentCore } from '@/lib/agentcore';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { product_id, credentials, pricing_model } = body;
 
-    console.log('[API ROUTE DEBUG] Buyer experience with pricing_model:', pricing_model);
+    console.log('[BUYER EXP API] Running buyer experience for product:', product_id);
 
-    if (!product_id || !credentials) {
+    // Extract credentials (support both camelCase and snake_case)
+    const accessKeyId = credentials?.accessKeyId || credentials?.aws_access_key_id;
+    const secretAccessKey = credentials?.secretAccessKey || credentials?.aws_secret_access_key;
+    const sessionToken = credentials?.sessionToken || credentials?.aws_session_token;
+
+    if (!product_id || !accessKeyId || !secretAccessKey) {
       return NextResponse.json(
-        { success: false, error: 'Missing required data' },
+        { success: false, error: 'Missing required data (product_id and credentials)' },
         { status: 400 }
       );
     }
 
-    // Call FastAPI backend with timeout (120 seconds for buyer experience)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    // Invoke AgentCore buyer_experience action
+    const result = await invokeAgentCore(
+      {
+        action: 'buyer_experience',
+        product_id,
+        sub_action: 'simulate',
+      } as any,
+      { accessKeyId, secretAccessKey, sessionToken }
+    );
 
-    try {
-      const response = await fetch('http://localhost:8000/run-buyer-experience', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          product_id,
-          pricing_model,
-          credentials,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const data = await response.json();
-
-      if (!response.ok) {
-        return NextResponse.json(
-          { success: false, error: data.detail?.error || data.error || 'Buyer experience failed' },
-          { status: response.status }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        buyer_result: data.buyer_result,
-        pricing_model: data.pricing_model,
-        next_step: data.next_step,
-        next_step_result: data.next_step_result,
-      });
-    } catch (fetchError: any) {
-      clearTimeout(timeoutId);
-      if (fetchError.name === 'AbortError') {
-        return NextResponse.json(
-          { success: false, error: 'Buyer experience request timed out. Please try again.' },
-          { status: 504 }
-        );
-      }
-      throw fetchError;
+    if (!result.success) {
+      console.error('[BUYER EXP API] AgentCore error:', result.error);
+      return NextResponse.json(
+        { success: false, error: result.error || 'Buyer experience failed' },
+        { status: 500 }
+      );
     }
-  } catch (error: any) {
-    console.error('Run buyer experience error:', error);
+
+    // Extract response data
+    const response = result.response as Record<string, unknown>;
+    
+    console.log('[BUYER EXP API] Buyer experience completed');
+
+    return NextResponse.json({
+      success: response.success !== false,
+      buyer_result: response.buyer_result || response,
+      pricing_model: pricing_model,
+      next_step: response.next_step,
+      next_step_result: response.next_step_result,
+    });
+  } catch (error: unknown) {
+    console.error('[BUYER EXP API] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

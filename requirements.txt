@@ -1,30 +1,32 @@
 # FastAPI Backend Requirements
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.5.0
-python-multipart==0.0.6
+fastapi>=0.104.1
+uvicorn[standard]>=0.34.2
+pydantic>=2.5.0
+python-multipart>=0.0.6
 
 # AWS SDK
-boto3==1.34.0
-botocore==1.34.0
+boto3>=1.34.0
+botocore>=1.34.0
 
-# HTTP Client
-httpx==0.25.2
-requests==2.31.0
+# HTTP Client (compatible with strands-agents)
+httpx>=0.27.0
+requests>=2.31.0
 
 # CORS
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]>=3.3.0
 
 # Environment
-python-dotenv==1.0.0
+python-dotenv>=1.0.0
 
 # Agent dependencies for AI capabilities
-# These are needed for the agent system integration
-anthropic==0.7.8
-langchain==0.1.0
-langchain-community==0.0.10
-selenium==4.16.0
-beautifulsoup4==4.12.2
-lxml==4.9.3
-pyyaml==6.0.1
-strands>=0.1.0
+anthropic>=0.7.8
+selenium>=4.16.0
+beautifulsoup4>=4.12.2
+lxml>=4.9.3
+pyyaml>=6.0.1
+
+# Strands Agents SDK (for agent implementation)
+strands-agents>=1.0.0
+
+# Bedrock AgentCore Runtime SDK (for deployment)
+bedrock-agentcore>=1.0.0
