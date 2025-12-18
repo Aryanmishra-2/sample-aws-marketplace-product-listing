@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { invokeAgentCore } from '@/lib/agentcore';
 
-// Call the full create_listing orchestration
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { listing_data, credentials } = body;
+    const { change_set_id, credentials } = body;
 
+    // Extract credentials
     const accessKeyId = credentials?.accessKeyId || credentials?.aws_access_key_id;
     const secretAccessKey = credentials?.secretAccessKey || credentials?.aws_secret_access_key;
     const sessionToken = credentials?.sessionToken || credentials?.aws_session_token;
@@ -18,22 +18,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[create-listing-stream] Calling create_listing (full orchestration)');
+    if (!change_set_id) {
+      return NextResponse.json(
+        { success: false, error: 'change_set_id is required' },
+        { status: 400 }
+      );
+    }
 
-    // Call the full create_listing action - this runs all stages
+    // Check listing status
     const result = await invokeAgentCore(
       {
-        action: 'create_listing',
-        listing_data: listing_data,
+        action: 'listing_get_status',
+        change_set_id,
       } as any,
       { accessKeyId, secretAccessKey, sessionToken }
     );
 
-    console.log('[create-listing-stream] Result:', JSON.stringify(result, null, 2));
-
     if (!result.success) {
       return NextResponse.json(
-        { success: false, error: result.error || 'Failed to create listing' },
+        { success: false, error: result.error || 'Failed to get listing status' },
         { status: 500 }
       );
     }
@@ -41,17 +44,16 @@ export async function POST(request: NextRequest) {
     const response = result.response as Record<string, unknown>;
     
     return NextResponse.json({
-      success: response.success !== false,
+      success: true,
+      status: response.status,
       product_id: response.product_id,
       offer_id: response.offer_id,
-      published_to_limited: response.published_to_limited,
       message: response.message,
-      stages: response.stages,
       error: response.error,
     });
   } catch (error: unknown) {
-    console.error('Error in create-listing-stream:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create listing';
+    console.error('Error in listing-status route:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get listing status';
     return NextResponse.json(
       { success: false, error: errorMessage },
       { status: 500 }

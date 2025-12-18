@@ -9,6 +9,11 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 import json
 import sys
 import os
+import threading
+import uuid
+from datetime import datetime
+import boto3
+from botocore.exceptions import ClientError
 
 # Add the app directory to path so Python can find the agents and backend packages
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -42,6 +47,91 @@ except ImportError:
 
 # Initialize AgentCore app
 app = BedrockAgentCoreApp()
+
+# DynamoDB table for persistent task state
+TASK_TABLE_NAME = "marketplace-listing-tasks"
+
+def get_dynamodb_client(access_key=None, secret_key=None, session_token=None):
+    """Get DynamoDB client with optional credentials"""
+    if access_key and secret_key:
+        return boto3.client(
+            'dynamodb',
+            region_name='us-east-1',
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            aws_session_token=session_token
+        )
+    return boto3.client('dynamodb', region_name='us-east-1')
+
+def ensure_task_table_exists(dynamodb_client):
+    """Create the task table if it doesn't exist"""
+    try:
+        dynamodb_client.describe_table(TableName=TASK_TABLE_NAME)
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            dynamodb_client.create_table(
+                TableName=TASK_TABLE_NAME,
+                KeySchema=[{'AttributeName': 'task_id', 'KeyType': 'HASH'}],
+                AttributeDefinitions=[{'AttributeName': 'task_id', 'AttributeType': 'S'}],
+                BillingMode='PAY_PER_REQUEST'
+            )
+            # Wait for table to be created
+            waiter = dynamodb_client.get_waiter('table_exists')
+            waiter.wait(TableName=TASK_TABLE_NAME)
+
+def save_task_state(task_id: str, task_data: dict, access_key=None, secret_key=None, session_token=None):
+    """Save task state to DynamoDB"""
+    try:
+        dynamodb_client = get_dynamodb_client(access_key, secret_key, session_token)
+        ensure_task_table_exists(dynamodb_client)
+        
+        item = {
+            'task_id': {'S': task_id},
+            'status': {'S': task_data.get('status', 'unknown')},
+            'stages': {'S': json.dumps(task_data.get('stages', []))},
+            'product_id': {'S': task_data.get('product_id') or ''},
+            'offer_id': {'S': task_data.get('offer_id') or ''},
+            'published_to_limited': {'BOOL': task_data.get('published_to_limited', False)},
+            'error': {'S': task_data.get('error') or ''},
+            'message': {'S': task_data.get('message') or ''},
+            'started_at': {'S': task_data.get('started_at') or ''},
+            'completed_at': {'S': task_data.get('completed_at') or ''},
+            'ttl': {'N': str(int(datetime.now().timestamp()) + 86400)}  # 24 hour TTL
+        }
+        
+        dynamodb_client.put_item(TableName=TASK_TABLE_NAME, Item=item)
+    except Exception as e:
+        print(f"Error saving task state: {e}")
+
+def get_task_state(task_id: str, access_key=None, secret_key=None, session_token=None) -> dict:
+    """Get task state from DynamoDB"""
+    try:
+        dynamodb_client = get_dynamodb_client(access_key, secret_key, session_token)
+        
+        response = dynamodb_client.get_item(
+            TableName=TASK_TABLE_NAME,
+            Key={'task_id': {'S': task_id}}
+        )
+        
+        if 'Item' not in response:
+            return None
+        
+        item = response['Item']
+        return {
+            'task_id': item.get('task_id', {}).get('S'),
+            'status': item.get('status', {}).get('S', 'unknown'),
+            'stages': json.loads(item.get('stages', {}).get('S', '[]')),
+            'product_id': item.get('product_id', {}).get('S') or None,
+            'offer_id': item.get('offer_id', {}).get('S') or None,
+            'published_to_limited': item.get('published_to_limited', {}).get('BOOL', False),
+            'error': item.get('error', {}).get('S') or None,
+            'message': item.get('message', {}).get('S') or None,
+            'started_at': item.get('started_at', {}).get('S') or None,
+            'completed_at': item.get('completed_at', {}).get('S') or None,
+        }
+    except Exception as e:
+        print(f"Error getting task state: {e}")
+        return None
 
 # Initialize agents
 workflow_orchestrator = WorkflowOrchestrator()
@@ -136,7 +226,10 @@ async def handle_request(payload: dict, context=None):
             return handle_delete_stack(payload, access_key, secret_key, session_token)
         
         elif action == "create_listing":
-            return await handle_create_listing(payload, access_key, secret_key, session_token)
+            return handle_create_listing_async(payload, access_key, secret_key, session_token)
+        
+        elif action == "listing_progress":
+            return handle_listing_progress(payload)
         
         elif action == "validate_credentials":
             return handle_validate_credentials(payload, access_key, secret_key, session_token)
@@ -225,7 +318,8 @@ async def handle_request(payload: dict, context=None):
                 "metering_find_tables", "metering_get_customer", "metering_insert_record",
                 "listing_create_draft", "listing_update_info", "listing_add_pricing",
                 "listing_update_support", "listing_update_legal", "listing_update_availability",
-                "listing_release_to_limited", "listing_get_status", "listing_get_entity", "health"
+                "listing_release_to_limited", "listing_get_status", "listing_get_entity", 
+                "listing_progress", "health"
             ]}
             
     except Exception as e:
@@ -811,13 +905,131 @@ def handle_delete_stack(payload: dict, access_key: str, secret_key: str, session
         return {"success": False, "error": str(e)}
 
 
-async def handle_create_listing(payload: dict, access_key: str, secret_key: str, session_token: str = None):
+def handle_listing_progress(payload: dict, access_key: str = None, secret_key: str = None, session_token: str = None):
+    """Get progress of an async listing creation task from DynamoDB"""
+    task_id = payload.get("task_id")
+    
+    if not task_id:
+        return {"success": False, "error": "Missing task_id"}
+    
+    task = get_task_state(task_id, access_key, secret_key, session_token)
+    
+    if not task:
+        return {"success": False, "error": f"Task {task_id} not found", "status": "NOT_FOUND"}
+    
+    return {
+        "success": True,
+        "task_id": task_id,
+        "status": task.get("status", "unknown"),
+        "stages": task.get("stages", []),
+        "product_id": task.get("product_id"),
+        "offer_id": task.get("offer_id"),
+        "published_to_limited": task.get("published_to_limited", False),
+        "error": task.get("error"),
+        "message": task.get("message"),
+        "started_at": task.get("started_at"),
+        "completed_at": task.get("completed_at"),
+    }
+
+
+def handle_create_listing_async(payload: dict, access_key: str, secret_key: str, session_token: str = None):
+    """Start async listing creation - returns immediately with task_id for polling"""
+    # Generate unique task ID
+    task_id = str(uuid.uuid4())[:8]
+    
+    # Initialize task state in DynamoDB
+    initial_state = {
+        "status": "in_progress",
+        "stages": [{"stage": "Initializing", "status": "in_progress", "message": "Starting listing creation..."}],
+        "product_id": None,
+        "offer_id": None,
+        "published_to_limited": False,
+        "error": None,
+        "message": "Listing creation started",
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+    }
+    save_task_state(task_id, initial_state, access_key, secret_key, session_token)
+    
+    # Start async task using AgentCore's task management
+    agentcore_task_id = app.add_async_task("create_listing", {"task_id": task_id})
+    
+    # Run the actual listing creation in a background thread
+    def run_listing_creation():
+        import asyncio
+        try:
+            # Create new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Run the async function
+            result = loop.run_until_complete(
+                handle_create_listing(payload, access_key, secret_key, session_token, task_id)
+            )
+            
+            # Update task state with result in DynamoDB
+            final_state = {
+                "status": "completed" if result.get("success") else "failed",
+                "stages": result.get("stages", []),
+                "product_id": result.get("product_id"),
+                "offer_id": result.get("offer_id"),
+                "published_to_limited": result.get("published_to_limited", False),
+                "error": result.get("error"),
+                "message": result.get("message", "Completed"),
+                "started_at": initial_state["started_at"],
+                "completed_at": datetime.now().isoformat(),
+            }
+            save_task_state(task_id, final_state, access_key, secret_key, session_token)
+            
+            loop.close()
+        except Exception as e:
+            error_state = {
+                "status": "failed",
+                "stages": [],
+                "product_id": None,
+                "offer_id": None,
+                "published_to_limited": False,
+                "error": str(e),
+                "message": "Failed",
+                "started_at": initial_state["started_at"],
+                "completed_at": datetime.now().isoformat(),
+            }
+            save_task_state(task_id, error_state, access_key, secret_key, session_token)
+        finally:
+            # Mark AgentCore task as complete
+            app.complete_async_task(agentcore_task_id)
+    
+    # Start background thread
+    thread = threading.Thread(target=run_listing_creation, daemon=True)
+    thread.start()
+    
+    # Return immediately with task_id
+    return {
+        "success": True,
+        "task_id": task_id,
+        "status": "in_progress",
+        "message": "Listing creation started. Poll /api/listing-progress with task_id for updates.",
+    }
+
+
+async def handle_create_listing(payload: dict, access_key: str, secret_key: str, session_token: str = None, task_id: str = None):
     """Create marketplace listing using AWS Marketplace Catalog API with full sub-agent orchestration"""
-    import boto3
     import time
     
     listing_data = payload.get("listing_data", {})
     stages = []
+    
+    # Helper to update task progress in real-time via DynamoDB
+    def update_progress(new_stages, product_id=None, offer_id=None, message=None):
+        if task_id:
+            # Get current state and update
+            current_state = get_d]["stages"] = new_stages
+            if product_id:
+                listing_tasks[task_id]["product_id"] = product_id
+            if offer_id:
+                listing_tasks[task_id]["offer_id"] = offer_id
+            if message:
+                listing_tasks[task_id]["message"] = message
     
     # Check if listing tools are available
     if not LISTING_AGENTS_AVAILABLE:
@@ -902,11 +1114,13 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
         # Stage 1: Product Information (ProductInformationAgent)
         # ============================================================
         stages.append({"stage": "Product Information", "status": "in_progress", "message": f"Creating product: {product_title}..."})
+        update_progress(stages)
         
         create_result = listing_tools.create_product_minimal(product_title)
         if not create_result.get("success"):
             stages[-1]["status"] = "failed"
             stages[-1]["message"] = create_result.get("error", "Failed to create product")
+            update_progress(stages)
             return {"success": False, "error": stages[-1]["message"], "stages": stages}
         
         change_set_id = create_result.get("change_set_id")
@@ -915,6 +1129,7 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
         if not wait_result.get("success"):
             stages[-1]["status"] = "failed"
             stages[-1]["message"] = wait_result.get("error", "Product creation failed")
+            update_progress(stages)
             return {"success": False, "error": stages[-1]["message"], "stages": stages}
         
         # Extract product_id and offer_id from changeset
@@ -929,13 +1144,16 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
         if not product_id:
             stages[-1]["status"] = "failed"
             stages[-1]["message"] = "Failed to get product ID"
+            update_progress(stages)
             return {"success": False, "error": "Failed to get product ID", "stages": stages}
         
         stages[-1]["status"] = "complete"
         stages[-1]["message"] = f"Product created: {product_id}"
+        update_progress(stages, product_id, offer_id)
         
         # Update product details
         stages.append({"stage": "Product Details", "status": "in_progress", "message": "Updating product details..."})
+        update_progress(stages, product_id, offer_id)
         
         description_data = {
             "ProductTitle": product_title,
@@ -962,17 +1180,20 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
             if details_wait.get("success"):
                 stages[-1]["status"] = "complete"
                 stages[-1]["message"] = "Product details updated"
+                update_progress(stages, product_id, offer_id)
             else:
                 raise Exception(details_wait.get("error", "Unknown error"))
         except Exception as e:
             stages[-1]["status"] = "failed"
             stages[-1]["message"] = f"Product details update failed: {str(e)}"
+            update_progress(stages, product_id, offer_id)
             return {"success": False, "error": str(e), "stages": stages, "product_id": product_id, "offer_id": offer_id}
         
         # ============================================================
         # Stage 2: Fulfillment (FulfillmentAgent)
         # ============================================================
         stages.append({"stage": "Fulfillment", "status": "in_progress", "message": "Configuring fulfillment URL..."})
+        update_progress(stages, product_id, offer_id)
         
         if fulfillment_url:
             try:
@@ -998,20 +1219,24 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
                 if fulfillment_wait.get("success"):
                     stages[-1]["status"] = "complete"
                     stages[-1]["message"] = "Fulfillment URL configured"
+                    update_progress(stages, product_id, offer_id)
                 else:
                     raise Exception(fulfillment_wait.get("error", "Unknown error"))
             except Exception as e:
                 stages[-1]["status"] = "failed"
                 stages[-1]["message"] = f"Fulfillment configuration failed: {str(e)}"
+                update_progress(stages, product_id, offer_id)
                 return {"success": False, "error": str(e), "stages": stages, "product_id": product_id, "offer_id": offer_id}
         else:
             stages[-1]["status"] = "complete"
             stages[-1]["message"] = "Fulfillment URL will be configured later"
+            update_progress(stages, product_id, offer_id)
         
         # ============================================================
         # Stage 3: Pricing Dimensions (PricingConfigAgent)
         # ============================================================
         stages.append({"stage": "Pricing Dimensions", "status": "in_progress", "message": "Configuring pricing dimensions..."})
+        update_progress(stages, product_id, offer_id)
         
         if pricing_dimensions and offer_id and product_id:
             try:
@@ -1049,6 +1274,7 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
                     if pricing_wait.get("success"):
                         stages[-1]["status"] = "complete"
                         stages[-1]["message"] = f"Configured {len(pricing_dimensions)} pricing dimension(s)"
+                        update_progress(stages, product_id, offer_id)
                     else:
                         raise Exception(pricing_wait.get("error", "Unknown error"))
                 else:
@@ -1056,20 +1282,24 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
             except Exception as e:
                 stages[-1]["status"] = "failed"
                 stages[-1]["message"] = f"Pricing configuration failed: {str(e)}"
+                update_progress(stages, product_id, offer_id)
                 return {"success": False, "error": str(e), "stages": stages, "product_id": product_id, "offer_id": offer_id}
         else:
             stages[-1]["status"] = "complete"
             stages[-1]["message"] = "Default pricing will be applied"
+            update_progress(stages, product_id, offer_id)
         
         # ============================================================
         # Stage 4: Price Review (PriceReviewAgent)
         # ============================================================
         stages.append({"stage": "Price Review", "status": "complete", "message": "Pricing configuration validated"})
+        update_progress(stages, product_id, offer_id)
         
         # ============================================================
         # Stage 5: Refund Policy (RefundPolicyAgent)
         # ============================================================
         stages.append({"stage": "Refund Policy", "status": "in_progress", "message": "Configuring refund policy..."})
+        update_progress(stages, product_id, offer_id)
         
         if refund_policy and offer_id:
             try:
@@ -1079,6 +1309,7 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
                     if refund_wait.get("success"):
                         stages[-1]["status"] = "complete"
                         stages[-1]["message"] = "Refund policy configured"
+                        update_progress(stages, product_id, offer_id)
                     else:
                         raise Exception(refund_wait.get("error", "Unknown error"))
                 else:
@@ -1086,15 +1317,18 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
             except Exception as e:
                 stages[-1]["status"] = "failed"
                 stages[-1]["message"] = f"Refund policy configuration failed: {str(e)}"
+                update_progress(stages, product_id, offer_id)
                 return {"success": False, "error": str(e), "stages": stages, "product_id": product_id, "offer_id": offer_id}
         else:
             stages[-1]["status"] = "complete"
             stages[-1]["message"] = "Default refund policy applied"
+            update_progress(stages, product_id, offer_id)
         
         # ============================================================
         # Stage 6: EULA Configuration (EULAConfigAgent)
         # ============================================================
         stages.append({"stage": "EULA", "status": "in_progress", "message": "Configuring End User License Agreement..."})
+        update_progress(stages, product_id, offer_id)
         
         if offer_id:
             try:
@@ -1109,6 +1343,7 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
                     if eula_wait.get("success"):
                         stages[-1]["status"] = "complete"
                         stages[-1]["message"] = f"{eula_type} EULA configured"
+                        update_progress(stages, product_id, offer_id)
                     else:
                         raise Exception(eula_wait.get("error", "Unknown error"))
                 else:
@@ -1116,15 +1351,18 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
             except Exception as e:
                 stages[-1]["status"] = "failed"
                 stages[-1]["message"] = f"EULA configuration failed: {str(e)}"
+                update_progress(stages, product_id, offer_id)
                 return {"success": False, "error": str(e), "stages": stages, "product_id": product_id, "offer_id": offer_id}
         else:
             stages[-1]["status"] = "complete"
             stages[-1]["message"] = "Standard EULA will be applied"
+            update_progress(stages, product_id, offer_id)
         
         # ============================================================
         # Stage 7: Availability Settings (OfferAvailabilityAgent)
         # ============================================================
         stages.append({"stage": "Availability", "status": "in_progress", "message": "Configuring availability settings..."})
+        update_progress(stages, product_id, offer_id)
         
         if offer_id:
             try:
@@ -1134,6 +1372,7 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
                     if availability_wait.get("success"):
                         stages[-1]["status"] = "complete"
                         stages[-1]["message"] = "Availability set to all countries"
+                        update_progress(stages, product_id, offer_id)
                     else:
                         raise Exception(availability_wait.get("error", "Unknown error"))
                 else:
@@ -1141,15 +1380,18 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
             except Exception as e:
                 stages[-1]["status"] = "failed"
                 stages[-1]["message"] = f"Availability configuration failed: {str(e)}"
+                update_progress(stages, product_id, offer_id)
                 return {"success": False, "error": str(e), "stages": stages, "product_id": product_id, "offer_id": offer_id}
         else:
             stages[-1]["status"] = "complete"
             stages[-1]["message"] = "Default availability applied"
+            update_progress(stages, product_id, offer_id)
         
         # ============================================================
         # Stage 8: Allowlist Configuration (AllowlistAgent)
         # ============================================================
         stages.append({"stage": "Allowlist", "status": "complete", "message": "Allowlist configuration complete (no restrictions)"})
+        update_progress(stages, product_id, offer_id)
         
         # ============================================================
         # Stage 9: Publish to Limited (optional)
@@ -1157,6 +1399,7 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
         published_to_limited = False
         if auto_publish_to_limited and product_id and offer_id:
             stages.append({"stage": "Publish to Limited", "status": "in_progress", "message": "Publishing product to Limited visibility..."})
+            update_progress(stages, product_id, offer_id)
             try:
                 release_result = listing_tools.release_product_and_offer_to_limited(
                     product_id=product_id, offer_id=offer_id,
@@ -1169,15 +1412,19 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
                         published_to_limited = True
                         stages[-1]["status"] = "complete"
                         stages[-1]["message"] = "Product published to Limited visibility"
+                        update_progress(stages, product_id, offer_id)
                     else:
                         stages[-1]["status"] = "warning"
                         stages[-1]["message"] = f"Publish to Limited pending: {release_wait.get('error', 'Unknown')[:50]}"
+                        update_progress(stages, product_id, offer_id)
                 else:
                     stages[-1]["status"] = "warning"
                     stages[-1]["message"] = f"Publish to Limited pending: {release_result.get('error', 'Unknown')[:50]}"
+                    update_progress(stages, product_id, offer_id)
             except Exception as e:
                 stages[-1]["status"] = "warning"
                 stages[-1]["message"] = f"Publish to Limited pending: {str(e)[:50]}"
+                update_progress(stages, product_id, offer_id)
         
         return {
             "success": True,
@@ -1900,6 +2147,35 @@ def handle_listing_get_status(payload: dict, access_key: str, secret_key: str, s
     
     try:
         result = tools.get_listing_status(change_set_id)
+        
+        if result.get("success"):
+            # Extract product_id and offer_id from changeset
+            product_id = None
+            offer_id = None
+            change_set = result.get("change_set", [])
+            
+            for change in change_set:
+                change_type = change.get("ChangeType", "")
+                entity = change.get("Entity", {})
+                identifier = entity.get("Identifier", "")
+                
+                # Strip revision suffix
+                if identifier and "@" in identifier:
+                    identifier = identifier.split("@")[0]
+                
+                if change_type == "CreateProduct":
+                    product_id = identifier
+                elif change_type == "CreateOffer":
+                    offer_id = identifier
+            
+            return {
+                "success": True,
+                "status": result.get("status"),
+                "product_id": product_id,
+                "offer_id": offer_id,
+                "message": f"Change set status: {result.get('status')}"
+            }
+        
         return result
     except Exception as e:
         return {"success": False, "error": str(e)}

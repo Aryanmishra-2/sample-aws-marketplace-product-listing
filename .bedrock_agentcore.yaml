@@ -30,7 +30,7 @@ agents:
     bedrock_agentcore:
       agent_id: marketplaceAgent-jSPPCj383D
       agent_arn: arn:aws:bedrock-agentcore:us-east-1:789707489355:runtime/marketplaceAgent-jSPPCj383D
-      agent_session_id: 85e98b32-abdb-4ec3-b47d-d8a0c3f10732
+      agent_session_id: a1a94cb7-1405-4971-8bd5-978b027600a0
     codebuild:
       project_name: bedrock-agentcore-marketplaceagent-builder
       execution_role: arn:aws:iam::789707489355:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-29855fdc98

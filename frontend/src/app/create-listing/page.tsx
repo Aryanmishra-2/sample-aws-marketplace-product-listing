@@ -20,42 +20,39 @@ import { useStore } from '@/lib/store';
 import WorkflowNav from '@/components/WorkflowNav';
 import axios from 'axios';
 
-interface Stage {
-  name: string;
-  description: string;
-  progress: number;
-  status: 'pending' | 'in-progress' | 'completed' | 'error';
-  message?: string;
-  startTime?: number;
-  endTime?: number;
+interface Changeset {
+  change_set_id: string;
+  change_set_name: string;
+  status: string;
+  start_time?: string;
+  end_time?: string;
+  entity_id?: string;
+  failure_code?: string;
 }
 
-const INITIAL_STAGES: Stage[] = [
-  { name: 'Product Information', description: 'Setting product details, logo, and descriptions', progress: 10, status: 'pending' },
-  { name: 'Fulfillment Configuration', description: 'Configuring fulfillment URL and settings', progress: 20, status: 'pending' },
-  { name: 'Pricing Dimensions', description: 'Creating pricing dimensions and models', progress: 30, status: 'pending' },
-  { name: 'Price Review', description: 'Configuring contract durations and options', progress: 40, status: 'pending' },
-  { name: 'Refund Policy', description: 'Setting refund policy terms', progress: 50, status: 'pending' },
-  { name: 'EULA Configuration', description: 'Configuring End User License Agreement', progress: 60, status: 'pending' },
-  { name: 'Availability Settings', description: 'Setting geographic availability', progress: 70, status: 'pending' },
-  { name: 'Allowlist Configuration', description: 'Configuring buyer account allowlist', progress: 80, status: 'pending' },
-  { name: 'Publish to Limited', description: 'Publishing product and offer to Limited stage', progress: 90, status: 'pending' },
+interface Stage {
+  name: string;
+  status: 'pending' | 'in_progress' | 'complete' | 'failed';
+  message?: string;
+}
+
+const STAGE_NAMES = [
+  'Product & Offer Creation',
+  'Product Details',
+  'Fulfillment',
+  'Pricing',
+  'Support Terms',
+  'Legal Terms',
+  'Availability',
+  'Publish to Limited',
 ];
 
 export default function CreateListingPage() {
   const router = useRouter();
-  const {
-    isAuthenticated,
-    listingData,
-    setProductId,
-    setCurrentStep,
-    credentials,
-  } = useStore();
+  const { isAuthenticated, listingData, setProductId, setCurrentStep, credentials } = useStore();
 
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [stages, setStages] = useState<Stage[]>(INITIAL_STAGES);
-  const [currentStageIndex, setCurrentStageIndex] = useState(-1);
+  const [stages, setStages] = useState<Stage[]>(STAGE_NAMES.map(name => ({ name, status: 'pending' })));
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [productId, setLocalProductId] = useState('');
@@ -63,368 +60,289 @@ export default function CreateListingPage() {
   const [publishedToLimited, setPublishedToLimited] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
+  const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
+  const [completedChangesets, setCompletedChangesets] = useState<Set<string>>(new Set());
   const hasStartedRef = useRef(false);
-  const isCreatingRef = useRef(false);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const requestSentRef = useRef(false);
 
   useEffect(() => {
     if (!isAuthenticated || !listingData || !credentials) {
       router.push('/');
       return;
     }
-
-    // Start listing creation automatically - but ABSOLUTELY only once!
-    // Use ref to survive React StrictMode double-render
-    if (!hasStartedRef.current && !isCreatingRef.current && !loading && !success) {
+    if (!hasStartedRef.current && !loading && !success) {
       hasStartedRef.current = true;
-      isCreatingRef.current = true;
-      console.log('[DEBUG] useEffect triggering createListing - FIRST TIME ONLY');
-      createListing();
-    } else {
-      console.log('[DEBUG] useEffect skipping createListing - already started');
+      startListingCreation();
     }
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
   }, [isAuthenticated, listingData, credentials]);
 
-  // Timer for elapsed time
   useEffect(() => {
     if (loading && startTime) {
-      const interval = setInterval(() => {
-        setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
-      }, 1000);
+      const interval = setInterval(() => setElapsedTime(Math.floor((Date.now() - startTime) / 1000)), 1000);
       return () => clearInterval(interval);
     }
   }, [loading, startTime]);
 
-  const updateStageStatus = (index: number, status: Stage['status'], message?: string) => {
-    setStages(prev => {
-      const newStages = [...prev];
-      newStages[index] = {
-        ...newStages[index],
-        status,
-        message,
-        startTime: status === 'in-progress' ? Date.now() : newStages[index].startTime,
-        endTime: status === 'completed' || status === 'error' ? Date.now() : undefined,
-      };
-      return newStages;
-    });
-  };
-
-  const createListing = async () => {
-    const callId = Math.random().toString(36).substring(7);
-    const timestamp = new Date().toISOString();
-    
-    console.log(`\n${'='.repeat(80)}`);
-    console.log(`[${timestamp}] [CALL-${callId}] createListing() INVOKED`);
-    console.log(`[${timestamp}] [CALL-${callId}] isCreatingRef.current: ${isCreatingRef.current}`);
-    console.log(`[${timestamp}] [CALL-${callId}] loading: ${loading}`);
-    console.log(`[${timestamp}] [CALL-${callId}] success: ${success}`);
-    console.log(`${'='.repeat(80)}\n`);
-    
-    // CRITICAL: Prevent duplicate calls with multiple checks
-    if (isCreatingRef.current && loading) {
-      console.log(`[${timestamp}] [CALL-${callId}] ❌ BLOCKED: Already creating listing`);
-      return;
-    }
-    
-    if (loading || success) {
-      console.log(`[${timestamp}] [CALL-${callId}] ❌ BLOCKED: Loading or already successful`);
-      return;
-    }
-
-    console.log(`[${timestamp}] [CALL-${callId}] ✅ PROCEEDING - Setting isCreatingRef to true`);
-    isCreatingRef.current = true;
+  const startListingCreation = async () => {
     setLoading(true);
     setError('');
     setStartTime(Date.now());
-    setProgress(5);
+    const sessionStart = new Date();
+    setSessionStartTime(sessionStart);
+    setCompletedChangesets(new Set());
+    
+    // Set first stage as in_progress
+    setStages(prev => prev.map((s, i) => ({ ...s, status: i === 0 ? 'in_progress' : 'pending' })));
 
-    try {
-      // Map stage names from backend to frontend indices
-      const stageNameToIndex: Record<string, number> = {
-        'Initializing': 0,
-        'Product Information': 0,
-        'Product Details': 0,
-        'Fulfillment': 1,
-        'Pricing Dimensions': 2,
-        'Price Review': 3,
-        'Refund Policy': 4,
-        'EULA': 5,
-        'Availability': 6,
-        'Allowlist': 7,
-        'Publish to Limited': 8,
-        'Publishing': 8,
-      };
-      
-      // Helper to simulate progress updates
-      const simulateProgress = async (stageIndex: number, message: string) => {
-        setCurrentStageIndex(stageIndex);
-        updateStageStatus(stageIndex, 'in-progress', message);
-        setProgress(stages[stageIndex].progress);
-        await new Promise(resolve => setTimeout(resolve, 500));
-      };
-      
-      // Start with initializing
-      await simulateProgress(0, 'Initializing listing creation...');
-      
-      console.log(`[${timestamp}] [CALL-${callId}] 📤 Calling AgentCore create_listing`);
-      
-      // Call AgentCore API (no SSE - synchronous call)
-      const response = await axios.post('/api/create-listing-stream', {
+    // Fire off the create_listing request (don't wait for response)
+    if (!requestSentRef.current) {
+      requestSentRef.current = true;
+      axios.post('/api/create-listing-stream', {
         listing_data: listingData,
-        credentials: credentials,
+        credentials,
+      }, { timeout: 600000 }).then(response => {
+        console.log('[create-listing] Response received:', response.data);
+        if (response.data.success) {
+          setLocalProductId(response.data.product_id || '');
+          setOfferId(response.data.offer_id || '');
+          setPublishedToLimited(response.data.published_to_limited || false);
+          if (response.data.product_id) setProductId(response.data.product_id);
+        }
+      }).catch(err => {
+        console.log('[create-listing] Request error (expected timeout):', err.message);
       });
-      
-      console.log(`[${timestamp}] [CALL-${callId}] 📥 AgentCore response:`, response.data);
-      
-      if (!response.data.success) {
-        throw new Error(response.data.error || response.data.message || 'Failed to create listing');
-      }
-      
-      // Process stages from response
-      const responseStages = response.data.stages || [];
-      
-      for (const stage of responseStages) {
-        const stageIndex = stageNameToIndex[stage.stage] ?? 0;
-        const status = stage.status === 'complete' || stage.status === 'completed' ? 'completed' 
-                     : stage.status === 'failed' || stage.status === 'error' ? 'error'
-                     : stage.status === 'warning' ? 'completed'
-                     : 'in-progress';
+    }
+
+    // Start polling for changesets
+    startPolling(sessionStart);
+  };
+
+  const startPolling = (sessionStart: Date) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+
+    const pollChangesets = async () => {
+      try {
+        const response = await axios.post('/api/list-changesets', { credentials, max_results: 20 });
         
-        updateStageStatus(stageIndex, status, stage.status === 'warning' ? `⚠ ${stage.message}` : `✓ ${stage.message}`);
-        setProgress(stages[stageIndex].progress);
+        if (!response.data.success) {
+          console.log('[poll] API error:', response.data.error);
+          return;
+        }
+
+        const changesets: Changeset[] = response.data.changesets;
         
-        // Small delay for visual feedback
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Filter to changesets started after our session began (with 1 min buffer)
+        const sessionStartWithBuffer = new Date(sessionStart.getTime() - 60000);
+        const relevantChangesets = changesets.filter(cs => {
+          if (!cs.start_time) return false;
+          const csTime = new Date(cs.start_time);
+          return csTime >= sessionStartWithBuffer;
+        });
+
+        console.log('[poll] Found', relevantChangesets.length, 'relevant changesets');
+
+        // Count completed changesets
+        const newCompleted = new Set(completedChangesets);
+        let foundProductId = '';
+        let foundOfferId = '';
+        let hasReleasedToLimited = false;
+
+        for (const cs of relevantChangesets) {
+          // Extract entity IDs
+          if (cs.entity_id) {
+            if (cs.entity_id.startsWith('prod-')) foundProductId = cs.entity_id.split('@')[0];
+            if (cs.entity_id.startsWith('offer-')) foundOfferId = cs.entity_id.split('@')[0];
+          }
+
+          if (cs.status === 'SUCCEEDED') {
+            newCompleted.add(cs.change_set_id);
+            
+            // Check for Release to Limited
+            if (cs.change_set_name?.includes('Release') && cs.change_set_name?.includes('Limited')) {
+              hasReleasedToLimited = true;
+            }
+          }
+        }
+
+        setCompletedChangesets(newCompleted);
+
+        // Update product/offer IDs
+        if (foundProductId && !productId) {
+          setLocalProductId(foundProductId);
+          setProductId(foundProductId);
+        }
+        if (foundOfferId && !offerId) {
+          setOfferId(foundOfferId);
+        }
+
+        // Update stages based on completed count
+        // The orchestration runs ~10 changesets total
+        const completedCount = newCompleted.size;
+        console.log('[poll] Completed changesets:', completedCount);
+
+        const newStages = STAGE_NAMES.map((name, idx) => {
+          // Map stage index to expected changeset count
+          // Stage 0: 1 changeset (CreateProduct)
+          // Stage 1: 2 changesets (UpdateInfo)
+          // Stage 2: 3 changesets (Fulfillment)
+          // Stage 3: 4 changesets (Pricing)
+          // Stage 4: 5 changesets (Support)
+          // Stage 5: 6 changesets (Legal)
+          // Stage 6: 7 changesets (Availability)
+          // Stage 7: 8+ changesets (Release to Limited)
+          const requiredCount = idx + 1;
+          
+          if (completedCount >= requiredCount) {
+            return { name, status: 'complete' as const, message: 'Completed' };
+          } else if (completedCount === requiredCount - 1) {
+            return { name, status: 'in_progress' as const, message: 'Processing...' };
+          } else {
+            return { name, status: 'pending' as const };
+          }
+        });
+
+        setStages(newStages);
+
+        // Check if done (Release to Limited completed OR 8+ changesets)
+        if (hasReleasedToLimited || completedCount >= 8) {
+          console.log('[poll] ✅ All done! Stopping polling.');
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+          setStages(STAGE_NAMES.map(name => ({ name, status: 'complete', message: 'Completed' })));
+          setSuccess(true);
+          setLoading(false);
+          setPublishedToLimited(hasReleasedToLimited);
+        }
+
+      } catch (err) {
+        console.error('[poll] Error:', err);
       }
-      
-      // Set final state
-      setProgress(100);
-      setSuccess(true);
-      setLocalProductId(response.data.product_id || '');
-      setOfferId(response.data.offer_id || '');
-      setPublishedToLimited(response.data.published_to_limited || false);
-      if (response.data.product_id) {
-        setProductId(response.data.product_id);
+    };
+
+    // Poll immediately, then every 5 seconds
+    // Continue for up to 10 minutes (600 seconds)
+    pollChangesets();
+    pollingRef.current = setInterval(() => {
+      const elapsed = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+      if (elapsed > 600) {
+        console.log('[poll] Timeout after 10 minutes');
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        // If we have some progress, show success
+        if (completedChangesets.size > 0) {
+          setSuccess(true);
+        } else {
+          setError('Timeout - check AWS Marketplace console');
+        }
+        setLoading(false);
+      } else {
+        pollChangesets();
       }
-      setLoading(false);
-      
-      // Mark final stage as completed
-      const lastCompletedStage = responseStages.length > 0 ? responseStages.length - 1 : 8;
-      updateStageStatus(Math.min(lastCompletedStage, 8), 'completed', '✓ Listing creation complete');
-      
-    } catch (err: any) {
-      console.error(`[${timestamp}] [CALL-${callId}] ❌ ERROR:`, err);
-      const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to create listing';
-      setError(errorMessage);
-      
-      // Mark current stage as failed
-      if (currentStageIndex >= 0 && currentStageIndex < stages.length) {
-        updateStageStatus(currentStageIndex, 'error', `✗ ${errorMessage}`);
-      }
-      
-      setProgress(0);
-      setSuccess(false);
-      setLoading(false);
+    }, 5000);
+  };
+
+  const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  const getStatusIcon = (status: Stage['status']) => {
+    switch (status) {
+      case 'complete': return <StatusIndicator type="success">✓</StatusIndicator>;
+      case 'in_progress': return <Spinner />;
+      case 'failed': return <StatusIndicator type="error">✗</StatusIndicator>;
+      default: return <Box color="text-body-secondary">○</Box>;
     }
   };
 
-  const handleContinue = () => {
-    setCurrentStep('saas_deployment');
-    router.push('/listing-success');
+  const getColor = (status: Stage['status']) => {
+    switch (status) {
+      case 'complete': return '#037f0c';
+      case 'in_progress': return '#0073bb';
+      case 'failed': return '#d13212';
+      default: return '#d5dbdb';
+    }
   };
 
-  const handleBack = () => {
-    setCurrentStep('review_suggestions');
-    router.push('/review-suggestions');
-  };
+  const progress = Math.round((stages.filter(s => s.status === 'complete').length / stages.length) * 100);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  if (!isAuthenticated || !listingData) {
-    return null;
-  }
+  if (!isAuthenticated || !listingData) return null;
 
   return (
     <AppLayout
-        navigation={<WorkflowNav />}
-        toolsHide
-        breadcrumbs={
+      navigation={<WorkflowNav />}
+      toolsHide
+      breadcrumbs={
         <BreadcrumbGroup
-          items={[
-            { text: 'Home', href: '/' },
-            { text: 'Product Information', href: '/product-info' },
-            { text: 'AI Analysis', href: '/ai-analysis' },
-            { text: 'Review Suggestions', href: '/review-suggestions' },
-            { text: 'Create Listing', href: '/create-listing' },
-          ]}
-          onFollow={(e) => {
-            e.preventDefault();
-            router.push(e.detail.href);
-          }}
+          items={[{ text: 'Home', href: '/' }, { text: 'Create Listing', href: '/create-listing' }]}
+          onFollow={(e) => { e.preventDefault(); router.push(e.detail.href); }}
         />
       }
       content={
-        <ContentLayout
-          header={
-            <Header
-              variant="h1"
-              description="Creating your AWS Marketplace listing with real-time progress tracking"
-            >
-              {success ? 'Listing Created Successfully!' : 'Creating Your Listing...'}
-            </Header>
-          }
-        >
+        <ContentLayout header={<Header variant="h1">{success ? 'Listing Created!' : 'Creating Listing...'}</Header>}>
           <SpaceBetween size="l">
-            {error && (
-              <Alert
-                type="error"
-                dismissible
-                onDismiss={() => setError('')}
-                action={
-                  <Button onClick={createListing}>
-                    Retry
-                  </Button>
-                }
-              >
-                {error}
-              </Alert>
-            )}
+            {error && <Alert type="error" dismissible onDismiss={() => setError('')}>{error}</Alert>}
 
             {success && (
               <Alert type="success" header="Listing Created Successfully!">
-                <SpaceBetween size="s">
-                  <Box>Your AWS Marketplace listing has been created successfully!</Box>
+                <SpaceBetween size="xs">
                   {productId && <Box>Product ID: <strong>{productId}</strong></Box>}
                   {offerId && <Box>Offer ID: <strong>{offerId}</strong></Box>}
-                  {publishedToLimited && (
-                    <Box color="text-status-success">
-                      ✓ Published to Limited stage - ready for testing!
-                    </Box>
-                  )}
-                  <Box color="text-body-secondary">
-                    Total time: {formatTime(elapsedTime)}
-                  </Box>
+                  {publishedToLimited && <Box color="text-status-success">✓ Published to Limited</Box>}
+                  <Box color="text-body-secondary">Time: {formatTime(elapsedTime)}</Box>
                 </SpaceBetween>
               </Alert>
             )}
 
-            <Container
-              header={
-                <Header 
-                  variant="h2"
-                  description={loading ? `Elapsed time: ${formatTime(elapsedTime)}` : ''}
-                >
-                  Listing Creation Progress
-                </Header>
-              }
-            >
-              <SpaceBetween size="l">
-                {loading && (
-                  <Box textAlign="center">
-                    <Spinner size="large" />
-                  </Box>
-                )}
-
+            <Container header={<Header variant="h2">Progress {loading && `(${formatTime(elapsedTime)})`}</Header>}>
+              <SpaceBetween size="m">
+                {loading && <Box textAlign="center"><Spinner size="large" /></Box>}
+                
                 <ProgressBar
                   value={progress}
-                  label="Overall progress"
-                  description={currentStageIndex >= 0 && currentStageIndex < stages.length ? stages[currentStageIndex].name : 'Initializing...'}
                   status={error ? 'error' : loading ? 'in-progress' : 'success'}
-                  additionalInfo={`${Math.round(progress)}%`}
+                  additionalInfo={`${progress}%`}
                 />
 
-                {/* Detailed stage progress */}
-                <SpaceBetween size="s">
-                  {stages.map((stage, index) => {
-                    const duration = stage.startTime && stage.endTime 
-                      ? ((stage.endTime - stage.startTime) / 1000).toFixed(1) + 's'
-                      : '';
-                    
-                    return (
-                      <div 
-                        key={index}
-                        className={`aws-progress-step ${stage.status}`}
-                        style={{
-                          borderLeft: stage.status === 'completed' ? '4px solid #037f0c' :
-                                     stage.status === 'in-progress' ? '4px solid #0073bb' :
-                                     stage.status === 'error' ? '4px solid #d13212' :
-                                     '4px solid #d5dbdb'
-                        }}
-                      >
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                          <div style={{ minWidth: '24px' }}>
-                            {stage.status === 'completed' && <StatusIndicator type="success">✓</StatusIndicator>}
-                            {stage.status === 'in-progress' && <Spinner />}
-                            {stage.status === 'error' && <StatusIndicator type="error">✗</StatusIndicator>}
-                            {stage.status === 'pending' && <Box color="text-body-secondary">○</Box>}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <Box fontWeight="bold">{stage.name}</Box>
-                            <Box fontSize="body-s" color="text-body-secondary">
-                              {stage.description}
-                            </Box>
-                            {stage.message && (
-                              <Box fontSize="body-s" color={stage.status === 'error' ? 'text-status-error' : 'text-status-success'}>
-                                {stage.message}
-                              </Box>
-                            )}
-                          </div>
-                          {duration && (
-                            <div style={{ minWidth: '60px', textAlign: 'right' }}>
-                              <Box fontSize="body-s" color="text-body-secondary">{duration}</Box>
-                            </div>
-                          )}
+                <SpaceBetween size="xs">
+                  {stages.map((stage, idx) => (
+                    <div key={idx} style={{ borderLeft: `4px solid ${getColor(stage.status)}`, paddingLeft: 12, paddingTop: 6, paddingBottom: 6 }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <div style={{ minWidth: 24 }}>{getStatusIcon(stage.status)}</div>
+                        <div>
+                          <Box fontWeight="bold">{stage.name}</Box>
+                          {stage.message && <Box fontSize="body-s" color="text-body-secondary">{stage.message}</Box>}
                         </div>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </SpaceBetween>
 
-                {!loading && !error && success && (
-                  <Box variant="p" textAlign="center" color="text-status-success">
-                    ✓ All stages completed successfully in {formatTime(elapsedTime)}!
-                  </Box>
-                )}
-
                 {loading && (
-                  <Box variant="p" textAlign="center" color="text-body-secondary">
-                    This may take 2-3 minutes. Please wait...
+                  <Box textAlign="center" color="text-body-secondary">
+                    Polling AWS Marketplace... ({completedChangesets.size} changesets completed)
                   </Box>
                 )}
               </SpaceBetween>
             </Container>
 
-            {success && (
+            {(success || (!loading && error)) && (
               <Container>
                 <SpaceBetween size="m" direction="horizontal">
-                  <Button onClick={handleBack}>
-                    ← Back
-                  </Button>
-                  <Button variant="primary" onClick={handleContinue}>
-                    View Results →
-                  </Button>
-                </SpaceBetween>
-              </Container>
-            )}
-
-            {!success && !loading && error && (
-              <Container>
-                <SpaceBetween size="m" direction="horizontal">
-                  <Button onClick={handleBack}>
-                    ← Back to Review
-                  </Button>
-                  <Button variant="primary" onClick={createListing}>
-                    Retry Creation
-                  </Button>
+                  <Button onClick={() => router.push('/review-suggestions')}>← Back</Button>
+                  {success && <Button variant="primary" onClick={() => { setCurrentStep('saas_deployment'); router.push('/listing-success'); }}>Continue →</Button>}
+                  {error && <Button variant="primary" onClick={() => { hasStartedRef.current = false; requestSentRef.current = false; setSuccess(false); setCompletedChangesets(new Set()); startListingCreation(); }}>Retry</Button>}
                 </SpaceBetween>
               </Container>
             )}
           </SpaceBetween>
         </ContentLayout>
       }
-      />
+    />
   );
 }
