@@ -345,24 +345,41 @@ async def handle_chat(payload: dict, access_key: str, secret_key: str, session_t
         aws_session_token=session_token
     )
     
-    system_prompt = """You are an AWS Marketplace Help Agent. You assist sellers with:
-- AWS Marketplace seller registration and requirements
-- Creating and managing SaaS product listings
-- Pricing models (subscription, usage-based, contracts)
-- SaaS integration and fulfillment setup
-- Metering and billing configuration
-- Public visibility requirements
-- Buyer experience optimization
+    system_prompt = """You are an AWS Marketplace Help Agent specializing in seller registration and SaaS product listings.
 
-Be helpful, concise, and provide actionable guidance."""
+IMPORTANT RULES:
+1. Only answer questions about AWS Marketplace seller topics
+2. If you don't know something specific, say "I don't have that specific information" rather than guessing
+3. For questions about other AWS services not related to Marketplace, say "I specialize in AWS Marketplace. For questions about [service], please refer to AWS documentation."
+4. Be concise and factual
+
+Topics you can help with:
+- AWS Marketplace seller registration process
+- SaaS product listing creation
+- Pricing models (usage-based, contracts, hybrid)
+- SaaS integration with CloudFormation
+- Metering and billing setup
+- Public visibility requirements
+- Buyer experience testing
+
+For technical AWS service questions outside Marketplace, direct users to AWS documentation."""
 
     messages = []
-    for msg in conversation_history:
-        if msg.get("role") and msg.get("content"):
-            messages.append({
-                "role": msg["role"],
-                "content": [{"text": msg["content"]}]
-            })
+    
+    # Filter conversation history to start with user message (Bedrock requirement)
+    if conversation_history:
+        start_idx = 0
+        for i, msg in enumerate(conversation_history):
+            if msg.get("role") == "user":
+                start_idx = i
+                break
+        
+        for msg in conversation_history[start_idx:]:
+            if msg.get("role") and msg.get("content"):
+                messages.append({
+                    "role": msg["role"],
+                    "content": [{"text": msg["content"]}]
+                })
     
     messages.append({
         "role": "user",
@@ -579,6 +596,23 @@ async def handle_generate_content(payload: dict, access_key: str, secret_key: st
         website_url = product_context["product_urls"][0] if product_context["product_urls"] else ""
     original_description = product_context.get("product_description", "")
     
+    # Valid AWS Marketplace categories
+    valid_categories = [
+        "AI Security", "Content Creation", "Customer Experience Personalization", "Customer Support",
+        "Data Analysis", "Finance & Accounting", "IT Support", "Legal & Compliance", "Observability",
+        "Procurement & Supply Chain", "Quality Assurance", "Research", "Sales & Marketing",
+        "Scheduling & Coordination", "Software Development", "Backup & Recovery", "Data Analytics",
+        "Data Integration", "Data Preparation", "ELT/ETL", "Streaming Solutions", "Databases",
+        "Data Warehouses", "Analytic Platforms", "Data Catalogs", "Master Data Management",
+        "Masking/Tokenization", "Business Intelligence & Advanced Analytics", "High Performance Computing",
+        "Migration", "Network Infrastructure", "Operating Systems", "Security", "Storage",
+        "Agile Lifecycle Management", "Application Development", "Application Servers", "Application Stacks",
+        "Continuous Integration and Continuous Delivery", "Infrastructure as Code", "Issue & Bug Tracking",
+        "Monitoring", "Log Analysis", "Source Control", "Testing", "Blockchain", "Collaboration & Productivity",
+        "Contact Center", "Content Management", "CRM", "eCommerce", "eLearning", "Human Resources",
+        "IT Business Management", "Project Management"
+    ]
+    
     prompt = f"""Based on this product analysis and original product information:
 
 ORIGINAL PRODUCT INFO:
@@ -596,9 +630,12 @@ Generate AWS Marketplace listing content that is SPECIFIC to this product.
 3. Long Description (50-5000 chars, detailed with benefits)
 4. Highlights (3-5 bullet points, 5-250 chars each)
 5. Search Keywords (5-10 keywords, max 50 chars each)
-6. Suggested Categories (1-3 subcategories) from: AI Security, Content Creation, Data Analysis, Security, Generative AI, Application Development, Monitoring, etc.
+6. Categories (1-3 categories) - MUST be from this EXACT list only:
+   {', '.join(valid_categories)}
 
-IMPORTANT: Use only basic ASCII characters. No bullet points (use hyphens), no smart quotes.
+IMPORTANT: 
+- Use only basic ASCII characters. No bullet points (use hyphens), no smart quotes.
+- Categories MUST match exactly from the list above - do not invent new categories.
 
 Format as JSON with keys: product_title, short_description, long_description, highlights (array), search_keywords (array), categories (array)"""
 
@@ -1019,17 +1056,10 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
     listing_data = payload.get("listing_data", {})
     stages = []
     
-    # Helper to update task progress in real-time via DynamoDB
+    # Helper to update task progress in real-time
     def update_progress(new_stages, product_id=None, offer_id=None, message=None):
-        if task_id:
-            # Get current state and update
-            current_state = get_d]["stages"] = new_stages
-            if product_id:
-                listing_tasks[task_id]["product_id"] = product_id
-            if offer_id:
-                listing_tasks[task_id]["offer_id"] = offer_id
-            if message:
-                listing_tasks[task_id]["message"] = message
+        nonlocal stages
+        stages = new_stages
     
     # Check if listing tools are available
     if not LISTING_AGENTS_AVAILABLE:

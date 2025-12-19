@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Box, Button, Input, SpaceBetween, StatusIndicator } from '@cloudscape-design/components';
+import { useStore } from '@/lib/store';
 
 interface Message {
   id: string;
@@ -26,6 +27,7 @@ const BOT_RESPONSES: Record<string, string> = {
 };
 
 export default function Chatbot() {
+  const { credentials } = useStore();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -115,7 +117,7 @@ export default function Chatbot() {
         content: msg.text
       }));
 
-      // Call backend chat endpoint with history
+      // Call backend chat endpoint with history and credentials
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -124,6 +126,11 @@ export default function Chatbot() {
         body: JSON.stringify({
           question: messageText,
           conversation_history: conversationHistory,
+          credentials: credentials ? {
+            accessKeyId: credentials.aws_access_key_id,
+            secretAccessKey: credentials.aws_secret_access_key,
+            sessionToken: credentials.aws_session_token,
+          } : undefined,
         }),
       });
 

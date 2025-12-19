@@ -79,7 +79,13 @@ export default function SaaSIntegrationPage() {
   const [showVisibilityGuide, setShowVisibilityGuide] = useState(false);
   const [visibilitySteps, setVisibilitySteps] = useState<any[]>([]);
   const [currentSubStep, setCurrentSubStep] = useState(0); // Track current sub-step (0-3)
-  const [pricingModel, setPricingModel] = useState<any>(null); // Pricing model selection
+  // Pricing model options
+  const PRICING_OPTIONS = [
+    { label: 'Usage-based (Subscriptions)', value: 'subscriptions', description: 'Pay-as-you-go pricing model' },
+    { label: 'Contract-based (Contracts)', value: 'contracts', description: 'Fixed-term contract pricing' },
+    { label: 'Contract with Consumption', value: 'contracts_with_subscription', description: 'Hybrid pricing model' }
+  ];
+  const [pricingModel, setPricingModel] = useState<any>(PRICING_OPTIONS[0]); // Default to first option
 
   useEffect(() => {
     if (!isAuthenticated || !productId) {
@@ -1269,12 +1275,7 @@ export default function SaaSIntegrationPage() {
                             <Select 
                               selectedOption={pricingModel} 
                               onChange={({ detail }) => setPricingModel(detail.selectedOption)} 
-                              options={[
-                                { label: 'Usage-based (Subscriptions)', value: 'subscriptions', description: 'Pay-as-you-go pricing model' },
-                                { label: 'Contract-based (Contracts)', value: 'contracts', description: 'Fixed-term contract pricing' },
-                                { label: 'Contract with Consumption', value: 'contracts_with_subscription', description: 'Hybrid pricing model' }
-                              ]} 
-                              placeholder="Select pricing model"
+                              options={PRICING_OPTIONS} 
                               disabled={loading || success} 
                             />
                           </FormField>
