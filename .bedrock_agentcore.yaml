@@ -2,21 +2,21 @@ default_agent: marketplaceAgent
 agents:
   marketplaceAgent:
     name: marketplaceAgent
-    entrypoint: /Users/avivenk/Projects/MPODemo/ai-agent-marketplace/agentcore_app.py
+    entrypoint: agentcore_app.py
     deployment_type: container
     runtime_type: null
     platform: linux/arm64
     container_runtime: docker
-    source_path: /Users/avivenk/Projects/MPODemo/ai-agent-marketplace
+    source_path: .
     aws:
-      execution_role: arn:aws:iam::789707489355:role/AmazonBedrockAgentCoreSDKRuntime-us-east-1-29855fdc98
+      execution_role: arn:aws:iam::230049944595:role/AmazonBedrockAgentCoreSDKRuntime-us-east-1-29855fdc98
       execution_role_auto_create: false
-      account: '789707489355'
+      account: '230049944595'
       region: us-east-1
-      ecr_repository: 789707489355.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-marketplaceagent
+      ecr_repository: 230049944595.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-marketplaceagent
       ecr_auto_create: false
       s3_path: null
-      s3_auto_create: false
+      s3_auto_create: true
       network_configuration:
         network_mode: PUBLIC
         network_mode_config: null
@@ -28,21 +28,21 @@ agents:
         idle_runtime_session_timeout: null
         max_lifetime: null
     bedrock_agentcore:
-      agent_id: marketplaceAgent-jSPPCj383D
-      agent_arn: arn:aws:bedrock-agentcore:us-east-1:789707489355:runtime/marketplaceAgent-jSPPCj383D
+      agent_id: marketplaceAgent-x9tOXd44Cz
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:230049944595:runtime/marketplaceAgent-x9tOXd44Cz
       agent_session_id: null
     codebuild:
       project_name: bedrock-agentcore-marketplaceagent-builder
-      execution_role: arn:aws:iam::789707489355:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-29855fdc98
-      source_bucket: bedrock-agentcore-codebuild-sources-789707489355-us-east-1
+      execution_role: arn:aws:iam::230049944595:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-29855fdc98
+      source_bucket: bedrock-agentcore-codebuild-sources-230049944595-us-east-1
     memory:
-      mode: STM_ONLY
-      memory_id: marketplaceAgent_mem-JPnAElFIDm
-      memory_arn: arn:aws:bedrock-agentcore:us-east-1:789707489355:memory/marketplaceAgent_mem-JPnAElFIDm
-      memory_name: marketplaceAgent_mem
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
       event_expiry_days: 30
-      first_invoke_memory_check_done: true
-      was_created_by_toolkit: true
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
     identity:
       credential_providers: []
       workload: null

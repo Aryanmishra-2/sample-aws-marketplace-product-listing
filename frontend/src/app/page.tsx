@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AppLayout,
@@ -20,7 +20,16 @@ import {
   StatusIndicator,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
-import axios from 'axios';
+
+// Lazy load axios to reduce initial bundle size
+let axios: any = null;
+const loadAxios = async () => {
+  if (!axios) {
+    const axiosModule = await import('axios');
+    axios = axiosModule.default;
+  }
+  return axios;
+};
 
 export default function CredentialsPage() {
   const router = useRouter();
@@ -33,6 +42,17 @@ export default function CredentialsPage() {
   const [error, setError] = useState('');
   const [permissions, setPermissions] = useState<any>(null);
   const [canProceed, setCanProceed] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Defer heavy initialization until after component mounts
+  useEffect(() => {
+    // Use setTimeout to defer initialization until after render
+    const timer = setTimeout(() => {
+      setIsInitialized(true);
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleValidate = async () => {
     if (!accessKey || !secretKey) {
@@ -49,8 +69,11 @@ export default function CredentialsPage() {
     setError('');
 
     try {
+      // Lazy load axios to reduce initial bundle size
+      const axiosInstance = await loadAxios();
+      
       // Validate credentials
-      const validateResponse = await axios.post('/api/validate-credentials', {
+      const validateResponse = await axiosInstance.post('/api/validate-credentials', {
         aws_access_key_id: accessKey,
         aws_secret_access_key: secretKey,
         aws_session_token: sessionToken || undefined,
@@ -82,7 +105,7 @@ export default function CredentialsPage() {
         });
 
         // Check seller status
-        const statusResponse = await axios.post('/api/check-seller-status', {
+        const statusResponse = await axiosInstance.post('/api/check-seller-status', {
           aws_access_key_id: accessKey,
           aws_secret_access_key: secretKey,
           aws_session_token: sessionToken || undefined,

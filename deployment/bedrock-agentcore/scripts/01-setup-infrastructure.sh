@@ -3,8 +3,8 @@ set -e
 
 echo "========================================="
 echo "Setting up Bedrock AgentCore Infrastructure"
-echo "Account: 797583073197"
-echo "Region: us-east-1"
+echo "Account: 230049944595"
+echo "Region: us-east-1
 echo "========================================="
 
 # Load configuration

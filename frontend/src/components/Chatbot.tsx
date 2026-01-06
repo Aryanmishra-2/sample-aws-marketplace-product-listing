@@ -40,6 +40,7 @@ export default function Chatbot() {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [speechRecognitionReady, setSpeechRecognitionReady] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
@@ -51,45 +52,55 @@ export default function Chatbot() {
     scrollToBottom();
   }, [messages]);
 
-  // Initialize speech recognition
+  // OPTIMIZATION: Initialize speech recognition only when chatbot is opened
+  // This prevents heavy initialization during app startup
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = false;
-        recognitionRef.current.interimResults = false;
-        recognitionRef.current.lang = 'en-US';
+    if (isOpen && !speechRecognitionReady && typeof window !== 'undefined') {
+      const initSpeechRecognition = () => {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRecognition) {
+          recognitionRef.current = new SpeechRecognition();
+          recognitionRef.current.continuous = false;
+          recognitionRef.current.interimResults = false;
+          recognitionRef.current.lang = 'en-US';
 
-        recognitionRef.current.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          setInputValue(transcript);
-          setIsListening(false);
-        };
+          recognitionRef.current.onresult = (event: any) => {
+            const transcript = event.results[0][0].transcript;
+            setInputValue(transcript);
+            setIsListening(false);
+          };
 
-        recognitionRef.current.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error);
-          setIsListening(false);
-        };
+          recognitionRef.current.onerror = (event: any) => {
+            console.error('Speech recognition error:', event.error);
+            setIsListening(false);
+          };
 
-        recognitionRef.current.onend = () => {
-          setIsListening(false);
-        };
-      }
+          recognitionRef.current.onend = () => {
+            setIsListening(false);
+          };
+          
+          setSpeechRecognitionReady(true);
+        }
+      };
+      
+      // Defer speech recognition initialization
+      setTimeout(initSpeechRecognition, 500);
     }
-  }, []);
+  }, [isOpen, speechRecognitionReady]);
 
   const startListening = () => {
-    if (recognitionRef.current) {
+    if (recognitionRef.current && speechRecognitionReady) {
       setIsListening(true);
       recognitionRef.current.start();
+    } else if (!speechRecognitionReady) {
+      alert('Speech recognition is still initializing. Please try again in a moment.');
     } else {
       alert('Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.');
     }
   };
 
   const stopListening = () => {
-    if (recognitionRef.current) {
+    if (recognitionRef.current && speechRecognitionReady) {
       recognitionRef.current.stop();
       setIsListening(false);
     }

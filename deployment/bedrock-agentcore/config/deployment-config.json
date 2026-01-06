@@ -1,10 +1,10 @@
 {
-  "account_id": "797583073197",
+  "account_id": "230049944595",
   "region": "us-east-1",
   "environment": "dev",
   
   "resources": {
-    "s3_bucket": "marketplace-agents-kb-797583073197",
+    "s3_bucket": "marketplace-agents-kb-230049944595",
     "dynamodb_table": "marketplace-agent-memory",
     "log_group": "/aws/bedrock/agents/marketplace",
     "opensearch_collection": "marketplace-docs"

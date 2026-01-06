@@ -1,9 +1,16 @@
 import '@cloudscape-design/global-styles/index.css';
 import './globals.css';
 import type { Metadata } from 'next';
-import Chatbot from '@/components/Chatbot';
+import dynamic from 'next/dynamic';
 import ProgressBar from '@/components/ProgressBar';
 import GlobalHeader from '@/components/GlobalHeader';
+
+// OPTIMIZATION: Lazy load heavy components to improve startup time
+// This prevents the Chatbot from blocking initial page render
+const Chatbot = dynamic(() => import('@/components/Chatbot'), {
+  ssr: false, // Disable server-side rendering for this component
+  loading: () => null, // No loading indicator needed for chatbot
+});
 
 export const metadata: Metadata = {
   title: 'AWS Marketplace Seller Portal',
