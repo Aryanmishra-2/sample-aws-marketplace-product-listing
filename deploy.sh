@@ -61,6 +61,15 @@ deploy_backend() {
     
     pip install -r requirements.txt -q
     
+    # Check if existing config has a different account ID - if so, recreate it
+    if [ -f ".bedrock_agentcore.yaml" ]; then
+        EXISTING_ACCOUNT=$(grep "account:" .bedrock_agentcore.yaml | head -1 | grep -o "'[0-9]*'" | tr -d "'" || echo "")
+        if [ -n "$EXISTING_ACCOUNT" ] && [ "$EXISTING_ACCOUNT" != "$AWS_ACCOUNT_ID" ]; then
+            log_warning "Existing config is for account $EXISTING_ACCOUNT, recreating for $AWS_ACCOUNT_ID..."
+            rm -rf .bedrock_agentcore.yaml .bedrock_agentcore/
+        fi
+    fi
+    
     if [ ! -f ".bedrock_agentcore.yaml" ]; then
         log_info "Creating AgentCore configuration..."
         cat > .bedrock_agentcore.yaml << EOF
