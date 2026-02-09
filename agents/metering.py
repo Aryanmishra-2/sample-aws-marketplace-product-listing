@@ -11,8 +11,8 @@ class MeteringAgent(Agent):
     def __init__(self):
         super().__init__(name="Metering")
         self.create_saas_agent = CreateSaasAgent()
-        self.dynamodb = boto3.client('dynamodb')
-        self.lambda_client = boto3.client('lambda')
+        self.dynamodb = boto3.client('dynamodb', region_name='us-east-1')
+        self.lambda_client = boto3.client('lambda', region_name='us-east-1')
     
     @tool
     def insert_test_customer(self, access_key, secret_key, session_token=None):

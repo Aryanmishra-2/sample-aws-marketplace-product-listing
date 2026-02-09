@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { invokeChat } from '@/lib/agentcore';
-import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 
 // Local knowledge base responses for quick answers about this app
 const LOCAL_KB: Record<string, string> = {
@@ -28,123 +27,6 @@ function getLocalKBResponse(question: string): string | null {
   }
   
   return null;
-}
-
-// Search AWS Documentation using the AWS Documentation Search API
-async function searchAWSDocumentation(question: string): Promise<string | null> {
-  try {
-    // Use AWS Documentation Search API (same as MCP server uses)
-    const searchUrl = 'https://docs.aws.amazon.com/search/doc-search.html';
-    const params = new URLSearchParams({
-      searchQuery: question,
-      searchPath: 'en_us',
-      this_doc_guide: '',
-      doc_locale: 'en_us',
-    });
-
-    const response = await fetch(`${searchUrl}?${params}`, {
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-    
-    if (data.items && data.items.length > 0) {
-      // Get top 3 results and format them
-      const results = data.items.slice(0, 3).map((item: any) => {
-        return `**${item.title}**\n${item.excerpt || ''}\nSource: ${item.url}`;
-      });
-      
-      return results.join('\n\n---\n\n');
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('AWS Documentation search error:', error);
-    return null;
-  }
-}
-
-// Generate response using Bedrock with AWS documentation context
-async function generateResponseWithContext(
-  question: string,
-  context: string,
-  accessKeyId: string,
-  secretAccessKey: string,
-  sessionToken?: string,
-  conversationHistory?: Array<{ role: string; content: string }>
-): Promise<string> {
-  const client = new BedrockRuntimeClient({
-    region: 'us-east-1',
-    credentials: { accessKeyId, secretAccessKey, sessionToken },
-  });
-
-  const systemPrompt = `You are an AWS Help Agent. You provide accurate information about AWS services.
-
-IMPORTANT RULES:
-1. Use the provided AWS documentation context to answer questions accurately
-2. If the context contains relevant information, base your answer on it
-3. If you're not sure about something, say so rather than guessing
-4. Always be factual and cite AWS documentation when possible
-5. For AWS Marketplace questions, focus on seller registration, SaaS listings, pricing, and integration
-
-AWS DOCUMENTATION CONTEXT:
-${context}
-
-Provide helpful, accurate, and concise answers based on the documentation above.`;
-
-  const messages: Array<{ role: 'user' | 'assistant'; content: Array<{ text: string }> }> = [];
-  
-  // Add conversation history - filter to ensure it starts with user message
-  if (conversationHistory && conversationHistory.length > 0) {
-    let startIdx = 0;
-    for (let i = 0; i < conversationHistory.length; i++) {
-      if (conversationHistory[i].role === 'user') {
-        startIdx = i;
-        break;
-      }
-    }
-    
-    for (let i = startIdx; i < conversationHistory.length; i++) {
-      const msg = conversationHistory[i];
-      if (msg.role && msg.content) {
-        messages.push({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: [{ text: msg.content }],
-        });
-      }
-    }
-  }
-  
-  messages.push({
-    role: 'user',
-    content: [{ text: question }],
-  });
-
-  const command = new ConverseCommand({
-    modelId: 'anthropic.claude-3-sonnet-20240229-v1:0',
-    system: [{ text: systemPrompt }],
-    messages,
-    inferenceConfig: { maxTokens: 2048, temperature: 0.3 }, // Lower temperature for more factual responses
-  });
-
-  const response = await client.send(command);
-  
-  let responseText = '';
-  if (response.output?.message?.content) {
-    for (const block of response.output.message.content) {
-      if ('text' in block) {
-        responseText += block.text;
-      }
-    }
-  }
-  
-  return responseText;
 }
 
 export async function POST(request: NextRequest) {
@@ -175,20 +57,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // If no credentials, still try to help with AWS documentation
     if (!accessKeyId || !secretAccessKey) {
-      // Try AWS documentation search (doesn't need credentials)
-      const awsDocsContext = await searchAWSDocumentation(question);
-      
-      if (awsDocsContext) {
-        return NextResponse.json({
-          success: true,
-          response: `Based on AWS documentation:\n\n${awsDocsContext}\n\nFor more detailed assistance, please provide your AWS credentials.`,
-          source: 'aws_docs',
-          session_id: session_id || `chat-${Date.now()}`,
-        });
-      }
-      
       return NextResponse.json({
         success: true,
         response: "I'm here to help with AWS Marketplace and AWS services! You can ask me about:\n\n• Seller registration process\n• SaaS integration\n• Creating product listings\n• Pricing models\n• AWS services\n\nPlease provide your AWS credentials for more detailed, personalized assistance.",
@@ -197,29 +66,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Step 2: Search AWS Documentation for context
-    const awsDocsContext = await searchAWSDocumentation(question);
-    
-    if (awsDocsContext) {
-      // Generate response using Bedrock with AWS documentation context
-      const response = await generateResponseWithContext(
-        question,
-        awsDocsContext,
-        accessKeyId,
-        secretAccessKey,
-        sessionToken,
-        conversation_history
-      );
-      
-      return NextResponse.json({
-        success: true,
-        response,
-        source: 'aws_docs_enhanced',
-        session_id: session_id || `chat-${Date.now()}`,
-      });
-    }
-
-    // Step 3: Try AgentCore for Marketplace-specific questions
+    // Step 2: Use AgentCore for all chat queries (routes through backend agent which uses Bedrock)
     try {
       const result = await invokeChat(
         question,
@@ -237,7 +84,7 @@ export async function POST(request: NextRequest) {
           responseText = String(result.response);
         }
 
-        if (responseText && responseText.length > 50) {
+        if (responseText && responseText.length > 10) {
           return NextResponse.json({
             success: true,
             response: responseText,
@@ -247,23 +94,13 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (agentError) {
-      console.log('AgentCore not available:', agentError);
+      console.error('AgentCore chat error:', agentError);
     }
 
-    // Step 4: Fallback to direct Bedrock call
-    const fallbackResponse = await generateResponseWithContext(
-      question,
-      'No specific documentation found. Provide general AWS guidance based on your knowledge, but be clear about any limitations.',
-      accessKeyId,
-      secretAccessKey,
-      sessionToken,
-      conversation_history
-    );
-
+    // Step 3: Fallback - AgentCore unavailable
     return NextResponse.json({
-      success: true,
-      response: fallbackResponse,
-      source: 'bedrock_direct',
+      success: false,
+      error: 'Chat service is temporarily unavailable. The AgentCore backend may still be starting up. Please try again in a few minutes.',
       session_id: session_id || `chat-${Date.now()}`,
     });
 

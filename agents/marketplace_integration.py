@@ -5,7 +5,7 @@ import json
 class MarketplaceIntegrationAgent(Agent):
     def __init__(self):
         super().__init__(name="MarketplaceIntegration")
-        self.marketplace_client = boto3.client('meteringmarketplace')
+        self.marketplace_client = boto3.client('meteringmarketplace', region_name='us-east-1')
     
     @tool
     def resolve_customer_token(self, registration_token):

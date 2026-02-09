@@ -1,4 +1,5 @@
-FROM node:18-alpine AS base
+# Use ECR Public Gallery to avoid Docker Hub rate limits in CodeBuild
+FROM public.ecr.aws/docker/library/node:18-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps

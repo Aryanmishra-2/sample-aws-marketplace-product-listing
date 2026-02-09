@@ -5,7 +5,7 @@ import json
 class ValidationHelperAgent(Agent):
     def __init__(self):
         super().__init__(name="ValidationHelper")
-        self.bedrock = boto3.client('bedrock-agent-runtime')
+        self.bedrock = boto3.client('bedrock-agent-runtime', region_name='us-east-1')
         self.knowledge_base_id = "YOUR_KB_ID"  # Replace with actual KB ID
     
     @tool

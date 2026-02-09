@@ -9,11 +9,11 @@ agents:
     container_runtime: docker
     source_path: .
     aws:
-      execution_role: arn:aws:iam::558227455834:role/AmazonBedrockAgentCoreSDKRuntime-us-east-1-29855fdc98
+      execution_role: arn:aws:iam::789707489355:role/AmazonBedrockAgentCoreSDKRuntime-us-east-1-29855fdc98
       execution_role_auto_create: false
-      account: '558227455834'
+      account: '789707489355'
       region: us-east-1
-      ecr_repository: 558227455834.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-marketplaceagent
+      ecr_repository: 789707489355.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-marketplaceagent
       ecr_auto_create: false
       s3_path: null
       s3_auto_create: true
@@ -28,13 +28,13 @@ agents:
         idle_runtime_session_timeout: null
         max_lifetime: null
     bedrock_agentcore:
-      agent_id: marketplaceAgent-S07a3kA7fH
-      agent_arn: arn:aws:bedrock-agentcore:us-east-1:558227455834:runtime/marketplaceAgent-S07a3kA7fH
-      agent_session_id: null
+      agent_id: marketplaceAgent-jSPPCj383D
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:789707489355:runtime/marketplaceAgent-jSPPCj383D
+      agent_session_id: 770aa595-5bf2-48a2-8533-f0b4f31ed6a9
     codebuild:
       project_name: bedrock-agentcore-marketplaceagent-builder
-      execution_role: arn:aws:iam::558227455834:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-29855fdc98
-      source_bucket: bedrock-agentcore-codebuild-sources-558227455834-us-east-1
+      execution_role: arn:aws:iam::789707489355:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-29855fdc98
+      source_bucket: bedrock-agentcore-codebuild-sources-789707489355-us-east-1
     memory:
       mode: NO_MEMORY
       memory_id: null
