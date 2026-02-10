@@ -301,6 +301,7 @@ setup_vpc_endpoints() {
         "com.amazonaws.${AWS_REGION}.logs"
         "com.amazonaws.${AWS_REGION}.bedrock-agent-runtime"
         "com.amazonaws.${AWS_REGION}.sts"
+        "com.amazonaws.${AWS_REGION}.cognito-idp"
     )
 
     SUBNET_LIST=$(echo $SUBNET_IDS | tr ' ' ',')
@@ -309,12 +310,27 @@ setup_vpc_endpoints() {
         SVC_SHORT=$(echo $SVC | awk -F. '{print $NF}')
         EXISTING=$(aws ec2 describe-vpc-endpoints --filters "Name=service-name,Values=${SVC}" "Name=vpc-id,Values=${VPC_ID}" "Name=vpc-endpoint-state,Values=available,pending" --query "VpcEndpoints[0].VpcEndpointId" --output text --region ${AWS_REGION} 2>/dev/null || echo "None")
         if [ "$EXISTING" == "None" ] || [ -z "$EXISTING" ]; then
+            # Get supported AZs for this endpoint service
+            SUPPORTED_AZS=$(aws ec2 describe-vpc-endpoint-services --service-names ${SVC} --region ${AWS_REGION} --query "ServiceDetails[0].AvailabilityZones" --output text 2>/dev/null || echo "")
+            # Filter subnets to only those in supported AZs
+            COMPATIBLE_SUBNETS=""
+            for SID in ${SUBNET_IDS}; do
+                SAZ=$(aws ec2 describe-subnets --subnet-ids ${SID} --region ${AWS_REGION} --query "Subnets[0].AvailabilityZone" --output text 2>/dev/null || echo "")
+                if echo "$SUPPORTED_AZS" | grep -q "$SAZ"; then
+                    COMPATIBLE_SUBNETS="${COMPATIBLE_SUBNETS} ${SID}"
+                fi
+            done
+            COMPATIBLE_SUBNETS=$(echo $COMPATIBLE_SUBNETS | xargs)
+            if [ -z "$COMPATIBLE_SUBNETS" ]; then
+                log_warning "No compatible subnets for ${SVC_SHORT}, skipping"
+                continue
+            fi
             log_info "Creating interface endpoint for ${SVC_SHORT}..."
             aws ec2 create-vpc-endpoint \
                 --vpc-id ${VPC_ID} \
                 --vpc-endpoint-type Interface \
                 --service-name ${SVC} \
-                --subnet-ids ${SUBNET_IDS} \
+                --subnet-ids ${COMPATIBLE_SUBNETS} \
                 --security-group-ids ${VPCE_SG_ID} \
                 --private-dns-enabled \
                 --region ${AWS_REGION} > /dev/null 2>&1 || \
@@ -341,6 +357,124 @@ setup_vpc_endpoints() {
     fi
 
     log_success "VPC endpoints configured"
+}
+
+# =============================================================================
+# Setup Cognito User Pool for ALB authentication
+# =============================================================================
+setup_cognito_auth() {
+    log_info "Setting up Cognito User Pool for ALB authentication..."
+
+    ALB_DNS=$1
+    COGNITO_POOL_NAME="${APP_NAME}-users"
+
+    # Create or find existing User Pool
+    POOL_ID=$(aws cognito-idp list-user-pools --max-results 60 --region ${AWS_REGION} --query "UserPools[?Name=='${COGNITO_POOL_NAME}'].Id | [0]" --output text 2>/dev/null || echo "None")
+    if [ "$POOL_ID" == "None" ] || [ -z "$POOL_ID" ]; then
+        log_info "Creating Cognito User Pool..."
+        POOL_ID=$(aws cognito-idp create-user-pool \
+            --pool-name "${COGNITO_POOL_NAME}" \
+            --auto-verified-attributes email \
+            --username-attributes email \
+            --mfa-configuration OFF \
+            --policies '{"PasswordPolicy":{"MinimumLength":8,"RequireUppercase":true,"RequireLowercase":true,"RequireNumbers":true,"RequireSymbols":false}}' \
+            --schema '[{"Name":"email","Required":true,"Mutable":true}]' \
+            --admin-create-user-config '{"AllowAdminCreateUserOnly":true}' \
+            --region ${AWS_REGION} \
+            --query "UserPool.Id" --output text)
+        if [ -z "$POOL_ID" ] || [ "$POOL_ID" == "None" ]; then
+            log_error "Failed to create Cognito User Pool"
+            exit 1
+        fi
+        log_success "Created Cognito User Pool: ${POOL_ID}"
+    else
+        log_info "Cognito User Pool already exists: ${POOL_ID}"
+    fi
+
+    # Create or find Cognito domain (required for ALB auth)
+    COGNITO_DOMAIN="${APP_NAME}-${AWS_ACCOUNT_ID}"
+    EXISTING_DOMAIN=$(aws cognito-idp describe-user-pool --user-pool-id "${POOL_ID}" --region ${AWS_REGION} --query "UserPool.Domain" --output text 2>/dev/null || echo "None")
+    if [ "$EXISTING_DOMAIN" == "None" ] || [ -z "$EXISTING_DOMAIN" ]; then
+        log_info "Creating Cognito domain..."
+        aws cognito-idp create-user-pool-domain \
+            --domain "${COGNITO_DOMAIN}" \
+            --user-pool-id "${POOL_ID}" \
+            --region ${AWS_REGION} 2>/dev/null || true
+        log_success "Created Cognito domain: ${COGNITO_DOMAIN}"
+    else
+        COGNITO_DOMAIN="${EXISTING_DOMAIN}"
+        log_info "Cognito domain already exists: ${COGNITO_DOMAIN}"
+    fi
+
+    # Create or find app client (ALB requires a client with a secret)
+    CLIENT_NAME="${APP_NAME}-alb-client"
+    CLIENT_ID=$(aws cognito-idp list-user-pool-clients --user-pool-id "${POOL_ID}" --region ${AWS_REGION} --query "UserPoolClients[?ClientName=='${CLIENT_NAME}'].ClientId | [0]" --output text 2>/dev/null || echo "None")
+    if [ "$CLIENT_ID" == "None" ] || [ -z "$CLIENT_ID" ]; then
+        log_info "Creating Cognito app client..."
+        CLIENT_ID=$(aws cognito-idp create-user-pool-client \
+            --user-pool-id "${POOL_ID}" \
+            --client-name "${CLIENT_NAME}" \
+            --generate-secret \
+            --allowed-o-auth-flows "code" \
+            --allowed-o-auth-flows-user-pool-client \
+            --allowed-o-auth-scopes "openid" "email" "profile" \
+            --callback-urls "https://${ALB_DNS}/oauth2/idpresponse" \
+            --supported-identity-providers "COGNITO" \
+            --explicit-auth-flows "ALLOW_USER_SRP_AUTH" "ALLOW_REFRESH_TOKEN_AUTH" \
+            --region ${AWS_REGION} \
+            --query "UserPoolClient.ClientId" --output text)
+        if [ -z "$CLIENT_ID" ] || [ "$CLIENT_ID" == "None" ]; then
+            log_error "Failed to create Cognito app client"
+            exit 1
+        fi
+        log_success "Created Cognito app client: ${CLIENT_ID}"
+    else
+        log_info "Cognito app client already exists: ${CLIENT_ID}"
+    fi
+
+    # Export for use in listener creation
+    export COGNITO_POOL_ID="${POOL_ID}"
+    export COGNITO_CLIENT_ID="${CLIENT_ID}"
+    export COGNITO_DOMAIN="${COGNITO_DOMAIN}"
+    export COGNITO_POOL_ARN=$(aws cognito-idp describe-user-pool --user-pool-id "${POOL_ID}" --region ${AWS_REGION} --query "UserPool.Arn" --output text)
+
+    log_success "Cognito auth configured (Pool: ${POOL_ID}, Client: ${CLIENT_ID}, Domain: ${COGNITO_DOMAIN})"
+}
+
+# =============================================================================
+# Generate self-signed cert and import to ACM (for internal ALB HTTPS)
+# =============================================================================
+setup_acm_cert() {
+    log_info "Setting up ACM certificate for internal ALB HTTPS..."
+
+    # Check for existing cert tagged for this app
+    CERT_ARN=$(aws acm list-certificates --region ${AWS_REGION} --query "CertificateSummaryList[?DomainName=='${APP_NAME}.internal'].CertificateArn | [0]" --output text 2>/dev/null || echo "None")
+    if [ "$CERT_ARN" != "None" ] && [ -n "$CERT_ARN" ]; then
+        log_info "ACM certificate already exists: ${CERT_ARN}"
+        export ACM_CERT_ARN=${CERT_ARN}
+        return
+    fi
+
+    log_info "Generating self-signed certificate for internal ALB..."
+    CERT_DIR=$(mktemp -d)
+
+    # Generate private key and self-signed cert (valid 1 year)
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout ${CERT_DIR}/private.key \
+        -out ${CERT_DIR}/certificate.pem \
+        -subj "/CN=${APP_NAME}.internal/O=${APP_NAME}" 2>/dev/null
+
+    # Import into ACM
+    CERT_ARN=$(aws acm import-certificate \
+        --certificate fileb://${CERT_DIR}/certificate.pem \
+        --private-key fileb://${CERT_DIR}/private.key \
+        --region ${AWS_REGION} \
+        --query "CertificateArn" --output text)
+
+    rm -rf ${CERT_DIR}
+
+    export ACM_CERT_ARN=${CERT_ARN}
+    log_success "ACM certificate imported: ${CERT_ARN}"
 }
 
 # =============================================================================
@@ -389,17 +523,21 @@ deploy_frontend() {
     # =========================================================================
     log_info "Creating least-privilege security groups..."
 
-    # ALB Security Group: ingress port 80 from VPC CIDR only
+    # ALB Security Group: HTTPS from anywhere (Cognito auth protects the app), HTTP for redirect
     ALB_SG_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${APP_NAME}-alb-sg" "Name=vpc-id,Values=${VPC_ID}" --query "SecurityGroups[0].GroupId" --output text --region ${AWS_REGION} 2>/dev/null || echo "None")
     if [ "$ALB_SG_ID" == "None" ] || [ -z "$ALB_SG_ID" ]; then
-        ALB_SG_ID=$(aws ec2 create-security-group --group-name ${APP_NAME}-alb-sg --description "ALB SG - HTTP from VPC CIDR only" --vpc-id ${VPC_ID} --query "GroupId" --output text --region ${AWS_REGION})
-        # Ingress: HTTP from VPC CIDR only (internal access via VPN/SSM)
-        aws ec2 authorize-security-group-ingress --group-id ${ALB_SG_ID} --protocol tcp --port 80 --cidr ${VPC_CIDR} --region ${AWS_REGION}
-        # Revoke default egress (allow-all) and restrict to ECS tasks only
+        ALB_SG_ID=$(aws ec2 create-security-group --group-name ${APP_NAME}-alb-sg --description "ALB SG - Cognito-protected HTTPS" --vpc-id ${VPC_ID} --query "GroupId" --output text --region ${AWS_REGION})
+        # Ingress: HTTP+HTTPS from anywhere (Cognito handles authentication)
+        aws ec2 authorize-security-group-ingress --group-id ${ALB_SG_ID} --protocol tcp --port 80 --cidr 0.0.0.0/0 --region ${AWS_REGION}
+        aws ec2 authorize-security-group-ingress --group-id ${ALB_SG_ID} --protocol tcp --port 443 --cidr 0.0.0.0/0 --region ${AWS_REGION}
+        # Revoke default egress and restrict
         aws ec2 revoke-security-group-egress --group-id ${ALB_SG_ID} --protocol -1 --port -1 --cidr 0.0.0.0/0 --region ${AWS_REGION} 2>/dev/null || true
-        log_success "Created ALB SG: ${ALB_SG_ID} (ingress: TCP/80 from ${VPC_CIDR})"
+        log_success "Created ALB SG: ${ALB_SG_ID} (ingress: TCP/80,443 from 0.0.0.0/0, Cognito-protected)"
     else
         log_info "ALB SG already exists: ${ALB_SG_ID}"
+        # Ensure public HTTPS+HTTP ingress exists
+        aws ec2 authorize-security-group-ingress --group-id ${ALB_SG_ID} --protocol tcp --port 443 --cidr 0.0.0.0/0 --region ${AWS_REGION} 2>/dev/null || true
+        aws ec2 authorize-security-group-ingress --group-id ${ALB_SG_ID} --protocol tcp --port 80 --cidr 0.0.0.0/0 --region ${AWS_REGION} 2>/dev/null || true
     fi
 
     # ECS Task Security Group: ingress port 3000 from ALB SG only
@@ -418,8 +556,10 @@ deploy_frontend() {
         log_info "ECS SG already exists: ${ECS_SG_ID}"
     fi
 
-    # Now add ALB egress rule to forward to ECS SG on port 3000
+    # ALB egress: forward to ECS tasks on port 3000
     aws ec2 authorize-security-group-egress --group-id ${ALB_SG_ID} --protocol tcp --port 3000 --source-group ${ECS_SG_ID} --region ${AWS_REGION} 2>/dev/null || true
+    # ALB egress: HTTPS to Cognito endpoints (for authenticate-cognito action)
+    aws ec2 authorize-security-group-egress --group-id ${ALB_SG_ID} --protocol tcp --port 443 --cidr 0.0.0.0/0 --region ${AWS_REGION} 2>/dev/null || true
 
     # =========================================================================
     # VPC Endpoints for private access to AWS services
@@ -493,6 +633,11 @@ EOF
     aws ecs register-task-definition --cli-input-json file:///tmp/task-def.json --region ${AWS_REGION} > /dev/null
 
     # =========================================================================
+    # ACM Certificate (self-signed for internal ALB — Cognito requires HTTPS)
+    # =========================================================================
+    setup_acm_cert
+
+    # =========================================================================
     # Internal ALB (not internet-facing)
     # =========================================================================
     ALB_ARN=$(aws elbv2 describe-load-balancers --names ${APP_NAME}-alb --region ${AWS_REGION} --query "LoadBalancers[0].LoadBalancerArn" --output text 2>/dev/null || echo "None")
@@ -502,7 +647,7 @@ EOF
             --name ${APP_NAME}-alb \
             --subnets ${SUBNETS} \
             --security-groups ${ALB_SG_ID} \
-            --scheme internal \
+            --scheme internet-facing \
             --type application \
             --query "LoadBalancers[0].LoadBalancerArn" --output text --region ${AWS_REGION})
     fi
@@ -514,11 +659,53 @@ EOF
         TG_ARN=$(aws elbv2 create-target-group --name ${APP_NAME}-tg --protocol HTTP --port 3000 --vpc-id ${VPC_ID} --target-type ip --health-check-path "/" --health-check-interval-seconds 30 --unhealthy-threshold-count 10 --query "TargetGroups[0].TargetGroupArn" --output text --region ${AWS_REGION})
     fi
 
-    # Listener
-    LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn ${ALB_ARN} --region ${AWS_REGION} --query "Listeners[0].ListenerArn" --output text 2>/dev/null || echo "None")
-    if [ "$LISTENER_ARN" == "None" ] || [ -z "$LISTENER_ARN" ]; then
-        aws elbv2 create-listener --load-balancer-arn ${ALB_ARN} --protocol HTTP --port 80 --default-actions Type=forward,TargetGroupArn=${TG_ARN} --region ${AWS_REGION} > /dev/null
-    fi
+    # =========================================================================
+    # Cognito User Pool (for ALB authentication)
+    # =========================================================================
+    setup_cognito_auth ${ALB_DNS}
+
+    # Update Cognito callback URL to use HTTPS ALB DNS
+    aws cognito-idp update-user-pool-client \
+        --user-pool-id ${COGNITO_POOL_ID} \
+        --client-id ${COGNITO_CLIENT_ID} \
+        --allowed-o-auth-flows "code" \
+        --allowed-o-auth-flows-user-pool-client \
+        --allowed-o-auth-scopes "openid" "email" "profile" \
+        --callback-urls "https://${ALB_DNS}/oauth2/idpresponse" \
+        --supported-identity-providers "COGNITO" \
+        --region ${AWS_REGION} > /dev/null 2>&1 || true
+
+    # =========================================================================
+    # Listeners: HTTPS/443 with Cognito auth, HTTP/80 redirects to HTTPS
+    # =========================================================================
+    # Delete any existing listeners (may be stale/unauthenticated)
+    EXISTING_LISTENERS=$(aws elbv2 describe-listeners --load-balancer-arn ${ALB_ARN} --region ${AWS_REGION} --query "Listeners[].ListenerArn" --output text 2>/dev/null || echo "")
+    for LIS in $EXISTING_LISTENERS; do
+        aws elbv2 delete-listener --listener-arn ${LIS} --region ${AWS_REGION} 2>/dev/null || true
+    done
+
+    # HTTPS listener (443) with Cognito authenticate action + forward
+    log_info "Creating HTTPS listener with Cognito authentication..."
+    aws elbv2 create-listener \
+        --load-balancer-arn ${ALB_ARN} \
+        --protocol HTTPS \
+        --port 443 \
+        --certificates CertificateArn=${ACM_CERT_ARN} \
+        --default-actions \
+            "Type=authenticate-cognito,Order=1,AuthenticateCognitoConfig={UserPoolArn=${COGNITO_POOL_ARN},UserPoolClientId=${COGNITO_CLIENT_ID},UserPoolDomain=${COGNITO_DOMAIN},OnUnauthenticatedRequest=authenticate,Scope=openid}" \
+            "Type=forward,Order=2,TargetGroupArn=${TG_ARN}" \
+        --region ${AWS_REGION} > /dev/null
+
+    # HTTP listener (80) redirects to HTTPS
+    log_info "Creating HTTP->HTTPS redirect listener..."
+    aws elbv2 create-listener \
+        --load-balancer-arn ${ALB_ARN} \
+        --protocol HTTP \
+        --port 80 \
+        --default-actions 'Type=redirect,RedirectConfig={Protocol=HTTPS,Port=443,StatusCode=HTTP_301}' \
+        --region ${AWS_REGION} > /dev/null
+
+    log_success "ALB listeners created with Cognito auth"
 
     # =========================================================================
     # ECS Service (with separate ECS SG, public IP for ECR pull)
@@ -535,27 +722,31 @@ EOF
         --health-check-grace-period-seconds 600 \
         --region ${AWS_REGION} > /dev/null
 
-    log_success "Frontend deployed (internal ALB): http://${ALB_DNS}"
+    log_success "Frontend deployed (internal ALB + Cognito auth): https://${ALB_DNS}"
     echo ""
     echo "========================================="
-    echo "🎉 Deployment Complete (Least-Privilege)"
+    echo "🎉 Deployment Complete (Cognito Auth)"
     echo "========================================="
     echo ""
     echo "🔒 Internal ALB DNS: ${ALB_DNS}"
-    echo "   (Only accessible from within VPC — via VPN, SSM, or port-forward)"
+    echo "   HTTPS with Cognito authentication (HTTP redirects to HTTPS)"
     echo ""
     if [ -n "$AGENTCORE_RUNTIME_ARN" ]; then
         echo "🤖 AgentCore ARN: $AGENTCORE_RUNTIME_ARN"
         echo ""
     fi
-    echo "🔐 Security Groups:"
-    echo "   ALB SG (${ALB_SG_ID}): ingress TCP/80 from ${VPC_CIDR}"
+    echo "🔐 Security:"
+    echo "   ALB SG (${ALB_SG_ID}): ingress TCP/80,443 from ${VPC_CIDR}"
     echo "   ECS SG (${ECS_SG_ID}): ingress TCP/3000 from ALB SG only"
+    echo "   Cognito Pool: ${COGNITO_POOL_ID}"
+    echo "   Cognito Domain: https://${COGNITO_DOMAIN}.auth.${AWS_REGION}.amazoncognito.com"
+    echo ""
+    echo "👤 Create a user to log in:"
+    echo "   aws cognito-idp admin-create-user --user-pool-id ${COGNITO_POOL_ID} --username <email> --user-attributes Name=email,Value=<email> --temporary-password 'TempPass1!' --region ${AWS_REGION}"
     echo ""
     echo "📡 Access via SSM port-forward:"
-    echo "   1. Launch a bastion/jump instance in the VPC (or use an existing one)"
-    echo "   2. aws ssm start-session --target <instance-id> --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters '{\"host\":[\"${ALB_DNS}\"],\"portNumber\":[\"80\"],\"localPortNumber\":[\"8080\"]}'"
-    echo "   3. Open http://localhost:8080 in your browser"
+    echo "   1. aws ssm start-session --target <instance-id> --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters '{\"host\":[\"${ALB_DNS}\"],\"portNumber\":[\"443\"],\"localPortNumber\":[\"8443\"]}'"
+    echo "   2. Open https://localhost:8443 in your browser (accept self-signed cert warning)"
     echo ""
     echo "Monitor with:"
     echo "  aws ecs describe-services --cluster ${APP_NAME} --services ${APP_NAME} --region ${AWS_REGION}"
