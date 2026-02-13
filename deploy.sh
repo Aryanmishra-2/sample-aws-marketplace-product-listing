@@ -722,13 +722,13 @@ EOF
         --health-check-grace-period-seconds 600 \
         --region ${AWS_REGION} > /dev/null
 
-    log_success "Frontend deployed (internal ALB + Cognito auth): https://${ALB_DNS}"
+    log_success "Frontend deployed (Cognito auth): https://${ALB_DNS}"
     echo ""
     echo "========================================="
     echo "🎉 Deployment Complete (Cognito Auth)"
     echo "========================================="
     echo ""
-    echo "🔒 Internal ALB DNS: ${ALB_DNS}"
+    echo "🌐 ALB DNS: ${ALB_DNS}"
     echo "   HTTPS with Cognito authentication (HTTP redirects to HTTPS)"
     echo ""
     if [ -n "$AGENTCORE_RUNTIME_ARN" ]; then
