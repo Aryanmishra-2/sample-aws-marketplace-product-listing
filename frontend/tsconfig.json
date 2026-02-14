@@ -31,8 +31,7 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
-    "/var/folders/fy/9jczc6ss70569x3c08ykkh700000gq/T/next-build-frontend/types/**/*.ts"
+    ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
