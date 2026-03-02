@@ -744,12 +744,159 @@ def handle_deploy_saas(payload: dict, access_key: str, secret_key: str, session_
     """Deploy SaaS integration CloudFormation stack"""
     import boto3
     
+    # Embedded CloudFormation template (static)
+    CLOUDFORMATION_TEMPLATE = """AWSTemplateFormatVersion: '2010-09-09'
+Description: "AWS Marketplace SaaS entitlement and subscription portal (qs-1s3j136e1)"
+Metadata:
+  Documentation:
+    EntrypointName: "Deploy AWS Marketplace SaaS entitlement and subscription portal"
+  AWS::CloudFormation::Interface:
+    ParameterLabels:
+      EntitlementSNSTopic:
+        default: "Entitlements SNS topic ARN"
+      MarketplaceTechAdminEmail:
+        default: "Admin email address"
+      ProductId:
+        default: "Product Id"
+      SubscriptionSNSTopic:
+        default: "Subscriptions SNS topic ARN"
+      TypeOfSaaSListing:
+        default: "Type of SaaS Listing"
+    ParameterGroups:
+      - Label: 
+          default: Integration configurations
+        Parameters:
+          - TypeOfSaaSListing
+          - ProductId
+          - MarketplaceTechAdminEmail
+      - Label: 
+          default: AWS Marketplace Parameters (Do not change)
+        Parameters:
+           - SNSAccountID
+           - SNSRegion
+           - UpdateFulfillmentURL
+Parameters:
+  TypeOfSaaSListing:
+    Description: "The type of SaaS listing: subscriptions (usage-based), contracts (contract-based), or contracts_with_subscription (contract with consumption)"
+    Type: String
+    Default: subscriptions
+    AllowedValues:
+    - subscriptions
+    - contracts
+    - contracts_with_subscription
+  SNSAccountID:
+    Type: String
+    Default: '287250355862'
+    Description: This is the AWS account hosting the SNS Entitlement and Subscription
+      topics for your product.
+    AllowedValues:
+    - '287250355862'
+  SNSRegion:
+    Type: String
+    Default: us-east-1
+    Description: This is the AWS region of the SNS Entitlement and Subscription topics
+      for your product.
+    AllowedValues:
+    - us-east-1
+  ProductId:
+    Description: "Provide the product id for your listing. You can find the product id in the 'Product summary' section for your listing in the AWS Marketplace Management Portal."
+    Type: String
+    AllowedPattern: .*
+  MarketplaceTechAdminEmail:
+    Description: "Provide the email address that will receive notifications for new customer registrations, entitlement changes, and subscription events."
+    Type: String
+    AllowedPattern: .*
+  UpdateFulfillmentURL:
+    Default: "true"
+    Type: String
+    Description: "WARNING: This will update your product's fulfillment URL automatically. Be careful if your product is already public"
+    AllowedValues:
+      - "true"
+      - "false"
+
+Resources:
+  SampleApp:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://ws-assets-prod-iad-r-iad-ed304a55c2ca1aee.s3.us-east-1.amazonaws.com/cc168d1f-b5c7-4b68-a2f9-d785d68b2f19/saas/saas-integration-reference-cloudformation-deployment/packaged.yaml"
+      Parameters:
+        WebsiteS3BucketName:
+         !Join
+          - '-'
+          - - 'web'
+            - !Select 
+              - 0
+              - !Split 
+                - "-"
+                - !Select
+                  - 2
+                  - !Split
+                    - "/"
+                    - !Ref AWS::StackId
+        NewSubscribersTableName:
+          !Join
+            - '-'
+            - - 'NewSubscribers'
+              - !Select 
+                - 0
+                - !Split 
+                  - "-"
+                  - !Select
+                    - 2
+                    - !Split
+                      - "/"
+                      - !Ref AWS::StackId
+        AWSMarketplaceMeteringRecordsTableName: 
+          !Join
+            - '-'
+            - - 'AWSMarketplaceMeteringRecords'
+              - !Select 
+                - 0
+                - !Split 
+                  - "-"
+                  - !Select
+                    - 2
+                    - !Split
+                      - "/"
+                      - !Ref AWS::StackId
+        TypeOfSaaSListing: !Ref TypeOfSaaSListing  
+        SNSAccountID: !Ref SNSAccountID
+        SNSRegion: !Ref SNSRegion
+        ProductId: !Ref ProductId
+        MarketplaceTechAdminEmail: !Ref MarketplaceTechAdminEmail
+        CreateCrossAccountRole: 'false'
+        CrossAccountId: ''
+        CrossAccountRoleName: ''
+        MarketplaceSellerEmail: ''
+        CreateRegistrationWebPage: 'true'
+        UpdateFulfillmentURL: !Ref UpdateFulfillmentURL
+
+Outputs:
+  WebsiteS3Bucket:
+    Description: This is the bucket for hosting the static site. Retrieve and upload the web files
+      at https://github.com/aws-samples/aws-marketplace-serverless-saas-integration/tree/master/web.
+    Value: !GetAtt SampleApp.Outputs.WebsiteS3Bucket
+  LandingPagePreviewURL:
+    Description: Use this URL to preview your landing page. This is NOT the Fulfillment URL.
+      for your product.
+    Value: !GetAtt SampleApp.Outputs.LandingPagePreviewURL
+  AWSMarketplaceFulfillmentURL:
+    Description: This is the AWS Marketplace fulfillment URL. Update the "Default fulfillment URL" for you listing with this value.
+    Value: !GetAtt SampleApp.Outputs.MarketplaceFulfillmentURL
+"""
+    
+    print(f"[DEPLOY_SAAS] Received payload: {json.dumps(payload, indent=2)}")
+    
     product_id = payload.get("product_id")
     email = payload.get("email")
     pricing_model = payload.get("pricing_model")
     region = payload.get("region", "us-east-1")
     
+    print(f"[DEPLOY_SAAS] Extracted values - product_id: {product_id}, email: {email}, pricing_model: {pricing_model}, region: {region}")
+    
     if not product_id or not email or not pricing_model:
+        error_msg = f"Missing required fields: product_id={product_id}, email={email}, pricing_model={pricing_model}"
+        print(f"[DEPLOY_SAAS ERROR] {error_msg}")
         return {"success": False, "error": "Missing required fields: product_id, email, pricing_model"}
     
     session = boto3.Session(
@@ -759,25 +906,15 @@ def handle_deploy_saas(payload: dict, access_key: str, secret_key: str, session_
         region_name=region
     )
     
-    # Find the Integration.yaml template
-    template_paths = [
-        os.path.join(os.path.dirname(__file__), 'deployment', 'cloudformation', 'Integration.yaml'),
-        os.path.join(os.path.dirname(__file__), '..', 'deployment', 'cloudformation', 'Integration.yaml'),
-        'deployment/cloudformation/Integration.yaml',
-    ]
-    
-    template_body = None
-    for path in template_paths:
-        if os.path.exists(path):
-            with open(path, 'r') as f:
-                template_body = f.read()
-            break
-    
-    if not template_body:
-        return {"success": False, "error": "CloudFormation template not found"}
+    # Use embedded template
+    template_body = CLOUDFORMATION_TEMPLATE
+    print(f"[DEPLOY_SAAS] Using embedded CloudFormation template")
     
     actual_stack_name = f"saas-integration-{product_id}"
     cf_client = session.client('cloudformation')
+    
+    print(f"[DEPLOY_SAAS] About to create CloudFormation stack: {actual_stack_name}")
+    print(f"[DEPLOY_SAAS] Parameters: ProductId={product_id}, TypeOfSaaSListing={pricing_model}, Email={email}")
     
     try:
         response = cf_client.create_stack(
@@ -792,6 +929,8 @@ def handle_deploy_saas(payload: dict, access_key: str, secret_key: str, session_
             Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND']
         )
         
+        print(f"[DEPLOY_SAAS SUCCESS] Stack created: {response['StackId']}")
+        
         return {
             "success": True,
             "stack_id": response['StackId'],
@@ -799,6 +938,7 @@ def handle_deploy_saas(payload: dict, access_key: str, secret_key: str, session_
             "message": "CloudFormation stack creation initiated"
         }
     except cf_client.exceptions.AlreadyExistsException:
+        print(f"[DEPLOY_SAAS] Stack already exists: {actual_stack_name}")
         stack_info = cf_client.describe_stacks(StackName=actual_stack_name)
         stack = stack_info['Stacks'][0]
         return {
@@ -809,7 +949,9 @@ def handle_deploy_saas(payload: dict, access_key: str, secret_key: str, session_
             "status": stack['StackStatus']
         }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        error_msg = f"CloudFormation error: {str(e)}"
+        print(f"[DEPLOY_SAAS ERROR] {error_msg}")
+        return {"success": False, "error": error_msg}
 
 
 def handle_get_stack_status(payload: dict, access_key: str, secret_key: str, session_token: str = None):
@@ -897,12 +1039,28 @@ def handle_get_stack_parameters(payload: dict, access_key: str, secret_key: str,
         for output in stack.get('Outputs', []):
             outputs[output['OutputKey']] = output['OutputValue']
         
+        # Extract pricing model and dimensions from parameters
+        # The CloudFormation template uses 'TypeOfSaaSListing' parameter
+        pricing_model = parameters.get('PricingModel') or parameters.get('TypeOfSaaSListing')
+        pricing_dimensions_str = parameters.get('PricingDimensions')
+        
+        # Parse pricing dimensions if present
+        pricing_dimensions = None
+        if pricing_dimensions_str:
+            try:
+                import json
+                pricing_dimensions = json.loads(pricing_dimensions_str)
+            except:
+                pricing_dimensions = None
+        
         return {
             "success": True,
             "stack_name": stack_name,
             "parameters": parameters,
             "outputs": outputs,
-            "status": stack['StackStatus']
+            "status": stack['StackStatus'],
+            "pricing_model": pricing_model,
+            "pricing_dimensions": pricing_dimensions
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -1300,7 +1458,8 @@ async def handle_create_listing(payload: dict, access_key: str, secret_key: str,
                     )
                 
                 if pricing_result.get("success"):
-                    pricing_wait = wait_for_changeset(pricing_result['change_set_id'], "Pricing Dimensions")
+                    # Pricing changesets can take 10-30 minutes, use longer timeout
+                    pricing_wait = wait_for_changeset(pricing_result['change_set_id'], "Pricing Dimensions", max_wait=1800)
                     if pricing_wait.get("success"):
                         stages[-1]["status"] = "complete"
                         stages[-1]["message"] = f"Configured {len(pricing_dimensions)} pricing dimension(s)"
@@ -1709,19 +1868,44 @@ def handle_check_stack_exists(payload: dict, access_key: str, secret_key: str, s
 
 def handle_run_metering(payload: dict, access_key: str, secret_key: str, session_token: str = None):
     """Run metering agent"""
+    print(f"\n{'='*80}")
+    print(f"[HANDLE_RUN_METERING] Starting metering handler")
+    print(f"[HANDLE_RUN_METERING] Payload: {payload}")
+    print(f"[HANDLE_RUN_METERING] Has access_key: {bool(access_key)}")
+    print(f"[HANDLE_RUN_METERING] Has secret_key: {bool(secret_key)}")
+    print(f"[HANDLE_RUN_METERING] Has session_token: {bool(session_token)}")
+    print(f"{'='*80}\n")
+    
     if not access_key or not secret_key:
+        print("[HANDLE_RUN_METERING] ERROR: Missing AWS credentials")
         return {"success": False, "error": "Missing AWS credentials", "steps": []}
     
     product_id = payload.get("product_id")
+    print(f"[HANDLE_RUN_METERING] Product ID from payload: {product_id}")
     
     try:
+        # Set product_id on the create_saas_agent so it can fetch dimensions from Marketplace
+        if product_id:
+            print(f"[HANDLE_RUN_METERING] Setting product_id on create_saas_agent: {product_id}")
+            metering_agent.create_saas_agent.set_product_id(product_id)
+            print(f"[HANDLE_RUN_METERING] Product ID set successfully")
+        else:
+            print(f"[HANDLE_RUN_METERING] WARNING: No product_id in payload")
+        
+        print(f"[HANDLE_RUN_METERING] Calling metering_agent.check_entitlement_and_add_metering()")
         result = metering_agent.check_entitlement_and_add_metering(
             access_key=access_key,
             secret_key=secret_key,
             session_token=session_token
         )
+        print(f"[HANDLE_RUN_METERING] Metering agent returned: {result}")
+        print(f"[HANDLE_RUN_METERING] Result type: {type(result)}")
+        print(f"[HANDLE_RUN_METERING] Result keys: {result.keys() if isinstance(result, dict) else 'N/A'}")
         return result
     except Exception as e:
+        print(f"[HANDLE_RUN_METERING] EXCEPTION: {str(e)}")
+        import traceback
+        print(f"[HANDLE_RUN_METERING] Traceback: {traceback.format_exc()}")
         return {"success": False, "error": str(e), "steps": []}
 
 

@@ -50,8 +50,8 @@ export default function PublicVisibilityPage() {
       
       console.log('[PUBLIC VISIBILITY] Guide response:', response.data);
       
-      if (response.data.success) {
-        setVisibilitySteps(response.data.steps);
+      if (response.data.success && response.data.guide?.steps) {
+        setVisibilitySteps(response.data.guide.steps);
       } else {
         setError(response.data.error || 'Failed to load public visibility guide');
       }

@@ -4,7 +4,10 @@ import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { aws_access_key_id, aws_secret_access_key, aws_session_token } = body;
+    
+    // Support both nested and flat credential structures
+    const credentials = body.credentials || body;
+    const { aws_access_key_id, aws_secret_access_key, aws_session_token } = credentials;
 
     if (!aws_access_key_id || !aws_secret_access_key) {
       return NextResponse.json(

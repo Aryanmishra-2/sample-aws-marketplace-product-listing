@@ -98,7 +98,7 @@ export default function SaaSIntegrationPage() {
       setProductId(urlProductId);
     }
 
-    setStackName(`marketplace-saas-${productId.substring(0, 8)}`);
+    setStackName(`saas-integration-${productId}`);
 
     if (credentials) {
       setAccessKey(credentials.aws_access_key_id || '');
@@ -109,9 +109,21 @@ export default function SaaSIntegrationPage() {
     // Check if coming from "Continue" button (stack already exists)
     const skipDeployment = searchParams.get('skipDeployment');
     if (skipDeployment === 'true') {
-      // Stack already exists, redirect to workflow page
+      // Stack already exists, try to get pricing model from localStorage
       const stackName = `saas-integration-${productId}`;
-      router.push(`/saas-workflow?productId=${productId}&stackName=${stackName}`);
+      let storedPricingModel = '';
+      
+      try {
+        const listingData = localStorage.getItem(`listing_data_${productId}`);
+        if (listingData) {
+          const parsed = JSON.parse(listingData);
+          storedPricingModel = parsed.pricing_model || '';
+        }
+      } catch (e) {
+        console.error('Failed to read pricing model from localStorage:', e);
+      }
+      
+      router.push(`/saas-workflow?productId=${productId}&stackName=${stackName}&pricingModel=${storedPricingModel}`);
     }
   }, [isAuthenticated, productId, credentials, router, urlProductId, storeProductId, setProductId, searchParams]);
 
@@ -392,6 +404,28 @@ export default function SaaSIntegrationPage() {
     setDeployedStackName(actualStackName);
 
     try {
+      // Validate credentials first
+      console.log('[FRONTEND DEBUG] Validating credentials before deployment...');
+      try {
+        const validateResponse = await axios.post('/api/validate-credentials', {
+          credentials: {
+            aws_access_key_id: accessKey,
+            aws_secret_access_key: secretKey,
+            aws_session_token: sessionToken || undefined,
+          },
+        });
+
+        if (!validateResponse.data.success) {
+          throw new Error(`Invalid or expired credentials: ${validateResponse.data.error || 'Please refresh your credentials and try again'}`);
+        }
+        console.log('[FRONTEND DEBUG] Credentials validated successfully');
+      } catch (validateErr: any) {
+        console.error('[FRONTEND DEBUG] Credential validation failed:', validateErr);
+        setError(validateErr.message || 'Credential validation failed. Please refresh your AWS credentials and try again.');
+        setLoading(false);
+        return;
+      }
+
       // Pass pricing model to backend for CloudFormation deployment
       console.log('[FRONTEND DEBUG] Deploying with pricing model:', pricingModel);
       console.log('[FRONTEND DEBUG] Pricing model value being sent:', pricingModel?.value);
@@ -420,6 +454,40 @@ export default function SaaSIntegrationPage() {
         }
       }
       
+      // Third try: Fetch from AWS Marketplace Catalog API
+      if (!storedPricingDimensions) {
+        console.log('[FRONTEND DEBUG] Fetching pricing dimensions from AWS Marketplace...');
+        try {
+          const dimensionsResponse = await axios.post('/api/get-pricing-dimensions', {
+            product_id: productId,
+            credentials: {
+              aws_access_key_id: accessKey,
+              aws_secret_access_key: secretKey,
+              aws_session_token: sessionToken || undefined,
+            },
+          });
+          
+          if (dimensionsResponse.data.success && dimensionsResponse.data.pricing_dimensions) {
+            storedPricingDimensions = dimensionsResponse.data.pricing_dimensions;
+            console.log('[FRONTEND DEBUG] Retrieved pricing dimensions from AWS:', storedPricingDimensions);
+            
+            // Store for future use
+            const listingData = {
+              pricing_dimensions: storedPricingDimensions,
+              pricing_model: pricingModel?.value,
+              retrieved_from: 'aws_marketplace',
+              timestamp: new Date().toISOString()
+            };
+            localStorage.setItem(`listing_data_${productId}`, JSON.stringify(listingData));
+          } else {
+            console.log('[FRONTEND DEBUG] No pricing dimensions found in AWS Marketplace');
+          }
+        } catch (fetchErr: any) {
+          console.error('[FRONTEND DEBUG] Failed to fetch pricing dimensions:', fetchErr);
+          // Continue anyway - deployment can work without dimensions
+        }
+      }
+      
       if (!storedPricingDimensions) {
         console.log('[FRONTEND DEBUG] ⚠ NO PRICING DIMENSIONS FOUND - will be null in backend request');
       }
@@ -444,6 +512,20 @@ export default function SaaSIntegrationPage() {
 
       setDeployedStackId(response.data.stack_id);
       setStackId(response.data.stack_id);
+      
+      // Store pricing model in localStorage for workflow page
+      try {
+        const existingData = localStorage.getItem(`listing_data_${productId}`);
+        const listingData = existingData ? JSON.parse(existingData) : {};
+        listingData.pricing_model = pricingModel?.value;
+        listingData.stack_deployed = true;
+        listingData.stack_id = response.data.stack_id;
+        listingData.timestamp = new Date().toISOString();
+        localStorage.setItem(`listing_data_${productId}`, JSON.stringify(listingData));
+        console.log('[FRONTEND DEBUG] Stored pricing model for workflow:', pricingModel?.value);
+      } catch (e) {
+        console.error('[FRONTEND DEBUG] Failed to store pricing model:', e);
+      }
       
       // Update stack name from response if provided (backend knows the actual name)
       if (response.data.stack_name) {
@@ -656,44 +738,28 @@ export default function SaaSIntegrationPage() {
                             variant="normal" 
                             onClick={async () => {
                               try {
+                                // Validate pricing model is selected
+                                if (!pricingModel || !pricingModel.value) {
+                                  setError('Please select a pricing model before continuing');
+                                  return;
+                                }
+                                
                                 // Skip deletion, go directly to SNS confirmation workflow
                                 setShowDeleteConfirm(false);
                                 setSuccess(true);
                                 setDeployedStackName(`saas-integration-${productId}`);
                                 
-                                // Try to retrieve pricing dimensions from existing stack
-                                console.log('[SAAS-INTEGRATION] Retrieving pricing dimensions from existing stack...');
+                                // Store pricing model in localStorage
                                 try {
-                                  const stackResponse = await axios.post('/api/get-stack-parameters', {
-                                    stack_name: `saas-integration-${productId}`,
-                                    region: region.value,
-                                    credentials: {
-                                      aws_access_key_id: accessKey,
-                                      aws_secret_access_key: secretKey,
-                                      aws_session_token: sessionToken || undefined,
-                                    }
-                                  });
-                                  
-                                  if (stackResponse.data.success && stackResponse.data.pricing_dimensions) {
-                                    // Store pricing dimensions for later use in metering
-                                    const pricingDimensions = stackResponse.data.pricing_dimensions;
-                                    console.log('[SAAS-INTEGRATION] Retrieved pricing dimensions:', pricingDimensions);
-                                    
-                                    // Store in localStorage for metering workflow
-                                    const listingData = {
-                                      pricing_dimensions: pricingDimensions,
-                                      pricing_model: stackResponse.data.pricing_model,
-                                      retrieved_from: 'existing_stack',
-                                      timestamp: new Date().toISOString()
-                                    };
-                                    localStorage.setItem(`listing_data_${productId}`, JSON.stringify(listingData));
-                                    console.log('[SAAS-INTEGRATION] Stored pricing dimensions for metering workflow');
-                                  } else {
-                                    console.log('[SAAS-INTEGRATION] No pricing dimensions found in existing stack');
-                                  }
-                                } catch (stackErr) {
-                                  console.error('[SAAS-INTEGRATION] Failed to retrieve pricing dimensions from stack:', stackErr);
-                                  // Continue anyway - metering will use defaults
+                                  const listingData = {
+                                    pricing_model: pricingModel.value,
+                                    retrieved_from: 'user_selection',
+                                    timestamp: new Date().toISOString()
+                                  };
+                                  localStorage.setItem(`listing_data_${productId}`, JSON.stringify(listingData));
+                                  console.log('[SAAS-INTEGRATION] Stored pricing model for existing stack:', pricingModel.value);
+                                } catch (e) {
+                                  console.error('[SAAS-INTEGRATION] Failed to store pricing model:', e);
                                 }
                                 
                                 setCurrentSubStep(1);
@@ -712,6 +778,20 @@ export default function SaaSIntegrationPage() {
                       <SpaceBetween size="s">
                         <Box>A CloudFormation stack with this product ID already exists:</Box>
                         <Box fontWeight="bold">{existingStackId}</Box>
+                        
+                        <FormField 
+                          label="Select Pricing Model" 
+                          description="Choose the pricing model for your existing SaaS product"
+                          constraintText="Required"
+                        >
+                          <Select 
+                            selectedOption={pricingModel} 
+                            onChange={({ detail }) => setPricingModel(detail.selectedOption)} 
+                            options={PRICING_OPTIONS}
+                            placeholder="Select pricing model"
+                          />
+                        </FormField>
+                        
                         <Box>Choose an option:</Box>
                         <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
                           <li>
@@ -926,16 +1006,16 @@ export default function SaaSIntegrationPage() {
                               if (nextStep === 'metering') {
                                 // Usage-based or Contract-with-consumption - show metering guide
                                 const meteringResponse = await axios.post('/api/metering-guide', {});
-                                if (meteringResponse.data.success) {
-                                  setMeteringSteps(meteringResponse.data.steps);
+                                if (meteringResponse.data.success && meteringResponse.data.guide?.steps) {
+                                  setMeteringSteps(meteringResponse.data.guide.steps);
                                   setShowMeteringGuide(true);
                                   setCurrentSubStep(3); // Move to Testing Complete
                                 }
                               } else if (nextStep === 'public_visibility') {
                                 // Contract-based - show public visibility guide
                                 const visibilityResponse = await axios.post('/api/public-visibility-guide', {});
-                                if (visibilityResponse.data.success) {
-                                  setVisibilitySteps(visibilityResponse.data.steps);
+                                if (visibilityResponse.data.success && visibilityResponse.data.guide?.steps) {
+                                  setVisibilitySteps(visibilityResponse.data.guide.steps);
                                   setShowVisibilityGuide(true);
                                   setCurrentSubStep(3); // Move to Testing Complete
                                 }
@@ -965,88 +1045,133 @@ export default function SaaSIntegrationPage() {
                           </Box>
                         </Alert>
                         
-                        {buyerSteps.length > 0 ? (
-                          buyerSteps.map((step, index) => (
-                            <Container key={index} header={<Header variant="h3">Step {step.step}: {step.title}</Header>}>
-                              <SpaceBetween size="s">
-                                <Box>{step.description}</Box>
-                                <Box variant="h4">Actions:</Box>
-                                <ul style={{ marginLeft: '20px' }}>
-                                  {step.actions?.map((action: string, idx: number) => (
-                                    <li key={idx}><Box fontSize="body-s">{action}</Box></li>
-                                  ))}
-                                </ul>
-                                {step.expected && (
-                                  <>
-                                    <Box variant="h4">Expected Outcomes:</Box>
-                                    <ul style={{ marginLeft: '20px' }}>
-                                      {step.expected.map((outcome: string, idx: number) => (
-                                        <li key={idx}><Box fontSize="body-s" color="text-status-success">✓ {outcome}</Box></li>
-                                      ))}
+                        
+                        <SpaceBetween size="m">
+                          {/* Step 1: Access Management Portal */}
+                          <Container>
+                            <SpaceBetween size="s">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ fontSize: '32px' }}>🏢</div>
+                                <Box variant="h3">Step 1: Access Product in AWS Marketplace Management Portal</Box>
+                              </div>
+                              <Box fontSize="body-s" color="text-body-secondary" padding={{ left: 'xxl' }}>
+                                <ol style={{ marginLeft: '20px', marginTop: '8px' }}>
+                                  <li>Open AWS Marketplace Management Portal: <a href="https://aws.amazon.com/marketplace/management/products" target="_blank" rel="noopener noreferrer" style={{ color: '#0073bb' }}>https://aws.amazon.com/marketplace/management/products</a></li>
+                                  <li>Navigate to your SaaS product listing</li>
+                                  <li>Select product: <strong>{productId}</strong></li>
+                                </ol>
+                              </Box>
+                            </SpaceBetween>
+                          </Container>
+
+                          {/* Step 2: Validate Fulfillment URL */}
+                          <Container>
+                            <SpaceBetween size="s">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ fontSize: '32px' }}>✅</div>
+                                <Box variant="h3">Step 2: Validate Fulfillment URL Update</Box>
+                              </div>
+                              <Box fontSize="body-s" color="text-body-secondary" padding={{ left: 'xxl' }}>
+                                <ol style={{ marginLeft: '20px', marginTop: '8px' }}>
+                                  <li>Go to the <strong>'Request Log'</strong> tab</li>
+                                  <li>Check that the last request status is <strong>'Succeeded'</strong></li>
+                                  <li>This confirms the fulfillment URL was updated successfully</li>
+                                </ol>
+                              </Box>
+                            </SpaceBetween>
+                          </Container>
+
+                          {/* Step 3: Review Product Information */}
+                          <Container>
+                            <SpaceBetween size="s">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ fontSize: '32px' }}>👁️</div>
+                                <Box variant="h3">Step 3: Review Product Information</Box>
+                              </div>
+                              <Box fontSize="body-s" color="text-body-secondary" padding={{ left: 'xxl' }}>
+                                <ol style={{ marginLeft: '20px', marginTop: '8px' }}>
+                                  <li>Select <strong>'View on AWS Marketplace'</strong></li>
+                                  <li>Review that your product information is accurate</li>
+                                  <li>Verify pricing, description, and features are correct</li>
+                                </ol>
+                              </Box>
+                            </SpaceBetween>
+                          </Container>
+
+                          {/* Step 4: Simulate Purchase Process */}
+                          <Container>
+                            <SpaceBetween size="s">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ fontSize: '32px' }}>🛍️</div>
+                                <Box variant="h3">Step 4: Simulate Purchase Process</Box>
+                              </div>
+                              <Box fontSize="body-s" color="text-body-secondary" padding={{ left: 'xxl' }}>
+                                <ol style={{ marginLeft: '20px', marginTop: '8px' }}>
+                                  <li>Select <strong>'View purchase options'</strong></li>
+                                  <li>Under <strong>'How long do you want your contract to run?'</strong>, select <strong>'1 month'</strong></li>
+                                  <li>Set <strong>'Renewal Settings'</strong> to <strong>'No'</strong></li>
+                                  <li>Under <strong>'Contract Options'</strong>, set any option quantity to <strong>1</strong></li>
+                                  <li>Select <strong>'Create contract'</strong> then <strong>'Pay now'</strong></li>
+                                </ol>
+                              </Box>
+                            </SpaceBetween>
+                          </Container>
+
+                          {/* Step 5: Account Setup and Registration */}
+                          <Container>
+                            <SpaceBetween size="s">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ fontSize: '32px' }}>📝</div>
+                                <Box variant="h3">Step 5: Account Setup and Registration</Box>
+                              </div>
+                              <Box fontSize="body-s" color="text-body-secondary" padding={{ left: 'xxl' }}>
+                                <ol style={{ marginLeft: '20px', marginTop: '8px' }}>
+                                  <li>Select <strong>'Set up your account'</strong></li>
+                                  <li>You'll be redirected to your custom registration page</li>
+                                  <li>Fill in the registration information:
+                                    <ul style={{ marginLeft: '20px', marginTop: '4px' }}>
+                                      <li>Company name</li>
+                                      <li>Contact email</li>
+                                      <li>Any other required fields</li>
                                     </ul>
-                                  </>
-                                )}
-                              </SpaceBetween>
-                            </Container>
-                          ))
-                        ) : (
-                          <SpaceBetween size="m">
-                            {[
-                              { icon: '🏢', title: 'Open SaaS product page', desc: 'Navigate to AWS Marketplace Management Portal and select your product', color: '#0073bb' },
-                              { icon: '✓', title: 'Validate fulfillment URL', desc: 'In Request Log tab, verify last request status is "Succeeded"', color: '#037f0c' },
-                              { icon: '👁️', title: 'View on Marketplace', desc: 'Select "View on AWS Marketplace"', color: '#0073bb' },
-                              { icon: '🛍️', title: 'Start purchase', desc: 'Select "View purchase options"', color: '#0073bb' },
-                              { icon: '⚙️', title: 'Configure contract', desc: '1 month duration, No renewal, quantity 1', color: '#ff9900' },
-                              { icon: '💳', title: 'Create contract', desc: 'Select "Create contract" then "Pay now"', color: '#ff9900' },
-                              { icon: '📝', title: 'Register account', desc: 'Fill registration form and select "Register"', color: '#0073bb' },
-                              { icon: '🎉', title: 'Verify success', desc: 'Blue banner appears + email notification received', color: '#037f0c' }
-                            ].map((step, index) => (
-                              <Container key={index}>
-                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-                                  <div style={{
-                                    fontSize: '36px',
-                                    minWidth: '56px',
-                                    textAlign: 'center',
-                                    lineHeight: '1'
-                                  }}>
-                                    {step.icon}
-                                  </div>
-                                  <div style={{ flex: 1 }}>
-                                    <Box variant="h3" color="text-label">
-                                      Step {index + 1}: {step.title}
-                                    </Box>
-                                    <Box fontSize="body-m" color="text-body-secondary" padding={{ top: 'xs' }}>
-                                      {step.desc}
-                                    </Box>
-                                  </div>
-                                  <div style={{
-                                    width: '36px',
-                                    height: '36px',
-                                    borderRadius: '50%',
-                                    backgroundColor: step.color,
-                                    color: 'white',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '18px',
-                                    fontWeight: 'bold'
-                                  }}>
-                                    {index + 1}
-                                  </div>
-                                </div>
-                              </Container>
-                            ))}
-                          </SpaceBetween>
-                        )}
+                                  </li>
+                                  <li>Select <strong>'Register'</strong></li>
+                                </ol>
+                              </Box>
+                            </SpaceBetween>
+                          </Container>
+
+                          {/* Step 6: Verify Registration Success */}
+                          <Container>
+                            <SpaceBetween size="s">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ fontSize: '32px' }}>🎉</div>
+                                <Box variant="h3">Step 6: Verify Registration Success</Box>
+                              </div>
+                              <Box fontSize="body-s" color="text-body-secondary" padding={{ left: 'xxl' }}>
+                                <Box fontWeight="bold" padding={{ bottom: 'xs' }}>Expected outcomes:</Box>
+                                <ul style={{ marginLeft: '20px' }}>
+                                  <li>✓ Blue banner appears confirming successful registration</li>
+                                  <li>✓ Email notification sent to your admin email</li>
+                                  <li>✓ Customer record created in DynamoDB</li>
+                                </ul>
+                              </Box>
+                            </SpaceBetween>
+                          </Container>
+                        </SpaceBetween>
                         
                         <Alert type="success">
                           <SpaceBetween size="xs">
-                            <Box fontWeight="bold">Expected Results:</Box>
+                            <Box fontWeight="bold">🎉 Buyer Experience Simulation Completed Successfully!</Box>
                             <Box fontSize="body-s">
-                              ✓ Blue banner confirms successful registration<br/>
-                              ✓ Email notification with subscription details<br/>
-                              ✓ Customer record created in DynamoDB
+                              Your SaaS integration is working correctly:
                             </Box>
+                            <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
+                              <li>✓ Marketplace purchase flow</li>
+                              <li>✓ Registration page redirect</li>
+                              <li>✓ SNS notifications</li>
+                              <li>✓ Customer data capture</li>
+                            </ul>
                           </SpaceBetween>
                         </Alert>
 
@@ -1095,8 +1220,8 @@ export default function SaaSIntegrationPage() {
                                   // Contract-based pricing -> Public Visibility
                                   console.log('[FRONTEND DEBUG] Contract-based pricing detected, showing public visibility guide');
                                   const visibilityResponse = await axios.post('/api/public-visibility-guide', {});
-                                  if (visibilityResponse.data.success) {
-                                    setVisibilitySteps(visibilityResponse.data.steps);
+                                  if (visibilityResponse.data.success && visibilityResponse.data.guide?.steps) {
+                                    setVisibilitySteps(visibilityResponse.data.guide.steps);
                                     setShowVisibilityGuide(true);
                                     setCurrentSubStep(3);
                                   }
@@ -1104,8 +1229,8 @@ export default function SaaSIntegrationPage() {
                                   // Usage-based or hybrid -> Metering
                                   console.log('[FRONTEND DEBUG] Usage-based pricing detected, showing metering guide');
                                   const meteringResponse = await axios.post('/api/metering-guide', {});
-                                  if (meteringResponse.data.success) {
-                                    setMeteringSteps(meteringResponse.data.steps);
+                                  if (meteringResponse.data.success && meteringResponse.data.guide?.steps) {
+                                    setMeteringSteps(meteringResponse.data.guide.steps);
                                     setShowMeteringGuide(true);
                                     setCurrentSubStep(3);
                                   }

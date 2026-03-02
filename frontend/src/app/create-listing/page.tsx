@@ -117,8 +117,10 @@ export default function CreateListingPage() {
       });
     }
 
-    // Start polling for changesets
-    startPolling(sessionStart);
+    // Start polling for changesets after a 10 second delay to allow backend to create first changeset
+    setTimeout(() => {
+      startPolling(sessionStart);
+    }, 10000);
   };
 
   const startPolling = (sessionStart: Date) => {

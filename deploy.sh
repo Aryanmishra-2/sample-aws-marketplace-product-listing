@@ -98,7 +98,7 @@ agents:
 EOF
     fi
 
-    agentcore deploy --agent marketplaceAgent --auto-update-on-conflict
+    agentcore launch --agent marketplaceAgent --auto-update-on-conflict
 
     AGENTCORE_RUNTIME_ARN=$(grep "agent_arn:" .bedrock_agentcore.yaml | head -1 | awk '{print $2}' || echo "")
     if [ -z "$AGENTCORE_RUNTIME_ARN" ]; then

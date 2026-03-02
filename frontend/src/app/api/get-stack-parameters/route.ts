@@ -4,7 +4,14 @@ import { invokeAgentCore } from '@/lib/agentcore';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { stack_name, product_id, credentials, region } = body;
+    const { stack_name, region, credentials } = body;
+
+    if (!stack_name || !credentials) {
+      return NextResponse.json(
+        { success: false, error: 'Missing required parameters' },
+        { status: 400 }
+      );
+    }
 
     // Extract credentials (support both camelCase and snake_case)
     const accessKeyId = credentials?.accessKeyId || credentials?.aws_access_key_id;
@@ -13,50 +20,51 @@ export async function POST(request: NextRequest) {
 
     if (!accessKeyId || !secretAccessKey) {
       return NextResponse.json(
-        { success: false, error: 'AWS credentials are required' },
+        { success: false, error: 'Missing AWS credentials' },
         { status: 400 }
       );
     }
 
-    if (!stack_name && !product_id) {
-      return NextResponse.json(
-        { success: false, error: 'stack_name or product_id is required' },
-        { status: 400 }
-      );
-    }
+    console.log('[GET-STACK-PARAMETERS] Fetching parameters for stack:', stack_name);
 
     // Invoke AgentCore get_stack_parameters action
     const result = await invokeAgentCore(
       {
         action: 'get_stack_parameters',
         stack_name,
-        product_id,
         region: region || 'us-east-1',
       } as any,
       { accessKeyId, secretAccessKey, sessionToken }
     );
 
     if (!result.success) {
+      console.error('[GET-STACK-PARAMETERS] AgentCore error:', result.error);
       return NextResponse.json(
-        { success: false, error: result.error || 'Failed to get stack parameters' },
+        { 
+          success: false, 
+          error: result.error || 'Failed to get stack parameters' 
+        },
         { status: 500 }
       );
     }
 
-    const response = result.response as Record<string, unknown>;
+    console.log('[GET-STACK-PARAMETERS] Stack parameters retrieved:', result);
 
     return NextResponse.json({
-      success: response.success !== false,
-      stack_name: response.stack_name,
-      parameters: response.parameters,
-      outputs: response.outputs,
-      status: response.status,
+      success: true,
+      pricing_model: result.pricing_model,
+      pricing_dimensions: result.pricing_dimensions,
+      parameters: result.parameters,
+      outputs: result.outputs,
+      status: result.status,
     });
-  } catch (error: unknown) {
-    console.error('Stack parameters API error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to get stack parameters';
+  } catch (error: any) {
+    console.error('[GET-STACK-PARAMETERS] Error:', error);
     return NextResponse.json(
-      { success: false, error: errorMessage },
+      { 
+        success: false, 
+        error: error.message || 'Failed to get stack parameters' 
+      },
       { status: 500 }
     );
   }

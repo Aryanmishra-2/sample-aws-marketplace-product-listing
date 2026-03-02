@@ -19,6 +19,8 @@ import {
   Badge,
   Modal,
   Link,
+  Select,
+  FormField,
 } from '@cloudscape-design/components';
 import { useStore } from '@/lib/store';
 import WorkflowNav from '@/components/WorkflowNav';
@@ -37,6 +39,15 @@ export default function SellerRegistrationPage() {
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const [revalidating, setRevalidating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [selectedProductForContinue, setSelectedProductForContinue] = useState<string | null>(null);
+  const [selectedPricingModel, setSelectedPricingModel] = useState<any>(null);
+
+  const PRICING_OPTIONS = [
+    { label: 'Usage-based (Subscriptions)', value: 'subscriptions', description: 'Pay-as-you-go pricing model' },
+    { label: 'Contract-based (Contracts)', value: 'contracts', description: 'Fixed-term contract pricing' },
+    { label: 'Contract with Consumption', value: 'contracts_with_subscription', description: 'Hybrid pricing model' }
+  ];
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -286,9 +297,8 @@ export default function SellerRegistrationPage() {
                                   <Button
                                     variant="primary"
                                     onClick={() => {
-                                      useStore.getState().setProductId(item.product_id);
-                                      useStore.getState().setCurrentStep('saas_deployment');
-                                      router.push(`/saas-integration?productId=${item.product_id}&skipDeployment=true`);
+                                      setSelectedProductForContinue(item.product_id);
+                                      setShowPricingModal(true);
                                     }}
                                   >
                                     Continue
@@ -366,6 +376,95 @@ export default function SellerRegistrationPage() {
                     Open AWS Marketplace Management Portal
                   </Button>
                 </Box>
+
+                {/* Pricing Model Selection Modal for Continue Button */}
+                <Modal
+                  visible={showPricingModal}
+                  onDismiss={() => {
+                    setShowPricingModal(false);
+                    setSelectedProductForContinue(null);
+                    setSelectedPricingModel(null);
+                  }}
+                  header="Select Pricing Model"
+                  footer={
+                    <Box float="right">
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button 
+                          variant="link" 
+                          onClick={() => {
+                            setShowPricingModal(false);
+                            setSelectedProductForContinue(null);
+                            setSelectedPricingModel(null);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="primary"
+                          disabled={!selectedPricingModel}
+                          onClick={() => {
+                            if (selectedProductForContinue && selectedPricingModel) {
+                              // Store pricing model in localStorage
+                              try {
+                                const listingData = {
+                                  pricing_model: selectedPricingModel.value,
+                                  timestamp: new Date().toISOString()
+                                };
+                                localStorage.setItem(`listing_data_${selectedProductForContinue}`, JSON.stringify(listingData));
+                                console.log('[SELLER-REG] Stored pricing model for Continue:', selectedPricingModel.value);
+                              } catch (e) {
+                                console.error('[SELLER-REG] Failed to store pricing model:', e);
+                              }
+
+                              // Navigate to workflow with pricing model
+                              const stackName = `saas-integration-${selectedProductForContinue}`;
+                              useStore.getState().setProductId(selectedProductForContinue);
+                              router.push(`/saas-workflow?productId=${selectedProductForContinue}&stackName=${stackName}&pricingModel=${selectedPricingModel.value}`);
+                              
+                              // Reset modal state
+                              setShowPricingModal(false);
+                              setSelectedProductForContinue(null);
+                              setSelectedPricingModel(null);
+                            }
+                          }}
+                        >
+                          Continue to Workflow
+                        </Button>
+                      </SpaceBetween>
+                    </Box>
+                  }
+                >
+                  <SpaceBetween size="m">
+                    <Alert type="info">
+                      <Box fontWeight="bold">Select the pricing model for your product</Box>
+                      <Box fontSize="body-s" padding={{ top: 'xs' }}>
+                        This determines the workflow steps (metering vs. public visibility) after buyer experience testing.
+                      </Box>
+                    </Alert>
+
+                    <FormField
+                      label="Pricing Model"
+                      description="Choose the pricing model that matches your product configuration"
+                    >
+                      <Select
+                        selectedOption={selectedPricingModel}
+                        onChange={({ detail }) => setSelectedPricingModel(detail.selectedOption)}
+                        options={PRICING_OPTIONS}
+                        placeholder="Select a pricing model"
+                        selectedAriaLabel="Selected"
+                      />
+                    </FormField>
+
+                    <Box fontSize="body-s" color="text-body-secondary">
+                      <Box fontWeight="bold" padding={{ bottom: 'xs' }}>Pricing Model Details:</Box>
+                      <ul style={{ marginLeft: '20px' }}>
+                        <li><strong>Usage-based (Subscriptions):</strong> Customers pay based on usage. Requires metering configuration.</li>
+                        <li><strong>Contract-based (Contracts):</strong> Fixed-term contracts. Proceeds directly to public visibility.</li>
+                        <li><strong>Contract with Consumption:</strong> Hybrid model with both contract and usage-based pricing. Requires metering.</li>
+                      </ul>
+                    </Box>
+                  </SpaceBetween>
+                </Modal>
               </SpaceBetween>
             </ContentLayout>
           }

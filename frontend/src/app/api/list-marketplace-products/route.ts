@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { 
-  MarketplaceCatalogClient, 
-  ListEntitiesCommand,
-  DescribeEntityCommand 
-} from '@aws-sdk/client-marketplace-catalog';
+import { invokeAgentCore } from '@/lib/agentcore';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,53 +13,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const catalogClient = new MarketplaceCatalogClient({
-      region: 'us-east-1',
-      credentials: {
+    // Call AgentCore backend which has the full product listing logic
+    const result = await invokeAgentCore(
+      {
+        action: 'list_marketplace_products',
+      } as any,
+      {
         accessKeyId: aws_access_key_id,
         secretAccessKey: aws_secret_access_key,
         sessionToken: aws_session_token,
-      },
-    });
+      }
+    );
 
-    // List all SaaS products
-    const listCommand = new ListEntitiesCommand({
-      Catalog: 'AWSMarketplace',
-      EntityType: 'SaaSProduct',
-    });
-
-    const response = await catalogClient.send(listCommand);
-    
-    const products = (response.EntitySummaryList || []).map((entity) => ({
-      product_id: entity.EntityId,
-      title: entity.Name || 'Untitled Product',
-      status: 'Active',
-      visibility: entity.Visibility || 'Limited',
-      entity_type: entity.EntityType,
-      last_modified: entity.LastModifiedDate,
-    }));
-
-    return NextResponse.json({
-      success: true,
-      products: products,
-      total: products.length,
-    });
-  } catch (error: any) {
-    console.error('List marketplace products API error:', error);
-    
-    // Handle specific AWS errors
-    if (error.name === 'AccessDeniedException') {
+    if (!result.success) {
+      console.error('AgentCore list products error:', result.error);
       return NextResponse.json({
         success: true,
         products: [],
         total: 0,
-        message: 'No marketplace access or no products found',
+        message: result.error || 'No products found',
       });
     }
+
+    const response = result.response as Record<string, unknown>;
+
+    return NextResponse.json({
+      success: true,
+      products: response.products || [],
+      total: response.count || 0,
+      account_id: response.account_id,
+    });
+  } catch (error: any) {
+    console.error('List marketplace products API error:', error);
     
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to list marketplace products' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: true,
+      products: [],
+      total: 0,
+      message: 'Failed to load products',
+    });
   }
 }

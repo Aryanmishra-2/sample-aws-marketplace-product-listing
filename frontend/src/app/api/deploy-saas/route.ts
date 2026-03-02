@@ -50,6 +50,17 @@ export async function POST(request: NextRequest) {
     }
 
     const response = result.response as Record<string, unknown>;
+    
+    console.log('[DEPLOY SAAS] Backend response:', JSON.stringify(response, null, 2));
+
+    // Check if response itself indicates failure
+    if (response.success === false) {
+      console.error('[DEPLOY SAAS] Backend returned success=false:', response.error);
+      return NextResponse.json(
+        { success: false, error: response.error || 'Deployment failed' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: response.success !== false,

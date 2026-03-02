@@ -34,7 +34,7 @@ export default function SaaSWorkflowPage() {
   const [sessionToken, setSessionToken] = useState('');
   const [email, setEmail] = useState('');
   const [region, setRegion] = useState('us-east-1');
-  const [pricingModel, setPricingModel] = useState(pricingModelParam || '');
+  const [pricingModel, setPricingModel] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -55,17 +55,37 @@ export default function SaaSWorkflowPage() {
       setSessionToken(credentials.aws_session_token || '');
     }
 
+    // Initialize pricing model from URL or localStorage
+    if (pricingModelParam) {
+      console.log('[WORKFLOW] Using pricing model from URL:', pricingModelParam);
+      setPricingModel(pricingModelParam);
+    } else {
+      // Try to get from localStorage
+      try {
+        const listingData = localStorage.getItem(`listing_data_${productId}`);
+        if (listingData) {
+          const parsed = JSON.parse(listingData);
+          if (parsed.pricing_model) {
+            console.log('[WORKFLOW] Using pricing model from localStorage:', parsed.pricing_model);
+            setPricingModel(parsed.pricing_model);
+          }
+        }
+      } catch (e) {
+        console.error('[WORKFLOW] Failed to read pricing model from localStorage:', e);
+      }
+    }
+
     // Fetch buyer experience steps
     fetchBuyerSteps();
-  }, [isAuthenticated, productId, credentials, router]);
+  }, [isAuthenticated, productId, credentials, router, pricingModelParam]);
 
   const fetchBuyerSteps = async () => {
     try {
       const response = await axios.post('/api/buyer-experience-guide', {});
       console.log('[WORKFLOW DEBUG] Buyer steps response:', response.data);
-      if (response.data.success) {
+      if (response.data.success && response.data.guide?.steps) {
         // Transform steps to include icons and colors
-        const transformedSteps = response.data.steps.map((step: any, index: number) => ({
+        const transformedSteps = response.data.guide.steps.map((step: any, index: number) => ({
           ...step,
           icon: ['🌐', '✅', '📝', '🛒', '⚙️', '💳', '👤', '📝', '🎉'][index] || '📋',
           color: ['#0073bb', '#037f0c', '#ff9900', '#ec7211', '#232f3e', '#16191f', '#0073bb', '#037f0c', '#ff9900'][index] || '#545b64'
@@ -99,9 +119,26 @@ export default function SaaSWorkflowPage() {
       console.log('[WORKFLOW DEBUG] Product ID:', productId);
       console.log('[WORKFLOW DEBUG] Stack Name:', stackName);
       
-      // If pricing model not available, fetch from stack
+      // Use pricing model from state (already loaded from URL or localStorage)
       let currentPricingModel = pricingModel;
       
+      // If still not available, try localStorage one more time
+      if (!currentPricingModel) {
+        console.log('[WORKFLOW DEBUG] Pricing model not in state, checking localStorage...');
+        try {
+          const listingData = localStorage.getItem(`listing_data_${productId}`);
+          if (listingData) {
+            const parsed = JSON.parse(listingData);
+            currentPricingModel = parsed.pricing_model;
+            console.log('[WORKFLOW DEBUG] Found pricing model in localStorage:', currentPricingModel);
+            setPricingModel(currentPricingModel);
+          }
+        } catch (e) {
+          console.error('[WORKFLOW DEBUG] Failed to read from localStorage:', e);
+        }
+      }
+      
+      // Last resort: fetch from CloudFormation stack
       if (!currentPricingModel) {
         console.log('[WORKFLOW DEBUG] Fetching pricing model from CloudFormation stack...');
         const stackResponse = await axios.post('/api/get-stack-parameters', {
