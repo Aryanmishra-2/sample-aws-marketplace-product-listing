@@ -82,6 +82,11 @@ aws ecs delete-service --cluster ai-agent-marketplace --service ai-agent-marketp
 aws elbv2 delete-load-balancer --load-balancer-arn $(aws elbv2 describe-load-balancers --names ai-agent-marketplace-alb --query "LoadBalancers[0].LoadBalancerArn" --output text --region us-east-1) --region us-east-1
 ```
 
+## Notes
+
+- This lab uses pre-built assets for a simple deployment in the N. Virginia (us-east-1) AWS Region. For any customization or deployments to other Regions, you must re-build it from the source in [aws-samples/aws-marketplace-serverless-saas-integration](https://github.com/aws-samples/aws-marketplace-serverless-saas-integration) GitHub repository.
+- The solution created in this lab serves as a reference demonstrating the core components needed for integrating and operating a SaaS listing in AWS Marketplace. While we periodically update the solution to reflect current integration standards, it does not adhere to any service level agreement. Proceed with caution if you intend to use this solution in your production accounts, or on production or other critical data. You are responsible for testing, securing, and optimizing AWS Content, such as sample code, as appropriate for production grade use based on your specific quality control practices and standards.
+
 ## License
 
 See [LICENSE](LICENSE) file.
