@@ -1,6 +1,8 @@
-# AWS Marketplace Seller Portal
+# AWS Marketplace QuickList
 
-AI-powered portal for AWS Marketplace seller registration and product listing creation.
+This sample demonstrates an AI-powered portal that guides AWS Partners through the end-to-end process of becoming an AWS Marketplace seller, from registration to product listing creation. It uses a Next.js frontend hosted on ECS Fargate behind an Application Load Balancer with Cognito authentication, and a set of specialized AI agents running on Amazon Bedrock AgentCore Runtime — including agents for seller registration, SaaS product creation, deployment, buyer experience, metering, and public visibility — all deployed via AWS CodeBuild and backed by Amazon Bedrock (Claude) for intelligent, conversational assistance.
+
+![Architecture Diagram](architecture.jpg)
 
 ## Quick Start
 
@@ -16,6 +18,7 @@ AI-powered portal for AWS Marketplace seller registration and product listing cr
 ```bash
 python3 -m venv venv
 source venv/bin/activate
+pip3 install -r requirements.txt
 ./deploy.sh
 ```
 
