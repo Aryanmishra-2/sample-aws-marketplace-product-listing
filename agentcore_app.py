@@ -387,7 +387,7 @@ For technical AWS service questions outside Marketplace, direct users to AWS doc
     })
     
     response = bedrock_client.converse(
-        modelId='anthropic.claude-3-sonnet-20240229-v1:0',
+        modelId='us.anthropic.claude-sonnet-4-6',
         system=[{"text": system_prompt}],
         messages=messages,
         inferenceConfig={"maxTokens": 2048, "temperature": 0.7}
@@ -549,7 +549,7 @@ Additional Context: {product_context.get('additional_context', 'Not provided')}
 """
 
     response = bedrock_client.converse(
-        modelId='anthropic.claude-3-sonnet-20240229-v1:0',
+        modelId='us.anthropic.claude-sonnet-4-6',
         system=[{"text": analysis_prompt}],
         messages=[{"role": "user", "content": [{"text": f"Analyze this product:\n{product_info}"}]}],
         inferenceConfig={"maxTokens": 2048, "temperature": 0.3}
@@ -640,7 +640,7 @@ IMPORTANT:
 Format as JSON with keys: product_title, short_description, long_description, highlights (array), search_keywords (array), categories (array)"""
 
     response = bedrock_client.converse(
-        modelId='anthropic.claude-3-sonnet-20240229-v1:0',
+        modelId='us.anthropic.claude-sonnet-4-6',
         system=[{"text": "Generate AWS Marketplace listing content. Respond ONLY with valid JSON."}],
         messages=[{"role": "user", "content": [{"text": prompt}]}],
         inferenceConfig={"maxTokens": 4096, "temperature": 0.3}
@@ -714,7 +714,7 @@ Format as JSON with:
 }}"""
 
     response = bedrock_client.converse(
-        modelId='anthropic.claude-3-sonnet-20240229-v1:0',
+        modelId='us.anthropic.claude-sonnet-4-6',
         system=[{"text": "Suggest AWS Marketplace pricing. Respond ONLY with valid JSON."}],
         messages=[{"role": "user", "content": [{"text": prompt}]}],
         inferenceConfig={"maxTokens": 2048, "temperature": 0.3}

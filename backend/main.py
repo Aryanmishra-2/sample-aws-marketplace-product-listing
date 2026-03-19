@@ -785,9 +785,9 @@ Return ONLY the JSON object, no other text."""
         
         # Try multiple models
         models = [
-            "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-            "anthropic.claude-3-5-sonnet-20240620-v1:0",
-            "anthropic.claude-3-sonnet-20240229-v1:0"
+            "us.anthropic.claude-sonnet-4-6",
+            "us.anthropic.claude-sonnet-4-20250514-v1:0",
+            "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
         ]
         
         response_text = None
@@ -913,9 +913,9 @@ async def generate_content(data: Dict[str, Any]):
         }
         
         models = [
-            "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-            "anthropic.claude-3-5-sonnet-20240620-v1:0",
-            "anthropic.claude-3-sonnet-20240229-v1:0"
+            "us.anthropic.claude-sonnet-4-6",
+            "us.anthropic.claude-sonnet-4-20250514-v1:0",
+            "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
         ]
         
         response_text = None
@@ -1003,9 +1003,9 @@ async def suggest_pricing(data: Dict[str, Any]):
         }
         
         models = [
-            "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-            "anthropic.claude-3-5-sonnet-20240620-v1:0",
-            "anthropic.claude-3-sonnet-20240229-v1:0"
+            "us.anthropic.claude-sonnet-4-6",
+            "us.anthropic.claude-sonnet-4-20250514-v1:0",
+            "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
         ]
         
         response_text = None
@@ -3060,9 +3060,9 @@ Provide a detailed, helpful answer based on the knowledge base. Format your resp
         
         # Try multiple models
         models = [
-            "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-            "anthropic.claude-3-5-sonnet-20240620-v1:0",
-            "anthropic.claude-3-sonnet-20240229-v1:0"
+            "us.anthropic.claude-sonnet-4-6",
+            "us.anthropic.claude-sonnet-4-20250514-v1:0",
+            "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
         ]
         
         for model_id in models:

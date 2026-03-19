@@ -14,7 +14,7 @@ def analyze_product(
     documentation_url: str = None
 ) -> Dict[str, Any]:
     """
-    Analyze product using Amazon Bedrock Claude 3.5 Sonnet
+    Analyze product using Amazon Bedrock Claude Sonnet 4.6
     
     Args:
         session: Boto3 session with valid credentials
@@ -46,7 +46,7 @@ Provide a comprehensive analysis including:
 Format the response as JSON with these keys: features, target_audience, advantages, requirements, aws_integrations"""
 
         response = bedrock.invoke_model(
-            modelId='us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+            modelId='us.anthropic.claude-sonnet-4-6',
             body=json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 2000,
@@ -109,7 +109,7 @@ Generate:
 Format as JSON with keys: title, short_description, long_description, highlights"""
 
         response = bedrock.invoke_model(
-            modelId='us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+            modelId='us.anthropic.claude-sonnet-4-6',
             body=json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 3000,
@@ -173,7 +173,7 @@ Recommend:
 Format as JSON with keys: model, dimensions, price_points, contract_durations"""
 
         response = bedrock.invoke_model(
-            modelId='us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+            modelId='us.anthropic.claude-sonnet-4-6',
             body=json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 2000,
@@ -235,7 +235,7 @@ Improve:
 Return the optimized version in the same JSON format."""
 
         response = bedrock.invoke_model(
-            modelId='us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+            modelId='us.anthropic.claude-sonnet-4-6',
             body=json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 3000,
