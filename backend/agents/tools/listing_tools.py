@@ -1634,9 +1634,9 @@ class ListingTools:
             # Wait for offer info changeset to complete
             info_changeset_id = info_result.get("change_set_id")
             if info_changeset_id:
-                max_wait = 20  # 20 attempts = ~60 seconds
+                max_wait = 60  # 60 attempts * 5s = 300 seconds
                 for attempt in range(max_wait):
-                    time.sleep(3)
+                    time.sleep(5)
                     status_result = self.get_listing_status(info_changeset_id)
                     status = status_result.get("status", "UNKNOWN")
                     
@@ -1669,7 +1669,7 @@ class ListingTools:
                 renewal_changeset_id = renewal_result.get("change_set_id")
                 if renewal_changeset_id:
                     for attempt in range(max_wait):
-                        time.sleep(3)
+                        time.sleep(5)
                         status_result = self.get_listing_status(renewal_changeset_id)
                         status = status_result.get("status", "UNKNOWN")
                         
@@ -1702,7 +1702,7 @@ class ListingTools:
                 targeting_changeset_id = targeting_result.get("change_set_id")
                 if targeting_changeset_id:
                     for attempt in range(max_wait):
-                        time.sleep(3)
+                        time.sleep(5)
                         status_result = self.get_listing_status(targeting_changeset_id)
                         status = status_result.get("status", "UNKNOWN")
                         

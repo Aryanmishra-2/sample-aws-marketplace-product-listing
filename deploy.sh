@@ -76,8 +76,8 @@ agents:
     name: marketplaceAgent
     entrypoint: agentcore_app.py
     deployment_type: container
-    platform: linux/arm64
-    container_runtime: docker
+    platform: linux/amd64
+    container_runtime: codebuild
     source_path: .
     aws:
       execution_role_auto_create: true

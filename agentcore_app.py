@@ -336,13 +336,10 @@ async def handle_chat(payload: dict, access_key: str, secret_key: str, session_t
     
     conversation_history = payload.get("conversation_history", [])
     
-    # Use Bedrock for chat
+    # Use Bedrock for chat — use runtime role credentials (not user creds)
     bedrock_client = boto3.client(
         'bedrock-runtime',
         region_name='us-east-1',
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        aws_session_token=session_token
     )
     
     system_prompt = """You are an AWS Marketplace Help Agent specializing in seller registration and SaaS product listings.
@@ -522,9 +519,6 @@ async def handle_analyze_product(payload: dict, access_key: str, secret_key: str
     bedrock_client = boto3.client(
         'bedrock-runtime',
         region_name='us-east-1',
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        aws_session_token=session_token
     )
     
     analysis_prompt = """Analyze the provided product information and generate a JSON response with:
@@ -585,9 +579,6 @@ async def handle_generate_content(payload: dict, access_key: str, secret_key: st
     bedrock_client = boto3.client(
         'bedrock-runtime',
         region_name='us-east-1',
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        aws_session_token=session_token
     )
     
     product_name = analysis.get("product_name", analysis.get("Product Name", ""))
@@ -676,9 +667,6 @@ async def handle_suggest_pricing(payload: dict, access_key: str, secret_key: str
     bedrock_client = boto3.client(
         'bedrock-runtime',
         region_name='us-east-1',
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        aws_session_token=session_token
     )
     
     prompt = f"""Based on this product analysis, suggest AWS Marketplace pricing:

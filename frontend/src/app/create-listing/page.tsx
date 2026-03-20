@@ -209,9 +209,10 @@ export default function CreateListingPage() {
 
         setStages(newStages);
 
-        // Check if done (Release to Limited completed OR 8+ changesets)
-        if (hasReleasedToLimited || completedCount >= 8) {
-          console.log('[poll] ✅ All done! Stopping polling.');
+        // Check if done — only when we see the actual Release to Limited changeset succeed
+        // or the backend response confirms published_to_limited
+        if (hasReleasedToLimited) {
+          console.log('[poll] ✅ All done! Release to Limited confirmed. Stopping polling.');
           if (pollingRef.current) {
             clearInterval(pollingRef.current);
             pollingRef.current = null;
@@ -219,7 +220,7 @@ export default function CreateListingPage() {
           setStages(STAGE_NAMES.map(name => ({ name, status: 'complete', message: 'Completed' })));
           setSuccess(true);
           setLoading(false);
-          setPublishedToLimited(hasReleasedToLimited);
+          setPublishedToLimited(true);
         }
 
       } catch (err) {
@@ -238,9 +239,10 @@ export default function CreateListingPage() {
           clearInterval(pollingRef.current);
           pollingRef.current = null;
         }
-        // If we have some progress, show success
+        // If we have some progress but release hasn't completed, show partial success
         if (completedChangesets.size > 0) {
           setSuccess(true);
+          setError('Listing created but Publish to Limited may still be in progress. Check the AWS Marketplace console.');
         } else {
           setError('Timeout - check AWS Marketplace console');
         }
