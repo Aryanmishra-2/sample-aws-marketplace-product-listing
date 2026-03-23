@@ -259,20 +259,28 @@ class CreateSaasAgent(Agent):
                 print(f"  → No dimensions found in marketplace listing")
                 return None
             
-            # Extract dimension keys/names
+            # Extract dimension keys/names - only METERED dimensions (skip contract/entitled)
             dimension_names = []
             for dim in dimensions:
                 print(f"  → [DEBUG] Raw dimension data: {dim}")
                 
-                # For AWS Marketplace metering, we need the 'Key' field (API identifier)
-                # This is what's used in BatchMeterUsage API calls
                 key = dim.get('Key')
                 name = dim.get('Name') 
                 description = dim.get('Description')
+                dim_types = dim.get('Types', [])
+                
+                # Skip contract/entitled dimensions - only include metered ones
+                # Types can be ['Metered'], ['Entitled'], or ['Metered', 'Entitled'] etc.
+                is_metered = 'Metered' in dim_types if dim_types else True  # default to include if no Types field
+                is_entitled_only = dim_types and 'Entitled' in dim_types and 'Metered' not in dim_types
+                
+                if is_entitled_only:
+                    print(f"  → ✗ Skipping CONTRACT/ENTITLED dimension: Key='{key}', Name='{name}', Types={dim_types}")
+                    continue
                 
                 if key:
                     dimension_names.append(key)
-                    print(f"  → Found dimension: Key='{key}', Name='{name}', Description='{description}'")
+                    print(f"  → ✓ Found METERED dimension: Key='{key}', Name='{name}', Types={dim_types}")
                 else:
                     print(f"  → [WARNING] Dimension missing 'Key' field: {dim}")
             

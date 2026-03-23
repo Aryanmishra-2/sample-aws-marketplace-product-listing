@@ -513,11 +513,17 @@ export default function SaaSWorkflowPage() {
                             {step.status === 'warning' && '⚠️'}
                             {step.status === 'skipped' && '⊘'}
                             {step.status === 'in_progress' && '⏳'}
+                            {step.status === 'pending' && '○'}
                           </div>
                           <div style={{ flex: 1 }}>
                             <Box variant="h3" color="text-label">
-                              Step {step.step}: {step.name}
+                              Step {step.step}: {step.name || step.title}
                             </Box>
+                            {step.description && (
+                              <Box fontSize="body-s" color="text-body-secondary" padding={{ top: 'xxs' }}>
+                                {step.description}
+                              </Box>
+                            )}
                             {step.status === 'completed' && (
                               <StatusIndicator type="success">Completed</StatusIndicator>
                             )}

@@ -1889,6 +1889,52 @@ def handle_run_metering(payload: dict, access_key: str, secret_key: str, session
         print(f"[HANDLE_RUN_METERING] Metering agent returned: {result}")
         print(f"[HANDLE_RUN_METERING] Result type: {type(result)}")
         print(f"[HANDLE_RUN_METERING] Result keys: {result.keys() if isinstance(result, dict) else 'N/A'}")
+        
+        # Step 2: Find and invoke the hourly metering Lambda to process the pending record
+        if isinstance(result, dict) and result.get("status") == "success":
+            print(f"[HANDLE_RUN_METERING] Entitlement check succeeded, now triggering hourly Lambda...")
+            try:
+                lambda_client = boto3.client(
+                    'lambda',
+                    region_name='us-east-1',
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                    aws_session_token=session_token
+                )
+                
+                # Find the hourly metering Lambda by looking for 'Hourly' in name
+                functions = lambda_client.list_functions()['Functions']
+                lambda_function_name = None
+                for func in functions:
+                    func_name = func['FunctionName']
+                    if 'hourly' in func_name.lower():
+                        lambda_function_name = func_name
+                        print(f"[HANDLE_RUN_METERING] ✓ Found hourly Lambda: {lambda_function_name}")
+                        break
+                
+                if lambda_function_name:
+                    print(f"[HANDLE_RUN_METERING] Invoking trigger_hourly_metering...")
+                    lambda_result = metering_agent.trigger_hourly_metering(
+                        lambda_function_name=lambda_function_name,
+                        access_key=access_key,
+                        secret_key=secret_key,
+                        session_token=session_token
+                    )
+                    print(f"[HANDLE_RUN_METERING] Lambda trigger result: {lambda_result}")
+                    result["lambda_trigger"] = lambda_result
+                else:
+                    print(f"[HANDLE_RUN_METERING] ⚠ No hourly Lambda found for product_id: {product_id}")
+                    print(f"[HANDLE_RUN_METERING] Available functions with 'Hourly':")
+                    for func in functions:
+                        if 'Hourly' in func['FunctionName']:
+                            print(f"[HANDLE_RUN_METERING]   - {func['FunctionName']}")
+                    result["lambda_trigger"] = {"status": "not_found", "message": f"No hourly Lambda found for product {product_id}"}
+            except Exception as lambda_err:
+                print(f"[HANDLE_RUN_METERING] ⚠ Failed to trigger Lambda: {str(lambda_err)}")
+                import traceback
+                print(f"[HANDLE_RUN_METERING] Traceback: {traceback.format_exc()}")
+                result["lambda_trigger"] = {"status": "error", "message": str(lambda_err)}
+        
         return result
     except Exception as e:
         print(f"[HANDLE_RUN_METERING] EXCEPTION: {str(e)}")
