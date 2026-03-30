@@ -1,10 +1,10 @@
 {
-  "account_id": "230049944595",
+  "account_id": "<YOUR_ACCOUNT_ID>",
   "region": "us-east-1",
   "environment": "dev",
   
   "resources": {
-    "s3_bucket": "marketplace-agents-kb-230049944595",
+    "s3_bucket": "marketplace-agents-kb-<YOUR_ACCOUNT_ID>",
     "dynamodb_table": "marketplace-agent-memory",
     "log_group": "/aws/bedrock/agents/marketplace",
     "opensearch_collection": "marketplace-docs"
@@ -13,7 +13,7 @@
   "agents": {
     "help_agent": {
       "name": "MarketplaceHelpAgent",
-      "description": "AWS Marketplace Help and Documentation Assistant",
+      "description": "AWS Marketplace Help and Documentation Assistant powered by Amazon Bedrock",
       "model_id": "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
       "instruction_file": "agents/help-agent/instructions.txt",
       "idle_session_ttl": 3600,
@@ -21,7 +21,7 @@
     },
     "marketplace_agent": {
       "name": "MarketplaceListingAgent",
-      "description": "AWS Marketplace Product Listing Orchestrator",
+      "description": "AWS Marketplace Product Listing Orchestrator powered by Amazon Bedrock",
       "model_id": "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
       "instruction_file": "agents/marketplace-agent/instructions.txt",
       "idle_session_ttl": 7200

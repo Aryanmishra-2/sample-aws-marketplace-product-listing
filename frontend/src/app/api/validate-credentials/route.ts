@@ -1,3 +1,5 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 import { NextRequest, NextResponse } from 'next/server';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 
@@ -35,29 +37,17 @@ export async function POST(request: NextRequest) {
     // Extract user name from ARN
     const arnParts = userArn.split('/');
     const userName = arnParts[arnParts.length - 1] || userId;
-    
-    // Determine region type based on account
-    let regionType = 'AWS_INC';
-    // AWS India accounts typically have specific patterns
-    if (accountId.startsWith('533')) {
-      regionType = 'AWS_INDIA';
-    }
 
     return NextResponse.json({
       success: true,
       account_id: accountId,
-      region_type: regionType,
       user_arn: userArn,
       user_type: userArn.includes(':assumed-role/') ? 'assumed_role' : 'iam_user',
       user_name: userName,
       organization: 'AWS Account ' + accountId,
       session_id: 'session-' + Date.now(),
-      permissions: {
-        marketplace: true,
-        cloudformation: true,
-        s3: true,
-      },
-      has_required_permissions: true,
+      permissions_verified: false,
+      permissions_note: 'STS identity verified. Specific IAM permissions have not been checked.',
       can_proceed: true,
     });
   } catch (error: any) {

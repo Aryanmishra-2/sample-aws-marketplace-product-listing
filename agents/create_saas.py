@@ -1,6 +1,9 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 from strands import Agent
 import boto3
 import json
+import os
 
 class CreateSaasAgent(Agent):
     def __init__(self):
@@ -122,7 +125,7 @@ class CreateSaasAgent(Agent):
                     print(f"[CREATE_SAAS] ⚠ WARNING: Using marketplace API dimensions, not user-entered!")
                     return dimensions
                 else:
-                    print(f"[CREATE_SAAS] → PRIORITY 3: Marketplace API returned no dimensions")
+                    print(f"[CREATE_SAAS] → PRIORITY 3: AWS Marketplace API returned no dimensions")
             else:
                 print(f"[CREATE_SAAS] → PRIORITY 3: Skipped (no credentials or product ID)")
             
@@ -420,5 +423,5 @@ class CreateSaasAgent(Agent):
             return None
     
     def get_email_dimension(self):
-        return "jain.manasvi1999@gmail.com"
+        return os.environ.get('CONTACT_EMAIL', 'support@example.com')
     

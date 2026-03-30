@@ -1,8 +1,10 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 /**
  * AgentCore Runtime Client for invoking agents deployed to Amazon Bedrock AgentCore
  * 
  * AgentCore uses HTTP POST to /invocations endpoint with SigV4 authentication,
- * NOT the BedrockAgentRuntimeClient (which is for standard Bedrock Agents).
+ * NOT the BedrockAgentRuntimeClient (which is for standard Amazon Bedrock Agents).
  */
 
 import { SignatureV4 } from '@smithy/signature-v4';

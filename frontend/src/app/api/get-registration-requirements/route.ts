@@ -1,3 +1,5 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {

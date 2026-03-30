@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """
 Tools for Listing Products in AWS Marketplace Agent
 """
@@ -30,12 +32,12 @@ from .help_tools import (
 )
 
 __all__ = [
-    # Marketplace tools
+    # AWS Marketplace tools
     "validate_credentials",
     "check_seller_status",
     "create_product_listing",
     "get_listing_status",
-    # Bedrock tools
+    # Amazon Bedrock tools
     "analyze_product",
     "generate_listing_content",
     "suggest_pricing_model",

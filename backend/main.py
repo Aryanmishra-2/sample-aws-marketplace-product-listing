@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """
 FastAPI Backend for AWS Marketplace Seller Portal
 Integrates with existing agent system for complete functionality
@@ -34,7 +36,7 @@ from agents import (
 )
 
 # Help agent functionality is integrated in the /chat endpoint below
-help_agent = None  # Placeholder - will use Bedrock directly
+help_agent = None  # Placeholder - will use Amazon Bedrock directly
 
 app = FastAPI(title="AWS Marketplace Seller Portal API")
 
@@ -186,10 +188,10 @@ async def validate_credentials(credentials: Credentials):
             )
             permissions_check['has_marketplace_manage_products'] = True
             permissions_check['has_marketplace_full_access'] = True
-            print("[DEBUG] Marketplace permissions: OK")
+            print("[DEBUG] AWS Marketplace permissions: OK")
         except Exception as e:
             error_code = getattr(e, 'response', {}).get('Error', {}).get('Code', '')
-            print(f"[DEBUG] Marketplace permissions error: {error_code}")
+            print(f"[DEBUG] AWS Marketplace permissions error: {error_code}")
             if error_code in ['AccessDenied', 'UnauthorizedOperation']:
                 permissions_check['missing_permissions'].append('aws-marketplace:ListEntities')
                 permissions_check['warnings'].append('Cannot list marketplace products')
@@ -265,7 +267,7 @@ async def check_seller_status(credentials: Credentials):
             region_name='us-east-1'
         )
         
-        # Check seller status using Marketplace Catalog API
+        # Check seller status using AWS Marketplace Catalog API
         marketplace_client = session.client('marketplace-catalog')
         
         try:
@@ -598,10 +600,10 @@ async def list_marketplace_products(credentials: Credentials):
             "count": 0
         }
 
-# List Bedrock agents
+# List Amazon Bedrock agents
 @app.post("/list-agents")
 async def list_agents(credentials: Credentials):
-    """List Bedrock agents in the account"""
+    """List Amazon Bedrock agents in the account"""
     try:
         # Create session with provided credentials
         session = boto3.Session(
@@ -644,14 +646,39 @@ async def list_agents(credentials: Credentials):
 def fetch_webpage_content(url: str, max_length: int = 5000) -> str:
     """Fetch and extract text content from a webpage"""
     import re
+    from urllib.parse import urlparse
+    import ipaddress
+    import socket
+
     try:
+        # Validate URL scheme - only allow https
+        parsed = urlparse(url)
+        if parsed.scheme not in ("https",):
+            print(f"[DEBUG] Blocked URL with disallowed scheme: {parsed.scheme}")
+            return ""
+
+        # Resolve hostname and block private/internal IPs
+        try:
+            hostname = parsed.hostname
+            if not hostname:
+                return ""
+            resolved_ips = socket.getaddrinfo(hostname, None)
+            for _, _, _, _, sockaddr in resolved_ips:
+                ip = ipaddress.ip_address(sockaddr[0])
+                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                    print(f"[DEBUG] Blocked URL resolving to private/internal IP: {ip}")
+                    return ""
+        except (socket.gaierror, ValueError) as e:
+            print(f"[DEBUG] DNS resolution failed for {url}: {e}")
+            return ""
+
         import requests
         from bs4 import BeautifulSoup
-        
+
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
         }
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=10, allow_redirects=False)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -807,7 +834,7 @@ Return ONLY the JSON object, no other text."""
                 continue
         
         if not response_text:
-            raise Exception("All Bedrock models failed")
+            raise Exception("All Amazon Bedrock models failed")
         
         # Parse response using helper function
         analysis = extract_json_from_text(response_text)
@@ -932,7 +959,7 @@ async def generate_content(data: Dict[str, Any]):
                 continue
         
         if not response_text:
-            raise Exception("All Bedrock models failed")
+            raise Exception("All Amazon Bedrock models failed")
         
         # Parse response
         try:
@@ -1022,7 +1049,7 @@ async def suggest_pricing(data: Dict[str, Any]):
                 continue
         
         if not response_text:
-            raise Exception("All Bedrock models failed")
+            raise Exception("All Amazon Bedrock models failed")
         
         # Parse response
         try:
@@ -2923,7 +2950,9 @@ async def create_listing_with_stream(data: Dict[str, Any]):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    host = os.environ.get("BACKEND_HOST", "127.0.0.1")
+    debug = os.environ.get("DEBUG", "false").lower() == "true"
+    uvicorn.run("main:app", host=host, port=8000, reload=debug)
 
 
 # Chatbot endpoint using AWS documentation
@@ -3011,7 +3040,7 @@ def generate_chat_response_with_history(question: str, conversation_history: Lis
     # Load knowledge base
     knowledge_base = load_knowledge_base()
     
-    # Use Bedrock to generate response with knowledge base context and history
+    # Use Amazon Bedrock to generate response with knowledge base context and history
     try:
         bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
         
@@ -3081,7 +3110,7 @@ Provide a detailed, helpful answer based on the knowledge base. Format your resp
         return generate_fallback_response(question_lower)
         
     except Exception as e:
-        print(f"[ERROR] Bedrock error: {e}")
+        print(f"[ERROR] Amazon Bedrock error: {e}")
         return generate_fallback_response(question_lower)
 
 def generate_chat_response(question: str) -> str:
@@ -3089,7 +3118,7 @@ def generate_chat_response(question: str) -> str:
     return generate_chat_response_with_history(question, [])
 
 def generate_fallback_response(question_lower: str) -> str:
-    """Generate fallback response when Bedrock is unavailable"""
+    """Generate fallback response when Amazon Bedrock is unavailable"""
     
     # India-specific responses
     if "india" in question_lower:

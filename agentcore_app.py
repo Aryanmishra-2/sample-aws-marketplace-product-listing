@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """
 AgentCore Runtime Application for AWS Marketplace Seller Portal
 
@@ -327,7 +329,7 @@ async def handle_request(payload: dict, context=None):
 
 
 async def handle_chat(payload: dict, access_key: str, secret_key: str, session_token: str = None):
-    """Handle chat/help requests using Bedrock"""
+    """Handle chat/help requests using Amazon Bedrock"""
     import boto3
     
     prompt = payload.get("prompt") or payload.get("question")
@@ -336,7 +338,7 @@ async def handle_chat(payload: dict, access_key: str, secret_key: str, session_t
     
     conversation_history = payload.get("conversation_history", [])
     
-    # Use Bedrock for chat — use runtime role credentials (not user creds)
+    # Use Amazon Bedrock for chat — use runtime role credentials (not user creds)
     bedrock_client = boto3.client(
         'bedrock-runtime',
         region_name='us-east-1',
@@ -363,7 +365,7 @@ For technical AWS service questions outside Marketplace, direct users to AWS doc
 
     messages = []
     
-    # Filter conversation history to start with user message (Bedrock requirement)
+    # Filter conversation history to start with user message (Amazon Bedrock requirement)
     if conversation_history:
         start_idx = 0
         for i, msg in enumerate(conversation_history):
@@ -570,7 +572,7 @@ Additional Context: {product_context.get('additional_context', 'Not provided')}
 
 
 async def handle_generate_content(payload: dict, access_key: str, secret_key: str, session_token: str = None):
-    """Generate listing content using Bedrock"""
+    """Generate listing content using Amazon Bedrock"""
     import boto3
     
     analysis = payload.get("analysis", {})
@@ -1872,7 +1874,7 @@ def handle_run_metering(payload: dict, access_key: str, secret_key: str, session
     print(f"[HANDLE_RUN_METERING] Product ID from payload: {product_id}")
     
     try:
-        # Set product_id on the create_saas_agent so it can fetch dimensions from Marketplace
+        # Set product_id on the create_saas_agent so it can fetch dimensions from AWS Marketplace
         if product_id:
             print(f"[HANDLE_RUN_METERING] Setting product_id on create_saas_agent: {product_id}")
             metering_agent.create_saas_agent.set_product_id(product_id)

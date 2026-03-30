@@ -1,3 +1,5 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 import '@cloudscape-design/global-styles/index.css';
 import './globals.css';
 import type { Metadata } from 'next';

@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """
 AWS Marketplace Seller Registration Tools
 
@@ -1451,7 +1453,7 @@ class SellerRegistrationTools:
                     {
                         "step": 1,
                         "title": "Access AWS Marketplace Management Portal",
-                        "description": "Sign in to AWS Console and navigate to Marketplace Management",
+                        "description": "Sign in to AWS Console and navigate to AWS Marketplace Management",
                         "url": "https://aws.amazon.com/marketplace/management/seller-registration",
                         "estimated_time": "5 minutes"
                     },

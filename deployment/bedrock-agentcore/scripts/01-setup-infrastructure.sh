@@ -3,8 +3,8 @@ set -e
 
 echo "========================================="
 echo "Setting up Bedrock AgentCore Infrastructure"
-echo "Account: 230049944595"
-echo "Region: us-east-1
+echo "Account: <YOUR_ACCOUNT_ID>"
+echo "Region: us-east-1"
 echo "========================================="
 
 # Load configuration
@@ -17,6 +17,16 @@ LOG_GROUP=$(jq -r '.resources.log_group' $CONFIG_FILE)
 
 echo "Step 1: Creating S3 bucket for Knowledge Base..."
 aws s3 mb s3://$S3_BUCKET --region $REGION 2>/dev/null || echo "Bucket already exists"
+
+# Block public access
+aws s3api put-public-access-block \
+  --bucket $S3_BUCKET \
+  --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+
+# Enable server-side encryption (SSE-S3)
+aws s3api put-bucket-encryption \
+  --bucket $S3_BUCKET \
+  --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"},"BucketKeyEnabled":true}]}'
 
 # Enable versioning
 aws s3api put-bucket-versioning \
@@ -45,6 +55,21 @@ cat > /tmp/bucket-policy.json <<EOF
       "Condition": {
         "StringEquals": {
           "aws:SourceAccount": "$ACCOUNT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "EnforceTLS",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::$S3_BUCKET",
+        "arn:aws:s3:::$S3_BUCKET/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
         }
       }
     }
@@ -108,10 +133,31 @@ aws iam create-role \
   --description "Role for Bedrock Agents in Marketplace Portal" \
   2>/dev/null || echo "Role already exists"
 
-# Attach policies
-aws iam attach-role-policy \
+# Attach scoped Bedrock policy instead of FullAccess
+cat > /tmp/bedrock-scoped-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeAgent",
+        "bedrock:Retrieve",
+        "bedrock:RetrieveAndGenerate",
+        "bedrock:GetKnowledgeBase",
+        "bedrock:ListKnowledgeBases"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+
+aws iam put-role-policy \
   --role-name BedrockAgentRole-Marketplace \
-  --policy-arn arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+  --policy-name ScopedBedrockAccess \
+  --policy-document file:///tmp/bedrock-scoped-policy.json
 
 # Create inline policy for additional permissions
 cat > /tmp/agent-policy.json <<EOF
@@ -195,15 +241,26 @@ cat > /tmp/lambda-policy.json <<EOF
     {
       "Effect": "Allow",
       "Action": [
-        "aws-marketplace:*",
-        "marketplace-catalog:*"
+        "marketplace-catalog:DescribeEntity",
+        "marketplace-catalog:ListEntities",
+        "marketplace-catalog:StartChangeSet",
+        "marketplace-catalog:DescribeChangeSet",
+        "marketplace-catalog:ListChangeSets",
+        "aws-marketplace:GetEntitlements",
+        "aws-marketplace:MeterUsage",
+        "aws-marketplace:BatchMeterUsage",
+        "aws-marketplace:ResolveCustomer"
       ],
       "Resource": "*"
     },
     {
       "Effect": "Allow",
       "Action": [
-        "dynamodb:*"
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Query",
+        "dynamodb:DeleteItem"
       ],
       "Resource": "arn:aws:dynamodb:$REGION:$ACCOUNT_ID:table/$DYNAMODB_TABLE"
     },

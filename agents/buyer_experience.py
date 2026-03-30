@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 from strands import Agent, tool
 import boto3
 import uuid
@@ -127,7 +129,7 @@ class BuyerExperienceAgent(Agent):
         if success_verified == 'y':
             print("\n🎉 Buyer experience simulation completed successfully!")
             print("Your SaaS integration is working correctly:")
-            print("  • Marketplace purchase flow ✓")
+            print("  • AWS Marketplace purchase flow ✓")
             print("  • Registration page redirect ✓")
             print("  • SNS notifications ✓")
             print("  • Customer data capture ✓")

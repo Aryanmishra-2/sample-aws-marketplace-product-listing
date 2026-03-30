@@ -128,11 +128,44 @@ if ! aws iam get-role --role-name ${TASK_ROLE_NAME} 2>/dev/null; then
   
   aws iam attach-role-policy \
     --role-name ${TASK_ROLE_NAME} \
-    --policy-arn arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+    --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
   
-  aws iam attach-role-policy \
-    --role-name ${TASK_ROLE_NAME} \
-    --policy-arn arn:aws:iam::aws:policy/AWSMarketplaceSellerFullAccess
+  # Scoped permissions instead of FullAccess managed policies
+  aws iam put-role-policy --role-name ${TASK_ROLE_NAME} --policy-name ScopedBedrockAccess --policy-document '{
+    "Version":"2012-10-17",
+    "Statement":[
+      {
+        "Effect":"Allow",
+        "Action":[
+          "bedrock:InvokeModel",
+          "bedrock:InvokeAgent",
+          "bedrock:Retrieve",
+          "bedrock:RetrieveAndGenerate"
+        ],
+        "Resource":"*"
+      },
+      {
+        "Effect":"Allow",
+        "Action":[
+          "marketplace-catalog:DescribeEntity",
+          "marketplace-catalog:ListEntities",
+          "marketplace-catalog:StartChangeSet",
+          "marketplace-catalog:DescribeChangeSet",
+          "marketplace-catalog:ListChangeSets",
+          "aws-marketplace:GetEntitlements",
+          "aws-marketplace:MeterUsage",
+          "aws-marketplace:BatchMeterUsage",
+          "aws-marketplace:ResolveCustomer"
+        ],
+        "Resource":"*"
+      },
+      {
+        "Effect":"Allow",
+        "Action":["sts:GetCallerIdentity"],
+        "Resource":"*"
+      }
+    ]
+  }'
   
   sleep 10
 fi

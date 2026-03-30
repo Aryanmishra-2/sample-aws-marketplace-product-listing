@@ -1,11 +1,13 @@
-"""Tools for querying AWS Bedrock Knowledge Base"""
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+"""Tools for querying AWS Amazon Bedrock Knowledge Base"""
 
 import boto3
 from typing import Dict, Any, List
 
 
 class KnowledgeBaseTools:
-    """AWS Bedrock Knowledge Base query tools"""
+    """AWS Amazon Bedrock Knowledge Base query tools"""
     
     def __init__(self, knowledge_base_id: str, region: str = "us-east-1"):
         # Use bedrock-agent-runtime for knowledge base operations

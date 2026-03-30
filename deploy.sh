@@ -6,15 +6,15 @@ set -e
 # =============================================================================
 # Deploys the complete application to your AWS account:
 # 1. Backend agents to Bedrock AgentCore Runtime
-# 2. Frontend to AWS ECS Fargate with Internal ALB (built via CodeBuild)
+# 2. Frontend to AWS ECS Fargate with internet-facing ALB (Cognito-authenticated)
 #
-# SECURITY: Least-privilege networking
-# - Internal ALB (not internet-facing)
-# - ALB SG: ingress port 80 from VPC CIDR only
+# SECURITY: Cognito-authenticated internet-facing ALB
+# - Internet-facing ALB with Cognito User Pool authentication
+# - ALB SG: ingress port 80,443 from 0.0.0.0/0 (Cognito handles auth)
+# - HTTP automatically redirects to HTTPS
 # - ECS SG: ingress port 3000 from ALB SG only
 # - VPC endpoints for AWS services (ECR, S3, CloudWatch, Bedrock)
 # - Network ACLs restrict traffic to VPC CIDR
-# - Access via SSM port-forward or VPN
 # =============================================================================
 
 RED='\033[0;31m'
@@ -125,6 +125,17 @@ build_frontend_with_codebuild() {
     # Create S3 bucket for source
     if ! aws s3api head-bucket --bucket ${S3_BUCKET} 2>/dev/null; then
         aws s3api create-bucket --bucket ${S3_BUCKET} --region ${AWS_REGION} 2>/dev/null || true
+        # Block public access
+        aws s3api put-public-access-block --bucket ${S3_BUCKET} \
+            --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+        # Enable encryption
+        aws s3api put-bucket-encryption --bucket ${S3_BUCKET} \
+            --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"},"BucketKeyEnabled":true}]}'
+        # Enforce TLS
+        aws s3api put-bucket-policy --bucket ${S3_BUCKET} --policy '{
+            "Version":"2012-10-17",
+            "Statement":[{"Sid":"EnforceTLS","Effect":"Deny","Principal":"*","Action":"s3:*","Resource":["arn:aws:s3:::'"${S3_BUCKET}"'","arn:aws:s3:::'"${S3_BUCKET}"'/*"],"Condition":{"Bool":{"aws:SecureTransport":"false"}}}]
+        }'
     fi
 
     # Create CodeBuild IAM role
@@ -638,11 +649,11 @@ EOF
     setup_acm_cert
 
     # =========================================================================
-    # Internal ALB (not internet-facing)
+    # Internet-facing ALB with Cognito authentication
     # =========================================================================
     ALB_ARN=$(aws elbv2 describe-load-balancers --names ${APP_NAME}-alb --region ${AWS_REGION} --query "LoadBalancers[0].LoadBalancerArn" --output text 2>/dev/null || echo "None")
     if [ "$ALB_ARN" == "None" ] || [ -z "$ALB_ARN" ]; then
-        log_info "Creating internal ALB..."
+        log_info "Creating internet-facing ALB with Cognito authentication..."
         ALB_ARN=$(aws elbv2 create-load-balancer \
             --name ${APP_NAME}-alb \
             --subnets ${SUBNETS} \
@@ -736,7 +747,7 @@ EOF
         echo ""
     fi
     echo "🔐 Security:"
-    echo "   ALB SG (${ALB_SG_ID}): ingress TCP/80,443 from ${VPC_CIDR}"
+    echo "   ALB SG (${ALB_SG_ID}): ingress TCP/80,443 from 0.0.0.0/0 (Cognito-authenticated)"
     echo "   ECS SG (${ECS_SG_ID}): ingress TCP/3000 from ALB SG only"
     echo "   Cognito Pool: ${COGNITO_POOL_ID}"
     echo "   Cognito Domain: https://${COGNITO_DOMAIN}.auth.${AWS_REGION}.amazoncognito.com"

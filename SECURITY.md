@@ -2,7 +2,7 @@
 
 ## Reporting Security Vulnerabilities
 
-If you discover a security vulnerability in this project, please report it by emailing [security@yourdomain.com](mailto:security@yourdomain.com). Please do not create public GitHub issues for security vulnerabilities.
+If you discover a security vulnerability in this project, please report it by opening a [GitHub Issue](https://github.com/aws-samples/ai-agent-marketplace/issues). For sensitive vulnerabilities, please use GitHub's [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability) feature. Please do not create public GitHub issues for sensitive security vulnerabilities.
 
 ### What to Include
 
@@ -220,7 +220,7 @@ We regularly update dependencies and address security vulnerabilities. Subscribe
 
 ## Contact
 
-For security concerns, contact: [security@yourdomain.com](mailto:security@yourdomain.com)
+For security concerns, please report via [GitHub Issues](https://github.com/aws-samples/ai-agent-marketplace/issues) or use GitHub's private vulnerability reporting feature.
 
 For general questions, create a GitHub issue (non-security related only).
 

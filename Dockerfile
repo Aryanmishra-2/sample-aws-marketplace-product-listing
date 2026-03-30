@@ -22,8 +22,18 @@ COPY agents/ ./agents/
 COPY backend/ ./backend/
 COPY tools/ ./tools/
 
+# Create non-root user and set ownership
+RUN groupadd --system --gid 1001 appuser && \
+    useradd --system --uid 1001 --gid appuser appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
 # Expose port for AgentCore runtime
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
 
 # Run the AgentCore app
 CMD ["python", "agentcore_app.py"]

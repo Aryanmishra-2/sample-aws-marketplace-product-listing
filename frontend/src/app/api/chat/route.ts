@@ -1,3 +1,5 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 import { NextRequest, NextResponse } from 'next/server';
 import { invokeChat } from '@/lib/agentcore';
 
@@ -66,7 +68,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Step 2: Use AgentCore for all chat queries (routes through backend agent which uses Bedrock)
+    // Step 2: Use AgentCore for all chat queries (routes through backend agent which uses Amazon Bedrock)
     try {
       const result = await invokeChat(
         question,
