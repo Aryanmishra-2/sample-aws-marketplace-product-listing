@@ -12,7 +12,7 @@ For a hands-on walkthrough, see the [AWS Marketplace Seller Workshop](https://ca
 
 - AWS CLI configured with credentials
 - Python 3.10+ with venv
-- AgentCore CLI (`pip install bedrock-agentcore-cli`)
+- AgentCore CLI — **latest version required** (`pip install --upgrade bedrock-agentcore`)
 - No Docker required — builds happen via AWS CodeBuild
 
 ### Deploy
@@ -25,7 +25,7 @@ pip3 install -r requirements.txt
 ```
 
 This deploys:
-1. **Backend**: Python agents to Bedrock AgentCore Runtime (ARM64 via CodeBuild)
+1. **Backend**: Python agents to Amazon Bedrock AgentCore Runtime (ARM64 via CodeBuild)
 2. **Frontend**: Next.js to ECS Fargate with ALB + Cognito authentication (AMD64 via CodeBuild)
 
 ### Options
@@ -60,7 +60,7 @@ Then open the ALB URL from the deploy output — you'll set a permanent password
 ## Architecture
 
 - **Frontend**: Next.js on ECS Fargate (AMD64)
-- **Backend**: Python agents on Bedrock AgentCore (ARM64)
+- **Backend**: Python agents on Amazon Bedrock AgentCore (ARM64)
 - **AI**: Amazon Bedrock (Claude) for intelligent assistance
 - **Auth**: Cognito User Pool on ALB (HTTPS listener with authenticate-cognito action)
 - **Networking**: Separate ALB/ECS security groups, VPC endpoints for AWS services

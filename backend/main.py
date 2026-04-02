@@ -5,7 +5,7 @@ FastAPI Backend for AWS Marketplace Seller Portal
 Integrates with existing agent system for complete functionality
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -18,6 +18,9 @@ import time
 import asyncio
 from queue import Queue
 import threading
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Add parent directory to path for imports
 # Import listing agents and tools from backend/agents
@@ -35,10 +38,18 @@ from agents import (
     SellerRegistrationTools,
 )
 
+from backend.input_sanitizer import sanitize_prompt_input
+
 # Help agent functionality is integrated in the /chat endpoint below
 help_agent = None  # Placeholder - will use Amazon Bedrock directly
 
 app = FastAPI(title="AWS Marketplace Seller Portal API")
+
+# Rate limiting
+RATE_LIMIT = os.environ.get("RATE_LIMIT", "60")
+limiter = Limiter(key_func=get_remote_address, default_limits=[f"{RATE_LIMIT}/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Enable CORS
 app.add_middleware(
@@ -742,8 +753,8 @@ async def analyze_product(data: Dict[str, Any]):
         # Build analysis prompt
         urls = product_context.get("product_urls", [])
         docs_url = product_context.get("documentation_url", "")
-        description = product_context.get("product_description", "")
-        product_name = product_context.get("product_name", "")
+        description = sanitize_prompt_input(product_context.get("product_description", ""))
+        product_name = sanitize_prompt_input(product_context.get("product_name", ""))
         
         # Fetch actual content from URLs
         website_content = ""
@@ -2960,7 +2971,7 @@ if __name__ == "__main__":
 async def chat(data: Dict[str, Any]):
     """Chat endpoint with conversation history support"""
     try:
-        question = data.get("question", "")
+        question = sanitize_prompt_input(data.get("question", ""))
         conversation_history = data.get("conversation_history", [])
         
         if not question:

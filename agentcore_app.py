@@ -28,6 +28,9 @@ from agents.public_visibility import PublicVisibilityAgent
 from agents.buyer_experience import BuyerExperienceAgent
 from agents.create_saas import CreateSaasAgent
 
+# Import input sanitizer
+from backend.input_sanitizer import sanitize_prompt_input
+
 # Import listing subagents and tools from backend
 try:
     from backend.agents import (
@@ -336,6 +339,7 @@ async def handle_chat(payload: dict, access_key: str, secret_key: str, session_t
     if not prompt:
         return {"error": "Missing 'prompt' or 'question' in payload"}
     
+    prompt = sanitize_prompt_input(prompt)
     conversation_history = payload.get("conversation_history", [])
     
     # Use Amazon Bedrock for chat — use runtime role credentials (not user creds)

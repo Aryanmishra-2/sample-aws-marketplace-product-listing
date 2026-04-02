@@ -26,10 +26,12 @@ class CreateSaasAgent(Agent):
         self._product_id = product_id
     
     def get_product_id(self):
-        return self._product_id or "prod-ebsllm6bj3ccm"
+        if not self._product_id:
+            raise ValueError("Product ID is not set. Call set_product_id() first.")
+        return self._product_id
     
     def get_aws_account_id(self):
-        return "605345174368"
+        return os.environ.get("AWS_ACCOUNT_ID", "<YOUR_ACCOUNT_ID>")
     
     def get_pricing_model_dimension(self):
         """Retrieve pricing model from the product's limited listing"""

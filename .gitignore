@@ -153,6 +153,7 @@ logs/
 .agentcore/
 .agent_arn
 .deployment_info.json
+.bedrock_agentcore.yaml
 cdk.out/
 .cdk.staging/
 cdk.context.json

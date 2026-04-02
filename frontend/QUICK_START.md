@@ -65,9 +65,15 @@ http://localhost:3000
 ## Step 5: Test the Workflow
 
 ### 1. Enter AWS Credentials
-- Access Key ID (starts with AKIA)
+
+> **⚠️ Security Note:** Avoid using long-term access keys (AKIA...) in production.
+> Instead, use temporary credentials from [AWS IAM Identity Center (SSO)](https://docs.aws.amazon.com/singlesignon/latest/userguide/what-is.html)
+> or [AWS STS AssumeRole](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html).
+> Temporary credentials include a Session Token and expire automatically, reducing the risk of credential leakage.
+
+- Access Key ID
 - Secret Access Key
-- Session Token (optional)
+- Session Token (recommended — required for temporary credentials)
 - Click "Validate Credentials"
 
 ### 2. Check Seller Status

@@ -5,7 +5,7 @@ set -e
 # AWS Marketplace Seller Portal - One-Click Deployment Script
 # =============================================================================
 # Deploys the complete application to your AWS account:
-# 1. Backend agents to Bedrock AgentCore Runtime
+# 1. Backend agents to Amazon Bedrock AgentCore Runtime
 # 2. Frontend to AWS ECS Fargate with internet-facing ALB (Cognito-authenticated)
 #
 # SECURITY: Cognito-authenticated internet-facing ALB
@@ -13,7 +13,7 @@ set -e
 # - ALB SG: ingress port 80,443 from 0.0.0.0/0 (Cognito handles auth)
 # - HTTP automatically redirects to HTTPS
 # - ECS SG: ingress port 3000 from ALB SG only
-# - VPC endpoints for AWS services (ECR, S3, CloudWatch, Bedrock)
+# - VPC endpoints for AWS services (Amazon ECR, Amazon S3, Amazon CloudWatch, Amazon Bedrock)
 # - Network ACLs restrict traffic to VPC CIDR
 # =============================================================================
 
@@ -38,7 +38,7 @@ check_prerequisites() {
     command -v python3 &> /dev/null || { log_error "Python 3 not installed"; exit 1; }
     if ! command -v agentcore &> /dev/null; then
         log_warning "AgentCore CLI not found. Installing..."
-        pip install bedrock-agentcore-cli
+        pip install bedrock-agentcore
     fi
     log_success "Prerequisites check completed"
 }
@@ -56,7 +56,7 @@ get_aws_info() {
 }
 
 deploy_backend() {
-    log_info "Deploying backend agents to Bedrock AgentCore..."
+    log_info "Deploying backend agents to Amazon Bedrock AgentCore..."
 
     # Recreate config if it targets a different account
     if [ -f ".bedrock_agentcore.yaml" ]; then
@@ -305,7 +305,7 @@ setup_vpc_endpoints() {
     # Get route table for S3 gateway endpoint
     ROUTE_TABLE_ID=$(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=${VPC_ID}" "Name=association.main,Values=true" --query "RouteTables[0].RouteTableId" --output text --region ${AWS_REGION})
 
-    # Interface endpoints: ECR API, ECR DKR, CloudWatch Logs, Bedrock AgentCore, STS
+    # Interface endpoints: Amazon ECR API, Amazon ECR DKR, Amazon CloudWatch Logs, Amazon Bedrock AgentCore, AWS STS
     INTERFACE_SERVICES=(
         "com.amazonaws.${AWS_REGION}.ecr.api"
         "com.amazonaws.${AWS_REGION}.ecr.dkr"
@@ -453,10 +453,10 @@ setup_cognito_auth() {
 }
 
 # =============================================================================
-# Generate self-signed cert and import to ACM (for internal ALB HTTPS)
+# Generate self-signed cert and import to ACM (for ALB HTTPS)
 # =============================================================================
 setup_acm_cert() {
-    log_info "Setting up ACM certificate for internal ALB HTTPS..."
+    log_info "Setting up ACM certificate for ALB HTTPS..."
 
     # Check for existing cert tagged for this app
     CERT_ARN=$(aws acm list-certificates --region ${AWS_REGION} --query "CertificateSummaryList[?DomainName=='${APP_NAME}.internal'].CertificateArn | [0]" --output text 2>/dev/null || echo "None")
@@ -466,7 +466,7 @@ setup_acm_cert() {
         return
     fi
 
-    log_info "Generating self-signed certificate for internal ALB..."
+    log_info "Generating self-signed certificate for ALB HTTPS..."
     CERT_DIR=$(mktemp -d)
 
     # Generate private key and self-signed cert (valid 1 year)
@@ -612,7 +612,7 @@ deploy_frontend() {
 
     if ! aws iam get-role --role-name ${TASK_ROLE_NAME} 2>/dev/null; then
         aws iam create-role --role-name ${TASK_ROLE_NAME} --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ecs-tasks.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
-        # Scoped Bedrock access for AgentCore invocation
+        # Scoped Amazon Bedrock access for AgentCore invocation
         aws iam put-role-policy --role-name ${TASK_ROLE_NAME} --policy-name BedrockAgentCoreAccess --policy-document '{
             "Version":"2012-10-17",
             "Statement":[
@@ -644,7 +644,7 @@ EOF
     aws ecs register-task-definition --cli-input-json file:///tmp/task-def.json --region ${AWS_REGION} > /dev/null
 
     # =========================================================================
-    # ACM Certificate (self-signed for internal ALB — Cognito requires HTTPS)
+    # ACM Certificate (self-signed for ALB HTTPS — Cognito requires HTTPS)
     # =========================================================================
     setup_acm_cert
 

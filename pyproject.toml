@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "Amazon Web Services"}
 ]
 keywords = ["aws", "marketplace", "bedrock", "agentcore", "ai", "saas"]
 classifiers = [
@@ -40,10 +40,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/marketplace-listing-agent"
-Documentation = "https://github.com/yourusername/marketplace-listing-agent/tree/main/docs"
-Repository = "https://github.com/yourusername/marketplace-listing-agent"
-Issues = "https://github.com/yourusername/marketplace-listing-agent/issues"
+Homepage = "https://github.com/aws-samples/ai-agent-marketplace"
+Documentation = "https://github.com/aws-samples/ai-agent-marketplace/tree/main/docs"
+Repository = "https://github.com/aws-samples/ai-agent-marketplace"
+Issues = "https://github.com/aws-samples/ai-agent-marketplace/issues"
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
