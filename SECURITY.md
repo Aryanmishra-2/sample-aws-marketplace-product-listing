@@ -1,17 +1,8 @@
 # Security Policy
 
-## Reporting Security Vulnerabilities
+## Reporting a Vulnerability
 
-If you discover a security vulnerability in this project, please report it by opening a [GitHub Issue](https://github.com/aws-samples/ai-agent-marketplace/issues). For sensitive vulnerabilities, please use GitHub's [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability) feature. Please do not create public GitHub issues for sensitive security vulnerabilities.
-
-### What to Include
-
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Suggested fix (if any)
-
-We will respond to security reports within 48 hours.
+If you discover a potential security issue in this project, we ask that you notify AWS Security via our [vulnerability reporting page](https://aws.amazon.com/security/vulnerability-reporting/). Please do **not** create a public GitHub issue.
 
 ## Security Best Practices
 
@@ -220,7 +211,7 @@ We regularly update dependencies and address security vulnerabilities. Subscribe
 
 ## Contact
 
-For security concerns, please report via [GitHub Issues](https://github.com/aws-samples/ai-agent-marketplace/issues) or use GitHub's private vulnerability reporting feature.
+For security concerns, please report via the [AWS vulnerability reporting page](https://aws.amazon.com/security/vulnerability-reporting/).
 
 For general questions, create a GitHub issue (non-security related only).
 
