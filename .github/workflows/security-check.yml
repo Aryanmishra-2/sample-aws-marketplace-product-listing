@@ -20,7 +20,7 @@ jobs:
     - name: Check for secrets
       run: |
         # Check for common secret patterns
-        if grep -r -E "(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AKIA[0-9A-Z]{16})" --exclude-dir=.git --exclude="*.md" --exclude=".env.example" .; then
+        if grep -r -E "(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AKIA[0-9A-Z]{16})" --exclude-dir=.git --exclude-dir=.github --exclude="*.md" --exclude=".env.example" .; then
           echo "❌ Potential secrets found in repository!"
           exit 1
         fi
