@@ -1,4 +1,4 @@
-# AWS Marketplace Listing Automation Agent - Intelligent Automation for Product Listing and Onboarding
+# AWS Marketplace Listing Automation Agent - Intelligent Multi-Agent Automation for Product Listing and Onboarding
 
 This sample demonstrates an AI-powered portal that **guides AWS Partners through the end-to-end process of becoming an AWS Marketplace seller, from registration to SaaS-based product listing creation.** It uses a Next.js frontend hosted on ECS Fargate behind an Application Load Balancer with Cognito authentication, and a set of specialized AI agents running on Amazon Bedrock AgentCore Runtime — including agents for seller registration, SaaS product creation, deployment, buyer experience, metering, and public visibility — all deployed via AWS CodeBuild and backed by Amazon Bedrock (Claude) for intelligent, conversational assistance.
 
