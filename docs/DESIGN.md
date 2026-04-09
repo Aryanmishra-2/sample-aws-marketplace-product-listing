@@ -6,7 +6,7 @@ The AI Agent Marketplace is a multi-component application that helps AWS Partner
 
 ## Architecture
 
-![Architecture Diagram](architecture.jpg)
+![Architecture Diagram](Architecture.png)
 
 ## Components
 

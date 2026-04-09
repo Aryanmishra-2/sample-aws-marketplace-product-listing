@@ -4,7 +4,7 @@ This sample demonstrates an AI-powered portal that **guides AWS Partners through
 
 For a hands-on walkthrough, see the [AWS Marketplace Seller Workshop](https://catalog.workshops.aws/mpseller/en-US/pre-requisite-register-as-seller).
 
-![Architecture Diagram](docs/architecture.jpg)
+![Architecture Diagram](docs/Architecture.png)
 
 ## Quick Start
 
